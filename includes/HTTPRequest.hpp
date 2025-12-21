@@ -8,7 +8,7 @@
 
 #pragma once
 
-class HTTPRequest{
+class HTTPRequest: public HTTPCommon{
 public:
 	// from request line
     std::string method;
@@ -26,21 +26,20 @@ public:
 	HTTPRequest& operator=(const HTTPRequest& other) = default;
 	~HTTPRequest() = default;
 
-    bool parseRequest(const std::string& raw);
+    bool parseRequest(const std::string raw);
 	void printRequest() const;
-	bool isValidMethod(const std::string& method) const;
-	bool isValidResourcePath(const std::string& resourcePath) const;
-	bool isValidProtocolVersion(const std::string& protocolVersion) const;
-	bool isValidBody(const std::string& body) const;
-	bool isCRLF(const std::string& line) const;
-	const std::string cleanWhiteSpace(std::string line);
+	bool isValidMethod(const std::string method) const;
+	bool isValidResourcePath(const std::string resourcePath) const;
+	bool isValidProtocolVersion(const std::string protocolVersion) const;
+	bool isValidBody(const std::string body) const;
+	bool isCRLF(const std::string line) const;
 
 	class HTTPRequestException: public std::exception
 	{
 		private:
 			std::string msg;
 		public:
-			HTTPRequestException(const std::string& message) : msg(message) {}
+			HTTPRequestException(const std::string message) : msg(message) {}
 			virtual const char* what() const noexcept override
 			{
 				return msg.c_str();

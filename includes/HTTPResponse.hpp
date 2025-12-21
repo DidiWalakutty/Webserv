@@ -8,10 +8,10 @@
 
 #pragma once
 
-class HTTPResponse{
+class HTTPResponse: public HTTPCommon{
 public:
 	// from status line
-    std::string protocolVersion;
+    HTTPProtocolVersion protocolVersion;
 	std::string statusCode;
 	std::string reasonPhrase;
 
@@ -26,14 +26,8 @@ public:
 	HTTPResponse& operator=(const HTTPResponse& other) = default;
 	~HTTPResponse() = default;
 
-    bool parseResponse(const std::string& raw);
 	void printResponse() const;
-	bool isValidProtocolVersion(const std::string& protocolVersion) const;
-	bool isValidStatusCode(const std::string& statusCode) const;
-	bool isValidReasonPhrase(const std::string& reasonPhrase) const;
-	bool isValidBody(const std::string& body) const;
-	bool isCRLF(const std::string& line) const;
-	const std::string cleanWhiteSpace(std::string line);
+	HTTPResponse buildResponse(HTTPState status, std::string version);
 
 	class HTTPResponseException: public std::exception
 	{

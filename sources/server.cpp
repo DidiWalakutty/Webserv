@@ -246,34 +246,34 @@ void Server::Start()
 			{
 				std::vector<char> data = ReadClient(events[i].data.fd, 512);
 				if (data.size() > 0) 
-					std::cout << std::endl << "Read FD: " << events[i].data.fd << std::endl << std::string(data.data()) << std::endl;
+					std::cout << std::endl << BOLDYELLOW << "Read FD: " << events[i].data.fd << std::endl
+							  << std::string(data.data(), data.size()) << RESET << std::endl;
 
-				MessageType messageType = getMessageType(data);				
-				if (messageType == MessageType::HTTPRequest)
+				HTTPRequest request;
+				try
 				{
-					HTTPRequest request;
-					try
-					{
-						request.parseRequest(std::string(data.data(), data.size()));
-						request.printRequest();
-					}
-					catch (const HTTPRequest::HTTPRequestException& exc)
-					{
-						std::cerr << "Failed to parse HTTP request: " << exc.what() << std::endl;
-					}
+					if (!request.parseRequest(std::string(data.data(), data.size())))
+					// {
+					// 	std::cerr << "Incomplete HTTP request." << std::endl;
+						continue;
+					// }
+					request.printRequest();
 				}
-				else if (messageType == MessageType::HTTPResponse)
+				catch (const HTTPRequest::HTTPRequestException& exc)
 				{
-					HTTPResponse response;
-					try
-					{
-						response.parseResponse(std::string(data.data(), data.size()));
-						response.printResponse();
-					}
-					catch (const HTTPResponse::HTTPResponseException& exc)
-					{
-						std::cerr << "Failed to parse HTTP response: " << exc.what() << std::endl;
-					}
+					std::cerr << "Failed to parse HTTP request: " << exc.what() << std::endl;
+				}
+				if (data.size() == 0)
+					RemoveClient(events[i].data.fd);
+				
+				HTTPResponse response = response.buildResponse(HTTPState::Ok, request.protocolVersion);	
+				ssize_t writeSize = write(events[i].data.fd, response.reasonPhrase.c_str(), response.reasonPhrase.size());
+				std::cout << std::endl << BOLDGREEN << "Wrote FD: " << events[i].data.fd << std::endl
+						  << response.reasonPhrase << RESET << std::endl;
+				if (writeSize < 0)
+				{
+					std::cerr << "Failed to write response to client." << std::endl;
+					RemoveClient(events[i].data.fd);
 				}
 				continue;
 			}

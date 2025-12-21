@@ -9,7 +9,7 @@
 // # replace Content-Length with the correct value
 // sed -i 's/Content-Length: .*/Content-Length: 74/' ./http_messages/put_request.txt
 
-bool HTTPRequest::parseRequest(const std::string& raw) 
+bool HTTPRequest::parseRequest(const std::string raw) 
 {
 	if (raw.empty())
 		throw HTTPRequestException("Empty request string");
@@ -24,7 +24,8 @@ bool HTTPRequest::parseRequest(const std::string& raw)
 		throw HTTPRequestException("Empty request line");
 	size_t methodEnd = requestLine.find(' ');
 	if (methodEnd == std::string::npos)
-		throw HTTPRequestException("Invalid request line: " + requestLine);
+		// throw HTTPRequestException("Invalid request line: " + requestLine);
+		return false;
 	method = requestLine.substr(0, methodEnd);
 	if (!isValidMethod(method) || isCRLF(method))
 		throw HTTPRequestException("Unsupported method: " + method);
@@ -114,22 +115,22 @@ bool HTTPRequest::parseRequest(const std::string& raw)
 	return true;
 }
 
-bool HTTPRequest::isValidMethod(const std::string& method) const
+bool HTTPRequest::isValidMethod(const std::string method) const
 {
 	return HTTPCommon::stringToMethod(method) != HTTPMethod::UNSUPPORTED;
 }
 
-bool HTTPRequest::isValidResourcePath(const std::string& resourcePath) const
+bool HTTPRequest::isValidResourcePath(const std::string resourcePath) const
 {
 	return !resourcePath.empty() && resourcePath[0] == '/';
 }
 
-bool HTTPRequest::isValidProtocolVersion(const std::string& protocolVersion) const
+bool HTTPRequest::isValidProtocolVersion(const std::string protocolVersion) const
 {
 	return HTTPCommon::stringToProtocolVersion(protocolVersion) != HTTPProtocolVersion::UNSUPPORTED;
 }
 
-bool HTTPRequest::isValidBody(const std::string& body) const
+bool HTTPRequest::isValidBody(const std::string body) const
 {
 	return true;
 }
@@ -138,16 +139,9 @@ bool HTTPRequest::isValidBody(const std::string& body) const
 // received where a Request-Line is expected. In other words, if the server is 
 // reading the protocol stream at the beginning of a message and receives a CRLF first, 
 // it should ignore the CRLF.
-bool HTTPRequest::isCRLF(const std::string& line) const
+bool HTTPRequest::isCRLF(const std::string line) const
 {
 	return line == "\r" || line == "" || line == "\n" || line == "\r\n" || line == "\n\r" || line == "\t";
-}
-
-const std::string HTTPRequest::cleanWhiteSpace(std::string line)
-{
-	line.erase(0, line.find_first_not_of(" \t\r\n"));
-	line.erase(line.find_last_not_of(" \t\r\n") + 1);
-	return line;
 }
 
 void HTTPRequest::printRequest() const {

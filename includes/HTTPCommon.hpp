@@ -2,6 +2,7 @@
 #include <string>
 #include <vector>
 #include <string_view>
+#include <iostream>
 
 #pragma once
 
@@ -107,10 +108,10 @@ class HTTPCommon
 	public:
 		static const std::unordered_map<HTTPState, HTTPMesage> HTTPStatusMap;
 
-		static HTTPMethod stringToMethod(const std::string& method);
-		static HTTPProtocolVersion stringToProtocolVersion(const std::string& version);
+		static HTTPMethod stringToMethod(const std::string method);
+		static HTTPProtocolVersion stringToProtocolVersion(const std::string version);
 		static std::string methodToString(HTTPMethod method);
 		static std::string protocolVersionToString(HTTPProtocolVersion version);
 };
-
-MessageType getMessageType(std::vector<char> data);
+	
+const std::string cleanWhiteSpace(std::string str);

@@ -45,7 +45,7 @@ const std::unordered_map<HTTPState, HTTPMesage> HTTPCommon::HTTPStatusMap = {
 	{HTTPState::NetworkAuthenticationRequired, {"511", "Network Authentication Required", "The client needs to authenticate to gain network access"}}
 };
 
-HTTPMethod HTTPCommon::stringToMethod(const std::string& method)
+HTTPMethod HTTPCommon::stringToMethod(const std::string method)
 {
 	if (method == "GET") return HTTPMethod::GET;
 	else if (method == "POST") return HTTPMethod::POST;
@@ -72,13 +72,15 @@ std::string HTTPCommon::methodToString(HTTPMethod method)
 	}
 };
 
-HTTPProtocolVersion HTTPCommon::stringToProtocolVersion(const std::string& version)
+HTTPProtocolVersion HTTPCommon::stringToProtocolVersion(const std::string version)
 {
-	if (version == "HTTP/0.9") return HTTPProtocolVersion::HTTP_0_9;
-	else if (version == "HTTP/1.0") return HTTPProtocolVersion::HTTP_1_0;
-	else if (version == "HTTP/1.1") return HTTPProtocolVersion::HTTP_1_1;
-	else if (version == "HTTP/2.0") return HTTPProtocolVersion::HTTP_2_0;
-	else if (version == "HTTP/3.0") return HTTPProtocolVersion::HTTP_3_0;
+	std::string v = cleanWhiteSpace(version);	
+
+	if (v == "HTTP/0.9") return HTTPProtocolVersion::HTTP_0_9;
+	else if (v == "HTTP/1.0") return HTTPProtocolVersion::HTTP_1_0;
+	else if (v == "HTTP/1.1") return HTTPProtocolVersion::HTTP_1_1;
+	else if (v == "HTTP/2.0") return HTTPProtocolVersion::HTTP_2_0;
+	else if (v == "HTTP/3.0") return HTTPProtocolVersion::HTTP_3_0;
 	else return HTTPProtocolVersion::UNSUPPORTED;
 };
 
@@ -95,14 +97,9 @@ std::string HTTPCommon::protocolVersionToString(HTTPProtocolVersion version)
 	}
 };
 
-MessageType getMessageType(std::vector<char> data)
+const std::string cleanWhiteSpace(std::string str)
 {
-    if (data.size() < 4)
-		return MessageType::unknown;
-
-	std::string startLine(data.data(), 4);
-	if (startLine.compare(0, 5, "HTTP/") == 0)
-		return MessageType::HTTPResponse;
-    else
-		return MessageType::HTTPRequest;
+	str.erase(0, str.find_first_not_of(" \t\r\n"));
+	str.erase(str.find_last_not_of(" \t\r\n") + 1);
+	return str;
 }
