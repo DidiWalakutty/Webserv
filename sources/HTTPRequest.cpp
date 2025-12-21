@@ -122,7 +122,7 @@ bool HTTPRequest::isValidMethod(const std::string method) const
 
 bool HTTPRequest::isValidResourcePath(const std::string resourcePath) const
 {
-	return !resourcePath.empty() && resourcePath[0] == '/';
+	return !resourcePath.empty() && (resourcePath[0] == '/');
 }
 
 bool HTTPRequest::isValidProtocolVersion(const std::string protocolVersion) const

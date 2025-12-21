@@ -5,6 +5,8 @@
 #include <exception>
 #include <iostream>
 #include "HTTPCommon.hpp"
+#include "HTTPRequest.hpp"
+#include <chrono>
 
 #pragma once
 
@@ -27,7 +29,7 @@ public:
 	~HTTPResponse() = default;
 
 	void printResponse() const;
-	HTTPResponse buildResponse(HTTPState status, std::string version);
+	HTTPResponse buildResponse(HTTPState status, HTTPRequest request);
 
 	class HTTPResponseException: public std::exception
 	{
