@@ -338,19 +338,13 @@ void Server::Start()
 				if (data.size() == 0)
 					RemoveClient(events[i].data.fd);
 
-				HTTPResponse response = response.buildResponse(HTTPState::Ok, request);
-				std::string fullResponse = "HTTP/1.1 " + response.statusCode + " " + response.reasonPhrase + "\r\n";
-				for (const auto &header : response.headers)
-				{
-					fullResponse += header.first + ": " + header.second + "\r\n";
-				}
-				fullResponse += "\r\n" + response.body;
-				ssize_t writeSize = write(events[i].data.fd, fullResponse.c_str(), fullResponse.size());
-				std::cout << std::endl
-						  << BOLDGREEN << "Wrote FD: " << events[i].data.fd << std::endl;
-				response.printResponse();
-				std::cout << RESET << std::endl;
-
+				HTTPResponse response;
+				std::string responseStr = response.buildResponse(request);
+				ssize_t writeSize = write(events[i].data.fd, responseStr.c_str(), responseStr.size());
+				// std::cout << std::endl
+				// 		  << BOLDGREEN << "Wrote FD: " << events[i].data.fd << std::endl;
+				// response.printResponse();
+				// std::cout << RESET << std::endl;
 				if (writeSize < 0)
 				{
 					std::cerr << "Failed to write response to client." << std::endl;

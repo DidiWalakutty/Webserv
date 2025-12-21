@@ -16,6 +16,7 @@
 #define BOLDRED "\033[1;31m"
 #define BOLDGREEN "\033[1;32m"
 #define BOLDYELLOW "\033[1;33m"
+#define BOLDBLUE "\033[1;34m"
 #define RESET "\033[0m"
 
 #define MAX_HEADER_SIZE 8192
@@ -93,13 +94,11 @@ struct HTTPMesage
  */
 enum class HTTPMethod
 {
-	GET,		/** <@brief Retrieves data from the server (e.g., loading a webpage). */
+	GET,		/** <@brief  Retrieves data from the server (e.g., loading a webpage). */
 	POST,		/** <@brief  Sends data to the server. */
 	PUT,		/** <@brief  Updates existing data on the server. */
 	DELETE,		/** <@brief  Removes specified data from the server. */
 	HEAD,		/** <@brief  Retrieves only headers of a resource, without the actual content. */
-	PATCH,		/** <@brief  Applies partial modifications to a resource. */
-	OPTIONS,	/** <@brief  Describes communication options available for a resource. */
 	UNSUPPORTED /** <@brief  For methods that are not recognized or supported. */
 };
 

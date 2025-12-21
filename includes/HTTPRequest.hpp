@@ -71,14 +71,12 @@ public:
 	 * @return True if CRLF, false otherwise.
 	 */
 	bool isCRLF(const std::string line) const;
-	
+
 	/**
 	 * @class HTTPRequestException
 	 * @brief Exception class for HTTP request parsing and validation errors.
 	 */
 	class HTTPRequestException : public std::exception
-
-								 class HTTPRequestException : public std::exception
 	{
 	private:
 		std::string msg;

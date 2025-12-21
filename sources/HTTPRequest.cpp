@@ -141,15 +141,12 @@ bool HTTPRequest::isCRLF(const std::string line) const
 void HTTPRequest::printRequest() const {
 	std::cout << "Method: " << methodToString(method) << std::endl;
 	std::cout << "Resource Path: " << resourcePath << std::endl;
-	std::cout << "Protocol Version: " << protocolVersionToString(protocolVersion) << std::endl;
-	std::cout << "Headers:" << std::endl;
-	for (std::map<std::string, std::string>::const_iterator it = headers.begin(); it != headers.end(); ++it)
-	{
-		std::cout << "  " << it->first << ": " << it->second << std::endl;
-	}
-	if (!body.empty())
-		std::cout << "==Body==\n" << body << std::endl;
+	// std::cout << "Protocol Version: " << protocolVersionToString(protocolVersion) << std::endl;
+	// std::cout << "Headers:" << std::endl;
+	// for (std::map<std::string, std::string>::const_iterator it = headers.begin(); it != headers.end(); ++it)
+	// {
+	// 	std::cout << "  " << it->first << ": " << it->second << std::endl;
+	// }
+	// if (!body.empty())
+	// 	std::cout << "==Body==\n" << body << std::endl;
 }
-
-// to continue from patch request example
-// c++ *.cpp && ./a.out ./http_messages/patch_request.txt 

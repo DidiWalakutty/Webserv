@@ -56,10 +56,6 @@ HTTPMethod HTTPCommon::stringToMethod(const std::string method)
 		return HTTPMethod::DELETE;
 	else if (method == "HEAD")
 		return HTTPMethod::HEAD;
-	else if (method == "PATCH")
-		return HTTPMethod::PATCH;
-	else if (method == "OPTIONS")
-		return HTTPMethod::OPTIONS;
 	else
 		return HTTPMethod::UNSUPPORTED;
 };
@@ -78,10 +74,6 @@ std::string HTTPCommon::methodToString(HTTPMethod method)
 		return "DELETE";
 	case HTTPMethod::HEAD:
 		return "HEAD";
-	case HTTPMethod::PATCH:
-		return "PATCH";
-	case HTTPMethod::OPTIONS:
-		return "OPTIONS";
 	default:
 		return "UNSUPPORTED";
 	}
