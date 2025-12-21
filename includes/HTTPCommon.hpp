@@ -21,8 +21,10 @@
 #define MAX_HEADER_SIZE 8192
 #define MAX_BODY_SIZE 10485760 // 10 MB
 
-// https://www.w3schools.com/tags/ref_httpmessages.asp
-
+/**
+ * @enum HTTPState
+ * @brief Represents HTTP status codes and their meanings.
+ */
 enum HTTPState
 {
 	Continue = 100,
@@ -69,6 +71,10 @@ enum HTTPState
 	NetworkAuthenticationRequired = 511
 };
 
+/**
+ * @brief Struct to hold HTTP message details.
+ *
+ */
 struct HTTPMesage
 {
 	std::string code;
@@ -81,18 +87,26 @@ struct HTTPMesage
 	}
 };
 
+/**
+ * @brief Enum for HTTP methods.
+ *
+ */
 enum class HTTPMethod
 {
-	GET,		// Retrieves data from the server (e.g., loading a webpage).
-	POST,		// Sends data to the server.
-	PUT,		// Updates existing data on the server.
-	DELETE,		// Removes specified data from the server.
-	HEAD,		// Retrieves only headers of a resource, without the actual content.
-	PATCH,		// Applies partial modifications to a resource.
-	OPTIONS,	// Describes communication options available for a resource.
-	UNSUPPORTED // For methods that are not recognized or supported.
+	GET,		/** <@brief Retrieves data from the server (e.g., loading a webpage). */
+	POST,		/** <@brief  Sends data to the server. */
+	PUT,		/** <@brief  Updates existing data on the server. */
+	DELETE,		/** <@brief  Removes specified data from the server. */
+	HEAD,		/** <@brief  Retrieves only headers of a resource, without the actual content. */
+	PATCH,		/** <@brief  Applies partial modifications to a resource. */
+	OPTIONS,	/** <@brief  Describes communication options available for a resource. */
+	UNSUPPORTED /** <@brief  For methods that are not recognized or supported. */
 };
 
+/**
+ * @brief Enum for HTTP protocol versions.
+ *
+ */
 enum class HTTPProtocolVersion
 {
 	HTTP_0_9,
@@ -103,6 +117,10 @@ enum class HTTPProtocolVersion
 	UNSUPPORTED
 };
 
+/**
+ * @brief Common HTTP utilities and mappings.
+ *
+ */
 class HTTPCommon
 {
 public:
@@ -114,4 +132,10 @@ public:
 	static std::string protocolVersionToString(HTTPProtocolVersion version);
 };
 
+/**
+ * @brief Cleans leading and trailing whitespace from a string.
+ *
+ * @param str
+ * @return const std::string
+ */
 const std::string cleanWhiteSpace(std::string str);

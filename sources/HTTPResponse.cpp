@@ -25,8 +25,10 @@ HTTPResponse HTTPResponse::buildResponse(HTTPState status, HTTPRequest request)
 	response.reasonPhrase = statusMessage.message;
 
 	std::string filePath = request.resourcePath;
-	if (filePath == "/")
+	if (filePath == "/" || filePath.empty())
 		filePath = "./html/home.html";
+	// else if (filePath.front() == '/') !! THIS PART SHOULD STAY !!!! However, after openning this, although the terminal shows the correct file path, the file is not read correctly in the browser.
+	// 	filePath = "." + filePath;
 	std::cout << "Attempting to read file: " << filePath << std::endl;
 	std::ifstream file(filePath);
 
@@ -69,6 +71,3 @@ HTTPResponse HTTPResponse::buildResponse(HTTPState status, HTTPRequest request)
 
 	return response;
 }
-
-// to continue from patch response example
-// c++ *.cpp && ./a.out ./http_messages/patch_response.txt
