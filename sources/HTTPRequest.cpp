@@ -1,14 +1,5 @@
 #include "HTTPRequest.hpp"
 
-// https://help.fortinet.com/fweb/600/Content/FortiWeb/fortiweb-admin/http_protocol_restraints.htm
-
-// # print body (everything after the first empty line) and show byte count
-// awk 'p{print} /^$/{p=1}' ./http_messages/put_request.txt | wc -c
-// # print the Content-Length header
-// grep -i 'Content-Length' ./http_messages/put_request.txt
-// # replace Content-Length with the correct value
-// sed -i 's/Content-Length: .*/Content-Length: 74/' ./http_messages/put_request.txt
-
 bool HTTPRequest::parseRequest(const std::string raw) 
 {
 	if (raw.empty())
@@ -22,13 +13,15 @@ bool HTTPRequest::parseRequest(const std::string raw)
 	std::getline(stream, requestLine);
 	if (requestLine.empty() || isCRLF(requestLine))
 		throw HTTPRequestException("Empty request line");
+
 	size_t methodEnd = requestLine.find(' ');
 	if (methodEnd == std::string::npos)
 		// throw HTTPRequestException("Invalid request line: " + requestLine);
 		return false;
-	method = requestLine.substr(0, methodEnd);
-	if (!isValidMethod(method) || isCRLF(method))
-		throw HTTPRequestException("Unsupported method: " + method);
+	std::string strMethod = requestLine.substr(0, methodEnd);
+	if (!isValidMethod(strMethod) || isCRLF(strMethod))
+		throw HTTPRequestException("Unsupported method: " + strMethod);
+	method = HTTPCommon::stringToMethod(strMethod);
 
 	size_t pathEnd = requestLine.find(' ', methodEnd + 1);
 	if (pathEnd == std::string::npos)
@@ -37,10 +30,11 @@ bool HTTPRequest::parseRequest(const std::string raw)
 	if (!isValidResourcePath(resourcePath) || isCRLF(resourcePath))
 		throw HTTPRequestException("Invalid resource path: " + resourcePath);
 
-	protocolVersion = requestLine.substr(pathEnd + 1);
-	if (!isValidProtocolVersion(protocolVersion) || isCRLF(protocolVersion))
-		throw HTTPRequestException("Unsupported protocol version: " + protocolVersion);
-	
+	std::string strVersion = requestLine.substr(pathEnd + 1);
+	if (!isValidProtocolVersion(strVersion) || isCRLF(strVersion))
+		throw HTTPRequestException("Unsupported protocol version: " + strVersion);
+	protocolVersion = HTTPCommon::stringToProtocolVersion(strVersion);
+
 	std::string line;
 	// Read header lines until an empty line (CRLF) that separates headers and body.
 	while (std::getline(stream, line))
@@ -69,9 +63,9 @@ bool HTTPRequest::parseRequest(const std::string raw)
 		if (contentLength > MAX_BODY_SIZE)
 			throw HTTPRequestException("Content-Length exceeds maximum allowed size");
 	}
-	else if (method == "POST" || method == "PUT" || method == "PATCH")
+	else if (strMethod == "POST" || strMethod == "PUT" || strMethod == "PATCH")
 	{
-		throw HTTPRequestException("Missing required Content-Length header for method: " + method);
+		throw HTTPRequestException("Missing required Content-Length header for method: " + strMethod);
 	}
 	if (stream.eof())
 		return true;
@@ -122,7 +116,7 @@ bool HTTPRequest::isValidMethod(const std::string method) const
 
 bool HTTPRequest::isValidResourcePath(const std::string resourcePath) const
 {
-	return !resourcePath.empty() && (resourcePath[0] == '/');
+	return !resourcePath.empty() && resourcePath[0] == '/';
 }
 
 bool HTTPRequest::isValidProtocolVersion(const std::string protocolVersion) const
@@ -145,9 +139,9 @@ bool HTTPRequest::isCRLF(const std::string line) const
 }
 
 void HTTPRequest::printRequest() const {
-	std::cout << "Method: " << method << std::endl;
+	std::cout << "Method: " << methodToString(method) << std::endl;
 	std::cout << "Resource Path: " << resourcePath << std::endl;
-	std::cout << "Protocol Version: " << protocolVersion << std::endl;
+	std::cout << "Protocol Version: " << protocolVersionToString(protocolVersion) << std::endl;
 	std::cout << "Headers:" << std::endl;
 	for (std::map<std::string, std::string>::const_iterator it = headers.begin(); it != headers.end(); ++it)
 	{

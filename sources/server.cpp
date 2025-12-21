@@ -10,10 +10,13 @@
 
 void Interrupt(int sig)
 {
-	if (sig == SIGINT) {Server::running = false;}
+	if (sig == SIGINT)
+	{
+		Server::running = false;
+	}
 }
 
-Server::Server(const ServerConfig& serverConfig)
+Server::Server(const ServerConfig &serverConfig)
 {
 	config = serverConfig;
 
@@ -24,7 +27,7 @@ Server::Server(const ServerConfig& serverConfig)
 		CreateSockets();
 		CreateEpoll();
 	}
-	catch(const std::exception& e)
+	catch (const std::exception &e)
 	{
 		std::cerr << "Failed to create server: " << e.what() << std::endl;
 
@@ -34,7 +37,8 @@ Server::Server(const ServerConfig& serverConfig)
 
 Server::~Server()
 {
-	std::cout << std::endl << "Closing server." << std::endl;
+	std::cout << std::endl
+			  << "Closing server." << std::endl;
 
 	Destroy();
 }
@@ -43,29 +47,42 @@ void Server::CreateSockets()
 {
 	DestroySockets();
 
-	if (serverSockets.size() != 0) {throw (std::runtime_error("Server sockets already exists."));}
+	if (serverSockets.size() != 0)
+	{
+		throw(std::runtime_error("Server sockets already exists."));
+	}
 
-	for (const int& port : config.ports)
+	for (const int &port : config.ports)
 	{
 		int socketFD = socket(config.socketConfig.domain, config.socketConfig.type, config.socketConfig.protocol);
 
-		if (socketFD < 0) {throw (std::runtime_error("Failed to create server socket."));}
+		if (socketFD < 0)
+		{
+			throw(std::runtime_error("Failed to create server socket."));
+		}
 
 		serverSockets.push_back(socketFD);
 
 		int opt = 1;
 		if (setsockopt(socketFD, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0)
-			{throw (std::runtime_error("Failed to set socket option."));}
+		{
+			throw(std::runtime_error("Failed to set socket option."));
+		}
 
 		sockaddr_in address{};
 		address.sin_family = config.socketConfig.domain;
 		address.sin_port = htons(port);
 		address.sin_addr.s_addr = INADDR_ANY;
 
-		if (bind(socketFD, (sockaddr*)&address, sizeof(address)) < 0)
-			{throw (std::runtime_error("Failed to bind server socket."));}
+		if (bind(socketFD, (sockaddr *)&address, sizeof(address)) < 0)
+		{
+			throw(std::runtime_error("Failed to bind server socket."));
+		}
 
-		if (listen(socketFD, SOMAXCONN) < 0) {throw (std::runtime_error("Failed to listen on server socket."));}
+		if (listen(socketFD, SOMAXCONN) < 0)
+		{
+			throw(std::runtime_error("Failed to listen on server socket."));
+		}
 
 		SetNonBlocking(socketFD);
 	}
@@ -73,30 +90,44 @@ void Server::CreateSockets()
 
 void Server::CreateEpoll()
 {
-	if (epollFD >= 0) {throw (std::runtime_error("Epoll instance already exists."));}
+	if (epollFD >= 0)
+	{
+		throw(std::runtime_error("Epoll instance already exists."));
+	}
 
 	epollFD = epoll_create(1);
 
-	if (epollFD < 0) {throw (std::runtime_error("Failed to create epoll instance."));}
+	if (epollFD < 0)
+	{
+		throw(std::runtime_error("Failed to create epoll instance."));
+	}
 
-	for (const int& socketFD : serverSockets)
+	for (const int &socketFD : serverSockets)
 	{
 		epoll_event event{};
 		event.events = EPOLLIN;
 		event.data.fd = socketFD;
 
 		if (epoll_ctl(epollFD, EPOLL_CTL_ADD, socketFD, &event) < 0)
-			{throw (std::runtime_error("Failed to add server socket to epoll."));}
+		{
+			throw(std::runtime_error("Failed to add server socket to epoll."));
+		}
 	}
 }
 
 void Server::DestroySockets()
 {
-	for (int& socketFD : serverSockets)
+	for (int &socketFD : serverSockets)
 	{
-		if (socketFD < 0) {continue;}
+		if (socketFD < 0)
+		{
+			continue;
+		}
 
-		if (close(socketFD) < 0) {std::cerr << "Failed to close server socket." << std::endl;}
+		if (close(socketFD) < 0)
+		{
+			std::cerr << "Failed to close server socket." << std::endl;
+		}
 
 		socketFD = -1;
 	}
@@ -110,15 +141,24 @@ void Server::DestroyEpoll()
 	{
 		if (clients[i] >= 0)
 		{
-			if (close(clients[i]) < 0) {std::cerr << "Failed to close client FD: " << clients[i] << "." << std::endl;}
+			if (close(clients[i]) < 0)
+			{
+				std::cerr << "Failed to close client FD: " << clients[i] << "." << std::endl;
+			}
 		}
 	}
 
 	clients.clear();
 
-	if (epollFD < 0) {return;}
+	if (epollFD < 0)
+	{
+		return;
+	}
 
-	if (close(epollFD) < 0) {std::cerr << "Failed to close epoll instance." << std::endl;}
+	if (close(epollFD) < 0)
+	{
+		std::cerr << "Failed to close epoll instance." << std::endl;
+	}
 
 	epollFD = -1;
 }
@@ -129,36 +169,51 @@ void Server::Destroy()
 	DestroyEpoll();
 }
 
-void Server::SetNonBlocking(const int& FD)
+void Server::SetNonBlocking(const int &FD)
 {
 	int flags = fcntl(FD, F_GETFL, 0); // Remove 0
 
-	if (flags < 0) {throw (std::runtime_error("Failed to retrieve FD flags."));}
+	if (flags < 0)
+	{
+		throw(std::runtime_error("Failed to retrieve FD flags."));
+	}
 
-	if (fcntl(FD, F_SETFL, flags | O_NONBLOCK) < 0) {throw (std::runtime_error("Failed to set FD flags."));}
+	if (fcntl(FD, F_SETFL, flags | O_NONBLOCK) < 0)
+	{
+		throw(std::runtime_error("Failed to set FD flags."));
+	}
 }
 
-bool Server::IsServerSocket(const int& FD)
+bool Server::IsServerSocket(const int &FD)
 {
-	for (const int& socketFD : serverSockets) {if (socketFD == FD && socketFD >= 0) {return (true);}}
+	for (const int &socketFD : serverSockets)
+	{
+		if (socketFD == FD && socketFD >= 0)
+		{
+			return (true);
+		}
+	}
 
 	return (false);
 }
 
-void Server::AddClient(const epoll_event& event)
+void Server::AddClient(const epoll_event &event)
 {
 	while (true)
 	{
 		sockaddr_in address{};
 		socklen_t length = sizeof(in_addr);
 
-		int clientFD = accept(event.data.fd, (sockaddr*)&address, &length);
+		int clientFD = accept(event.data.fd, (sockaddr *)&address, &length);
 
 		if (clientFD < 0)
 		{
-			if (errno == EAGAIN || errno == EWOULDBLOCK) {break;}
-			
-			throw (std::runtime_error("Failed to accept client connection."));
+			if (errno == EAGAIN || errno == EWOULDBLOCK)
+			{
+				break;
+			}
+
+			throw(std::runtime_error("Failed to accept client connection."));
 		}
 
 		clients.push_back(clientFD);
@@ -170,15 +225,21 @@ void Server::AddClient(const epoll_event& event)
 		event.data.fd = clientFD;
 
 		if (epoll_ctl(epollFD, EPOLL_CTL_ADD, clientFD, &event) < 0)
-			{throw (std::runtime_error("Failed to add client socket to epoll."));}
+		{
+			throw(std::runtime_error("Failed to add client socket to epoll."));
+		}
 
-		std::cout << std::endl << "Added FD: " << event.data.fd << std::endl;
+		std::cout << std::endl
+				  << "Added FD: " << event.data.fd << std::endl;
 	}
 }
 
-void Server::RemoveClient(const int& clientFD)
+void Server::RemoveClient(const int &clientFD)
 {
-	if (clientFD < 0) {return;}
+	if (clientFD < 0)
+	{
+		return;
+	}
 
 	int index = -1;
 	for (size_t i = 0; i < clients.size(); i++)
@@ -190,16 +251,23 @@ void Server::RemoveClient(const int& clientFD)
 		}
 	}
 
-	if (index < 0) {return;}
+	if (index < 0)
+	{
+		return;
+	}
 
-	if (close(clientFD) < 0) {std::cerr << "Failed to close client FD: " << clientFD << "." << std::endl;}
+	if (close(clientFD) < 0)
+	{
+		std::cerr << "Failed to close client FD: " << clientFD << "." << std::endl;
+	}
 
 	clients[index] = -1;
 
-	std::cout << std::endl << "Removed FD: " << clientFD << std::endl;
+	std::cout << std::endl
+			  << "Removed FD: " << clientFD << std::endl;
 }
 
-std::vector<char> Server::ReadClient(const int& FD, const size_t size)
+std::vector<char> Server::ReadClient(const int &FD, const size_t size)
 {
 	std::vector<char> result;
 	result.resize(size);
@@ -212,7 +280,10 @@ std::vector<char> Server::ReadClient(const int& FD, const size_t size)
 		result.clear();
 	}
 
-	if (readSize < 0 && errno != EAGAIN) {throw (std::runtime_error("Failed to read client."));}
+	if (readSize < 0 && errno != EAGAIN)
+	{
+		throw(std::runtime_error("Failed to read client."));
+	}
 
 	return (result);
 }
@@ -226,7 +297,10 @@ void Server::Start()
 	while (running)
 	{
 		int count = epoll_wait(epollFD, events, config.maxEvents, -1);
-		if (count < 0) {break;}
+		if (count < 0)
+		{
+			break;
+		}
 
 		for (int i = 0; i < count; i++)
 		{
@@ -245,8 +319,9 @@ void Server::Start()
 			if (events[i].events & EPOLLIN)
 			{
 				std::vector<char> data = ReadClient(events[i].data.fd, 512);
-				if (data.size() > 0) 
-					std::cout << std::endl << BOLDYELLOW << "Read FD: " << events[i].data.fd << std::endl;
+				if (data.size() > 0)
+					std::cout << std::endl
+							  << BOLDYELLOW << "Read FD: " << events[i].data.fd << std::endl;
 
 				HTTPRequest request;
 				try
@@ -256,24 +331,26 @@ void Server::Start()
 					request.printRequest();
 					std::cout << RESET << std::endl;
 				}
-				catch (const HTTPRequest::HTTPRequestException& exc)
+				catch (const HTTPRequest::HTTPRequestException &exc)
 				{
 					std::cerr << "Failed to parse HTTP request: " << exc.what() << std::endl;
 				}
 				if (data.size() == 0)
 					RemoveClient(events[i].data.fd);
-				
-				HTTPResponse response = response.buildResponse(HTTPState::Ok, request);	
+
+				HTTPResponse response = response.buildResponse(HTTPState::Ok, request);
 				std::string fullResponse = "HTTP/1.1 " + response.statusCode + " " + response.reasonPhrase + "\r\n";
-				for (const auto& header : response.headers) {
+				for (const auto &header : response.headers)
+				{
 					fullResponse += header.first + ": " + header.second + "\r\n";
 				}
 				fullResponse += "\r\n" + response.body;
 				ssize_t writeSize = write(events[i].data.fd, fullResponse.c_str(), fullResponse.size());
-				std::cout << std::endl << BOLDGREEN << "Wrote FD: " << events[i].data.fd << std::endl;
+				std::cout << std::endl
+						  << BOLDGREEN << "Wrote FD: " << events[i].data.fd << std::endl;
 				response.printResponse();
 				std::cout << RESET << std::endl;
-				
+
 				if (writeSize < 0)
 				{
 					std::cerr << "Failed to write response to client." << std::endl;
@@ -283,7 +360,7 @@ void Server::Start()
 			}
 		}
 	}
-	
+
 	running = false;
 
 	Destroy();

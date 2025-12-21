@@ -3,14 +3,14 @@
 const std::unordered_map<HTTPState, HTTPMesage> HTTPCommon::HTTPStatusMap = {
 	{HTTPState::Continue, {"100", "Continue", "The server has received the request headers, and the client should proceed to send the request body"}},
 	{HTTPState::SwitchingProtocols, {"101", "Switching Protocols", "The requester has asked the server to switch protocols"}},
-	{HTTPState::EarlyHints, {"103", "Early Hints", "Used with the Link header to allow the browser to start preloading resources while the server prepares a response"}},	
+	{HTTPState::EarlyHints, {"103", "Early Hints", "Used with the Link header to allow the browser to start preloading resources while the server prepares a response"}},
 	{HTTPState::Ok, {"200", "OK", "The request is OK (this is the standard response for successful HTTP requests)"}},
 	{HTTPState::Created, {"201", "Created", "The request has been fulfilled, and a new resource is created"}},
 	{HTTPState::Accepted, {"202", "Accepted", "The request has been accepted for processing, but the processing has not been completed"}},
-	{HTTPState::NonAuthoritativeInformation, {"203", "Non-Authoritative Information", "The request has been successfully processed, but is returning information that may be from another source"}},	
+	{HTTPState::NonAuthoritativeInformation, {"203", "Non-Authoritative Information", "The request has been successfully processed, but is returning information that may be from another source"}},
 	{HTTPState::NoContent, {"204", "No Content", "The request has been successfully processed, but is not returning any content"}},
 	{HTTPState::ResetContent, {"205", "Reset Content", "The request has been successfully processed, but is not returning any content, and requires that the requester reset the document view"}},
-	{HTTPState::PartialContent, {"206", "Partial Content", "The server is delivering only part of the resource due to a range header sent by the client"}},	
+	{HTTPState::PartialContent, {"206", "Partial Content", "The server is delivering only part of the resource due to a range header sent by the client"}},
 	{HTTPState::MultipleChoices, {"300", "Multiple Choices", "A link list. The user can select a link and go to that location. Maximum five addresses"}},
 	{HTTPState::MovedPermanently, {"301", "Moved Permanently", "The requested page has moved to a new URL"}},
 	{HTTPState::Found, {"302", "Found", "The requested page has moved temporarily to a new URL"}},
@@ -42,58 +42,85 @@ const std::unordered_map<HTTPState, HTTPMesage> HTTPCommon::HTTPStatusMap = {
 	{HTTPState::ServiceUnavailable, {"503", "Service Unavailable", "The server is not ready to handle the request"}},
 	{HTTPState::GatewayTimeout, {"504", "Gateway Timeout", "The server, while acting as a gateway or proxy, did not receive a timely response from the upstream server"}},
 	{HTTPState::HTTPVersionNotSupported, {"505", "HTTP Version Not Supported", "The HTTP version used in the request is not supported by the server"}},
-	{HTTPState::NetworkAuthenticationRequired, {"511", "Network Authentication Required", "The client needs to authenticate to gain network access"}}
-};
+	{HTTPState::NetworkAuthenticationRequired, {"511", "Network Authentication Required", "The client needs to authenticate to gain network access"}}};
 
 HTTPMethod HTTPCommon::stringToMethod(const std::string method)
 {
-	if (method == "GET") return HTTPMethod::GET;
-	else if (method == "POST") return HTTPMethod::POST;
-	else if (method == "PUT") return HTTPMethod::PUT;
-	else if (method == "DELETE") return HTTPMethod::DELETE;
-	else if (method == "HEAD") return HTTPMethod::HEAD;
-	else if (method == "PATCH") return HTTPMethod::PATCH;
-	else if (method == "OPTIONS") return HTTPMethod::OPTIONS;
-	else return HTTPMethod::UNSUPPORTED;
+	if (method == "GET")
+		return HTTPMethod::GET;
+	else if (method == "POST")
+		return HTTPMethod::POST;
+	else if (method == "PUT")
+		return HTTPMethod::PUT;
+	else if (method == "DELETE")
+		return HTTPMethod::DELETE;
+	else if (method == "HEAD")
+		return HTTPMethod::HEAD;
+	else if (method == "PATCH")
+		return HTTPMethod::PATCH;
+	else if (method == "OPTIONS")
+		return HTTPMethod::OPTIONS;
+	else
+		return HTTPMethod::UNSUPPORTED;
 };
 
 std::string HTTPCommon::methodToString(HTTPMethod method)
 {
 	switch (method)
 	{
-		case HTTPMethod::GET: return "GET";
-		case HTTPMethod::POST: return "POST";
-		case HTTPMethod::PUT: return "PUT";
-		case HTTPMethod::DELETE: return "DELETE";
-		case HTTPMethod::HEAD: return "HEAD";
-		case HTTPMethod::PATCH: return "PATCH";
-		case HTTPMethod::OPTIONS: return "OPTIONS";
-		default: return "UNSUPPORTED";
+	case HTTPMethod::GET:
+		return "GET";
+	case HTTPMethod::POST:
+		return "POST";
+	case HTTPMethod::PUT:
+		return "PUT";
+	case HTTPMethod::DELETE:
+		return "DELETE";
+	case HTTPMethod::HEAD:
+		return "HEAD";
+	case HTTPMethod::PATCH:
+		return "PATCH";
+	case HTTPMethod::OPTIONS:
+		return "OPTIONS";
+	default:
+		return "UNSUPPORTED";
 	}
 };
 
 HTTPProtocolVersion HTTPCommon::stringToProtocolVersion(const std::string version)
 {
-	std::string v = cleanWhiteSpace(version);	
+	std::string v = cleanWhiteSpace(version);
 
-	if (v == "HTTP/0.9") return HTTPProtocolVersion::HTTP_0_9;
-	else if (v == "HTTP/1.0") return HTTPProtocolVersion::HTTP_1_0;
-	else if (v == "HTTP/1.1") return HTTPProtocolVersion::HTTP_1_1;
-	else if (v == "HTTP/2.0") return HTTPProtocolVersion::HTTP_2_0;
-	else if (v == "HTTP/3.0") return HTTPProtocolVersion::HTTP_3_0;
-	else return HTTPProtocolVersion::UNSUPPORTED;
+	if (v == "HTTP/0.9")
+		return HTTPProtocolVersion::HTTP_0_9;
+	else if (v == "HTTP/1.0")
+		return HTTPProtocolVersion::HTTP_1_0;
+	else if (v == "HTTP/1.1")
+		return HTTPProtocolVersion::HTTP_1_1;
+	else if (v == "HTTP/2.0")
+		return HTTPProtocolVersion::HTTP_2_0;
+	else if (v == "HTTP/3.0")
+		return HTTPProtocolVersion::HTTP_3_0;
+	else
+		return HTTPProtocolVersion::UNSUPPORTED;
 };
 
 std::string HTTPCommon::protocolVersionToString(HTTPProtocolVersion version)
 {
 	switch (version)
 	{
-		case HTTPProtocolVersion::HTTP_0_9: return "HTTP/0.9";
-		case HTTPProtocolVersion::HTTP_1_0: return "HTTP/1.0";
-		case HTTPProtocolVersion::HTTP_1_1: return "HTTP/1.1";
-		case HTTPProtocolVersion::HTTP_2_0: return "HTTP/2.0";
-		case HTTPProtocolVersion::HTTP_3_0: return "HTTP/3.0";
-		default: return "UNSUPPORTED";
+	case HTTPProtocolVersion::HTTP_0_9:
+		return "HTTP/0.9";
+	case HTTPProtocolVersion::HTTP_1_0:
+		return "HTTP/1.0";
+	case HTTPProtocolVersion::HTTP_1_1:
+		return "HTTP/1.1";
+	case HTTPProtocolVersion::HTTP_2_0:
+		return "HTTP/2.0";
+	case HTTPProtocolVersion::HTTP_3_0:
+		return "HTTP/3.0";
+	default:
+		return "UNSUPPORTED";
 	}
 };
 

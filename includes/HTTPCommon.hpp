@@ -6,13 +6,17 @@
 #include <chrono>
 #include <ctime>
 #include <sstream>
+#include <fstream>
+#include <map>
+#include <algorithm>
+#include <exception>
 
 #pragma once
 
-#define BOLDRED    "\033[1;31m"
-#define BOLDGREEN  "\033[1;32m"
+#define BOLDRED "\033[1;31m"
+#define BOLDGREEN "\033[1;32m"
 #define BOLDYELLOW "\033[1;33m"
-#define RESET      "\033[0m"
+#define RESET "\033[0m"
 
 #define MAX_HEADER_SIZE 8192
 #define MAX_BODY_SIZE 10485760 // 10 MB
@@ -65,13 +69,6 @@ enum HTTPState
 	NetworkAuthenticationRequired = 511
 };
 
-enum class MessageType
-{
-	unknown,
-	HTTPRequest,
-	HTTPResponse
-};
-
 struct HTTPMesage
 {
 	std::string code;
@@ -86,13 +83,13 @@ struct HTTPMesage
 
 enum class HTTPMethod
 {
-	GET, // Retrieves data from the server (e.g., loading a webpage).
-	POST, // Sends data to the server.
-	PUT, // Updates existing data on the server.
-	DELETE, // Removes specified data from the server.
-	HEAD, // Retrieves only headers of a resource, without the actual content.
-	PATCH, // Applies partial modifications to a resource.
-	OPTIONS, // Describes communication options available for a resource.
+	GET,		// Retrieves data from the server (e.g., loading a webpage).
+	POST,		// Sends data to the server.
+	PUT,		// Updates existing data on the server.
+	DELETE,		// Removes specified data from the server.
+	HEAD,		// Retrieves only headers of a resource, without the actual content.
+	PATCH,		// Applies partial modifications to a resource.
+	OPTIONS,	// Describes communication options available for a resource.
 	UNSUPPORTED // For methods that are not recognized or supported.
 };
 
@@ -108,13 +105,13 @@ enum class HTTPProtocolVersion
 
 class HTTPCommon
 {
-	public:
-		static const std::unordered_map<HTTPState, HTTPMesage> HTTPStatusMap;
+public:
+	static const std::unordered_map<HTTPState, HTTPMesage> HTTPStatusMap;
 
-		static HTTPMethod stringToMethod(const std::string method);
-		static HTTPProtocolVersion stringToProtocolVersion(const std::string version);
-		static std::string methodToString(HTTPMethod method);
-		static std::string protocolVersionToString(HTTPProtocolVersion version);
+	static HTTPMethod stringToMethod(const std::string method);
+	static HTTPProtocolVersion stringToProtocolVersion(const std::string version);
+	static std::string methodToString(HTTPMethod method);
+	static std::string protocolVersionToString(HTTPProtocolVersion version);
 };
-	
+
 const std::string cleanWhiteSpace(std::string str);
