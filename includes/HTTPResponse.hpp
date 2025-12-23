@@ -56,15 +56,24 @@ public:
 	std::string setDate();
 
 	/**
-	 * @brief Constructs the HTTP response string based on the request and status.
+	 * @brief Parses the response string based on the request, status message, and file path.
 	 * @param request The HTTP request object.
-	 * @param statusCode The HTTP status code.
-	 * @param statusMessage The HTTP status message.
-	 * @param body The response body content.
+	 * @param statusMessage The HTTP message corresponding to the status.
+	 * @param filePath The file path string.
 	 * @return The constructed HTTP response string.
 	 */
-	std::string parseResponseStr(const HTTPRequest request, std::string statusCode, HTTPMesage statusMessage, std::string body);
+	std::string parseResponseStr(const HTTPRequest request, HTTPMesage statusMessage, std::string filePath);
 
+	/**
+	 * @brief Clears the response body and resets related headers.
+	 */
+	void clearBody();
+
+	/**
+	 * @brief Updates the response based on the given HTTP state.
+	 * @param state The HTTP state to update the response for.
+	 */
+	void updateForHTTPState(HTTPState state);
 
 	/**
 	 * @class HTTPResponseException

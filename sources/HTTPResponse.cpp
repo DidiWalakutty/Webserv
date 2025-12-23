@@ -72,34 +72,22 @@ std::string HTTPResponse::buildResponse(HTTPRequest request)
 		buffer << file.rdbuf();
 		body = buffer.str();
 		file.close();
-		statusMessage = HTTPCommon::HTTPStatusMap.at(HTTPState::Ok);
-		statusCode = statusMessage.code;
-		reasonPhrase = statusMessage.message;
+		updateForHTTPState(HTTPState::Ok);
 	}
 	else
 	{
 		std::cout << "File not found, using status message" << std::endl;
-		statusMessage = HTTPCommon::HTTPStatusMap.at(HTTPState::NotFound);
-		statusCode = statusMessage.code;
-		reasonPhrase = statusMessage.message;
-		body = statusCode + ": " + statusMessage.description;
+		updateForHTTPState(HTTPState::NotFound);
 	}
 
-	headers["Content-Length"] = std::to_string(body.length());
-	headers["Connection"] = "keep-alive";
-	headers["Server"] = "Webserv_Didi_Ferre_Goksu";
-	headers["Content-Type"] = parseContentType(filePath);
-	headers["Date"] = setDate();
+	std::string responseStr = parseResponseStr(request, statusMessage, filePath);
 
-	std::string responseStr = parseResponseStr(request, statusCode, statusMessage, body);
-
-	// This built response is going to be changed according to the method, searching for best practices
 	std::cout << BOLDBLUE << "Built Response String for request: " << methodToString(request.method) << std::endl;
 	std::cout << responseStr << RESET << std::endl;
 	return responseStr;
 }
 
-std::string HTTPResponse::parseResponseStr(const HTTPRequest request, std::string statusCode, HTTPMesage statusMessage, std::string body)
+std::string HTTPResponse::parseResponseStr(const HTTPRequest request, HTTPMesage statusMessage, std::string filePath)
 {
 	switch (request.method)
 	{
@@ -110,39 +98,23 @@ std::string HTTPResponse::parseResponseStr(const HTTPRequest request, std::strin
 	case HTTPMethod::PUT:
 		break;
 	case HTTPMethod::DELETE:
-		body.clear();
-		headers["Content-Length"] = "0";
-		headers["Content-Type"] = "";
-		statusCode = "204";
-		statusMessage = HTTPCommon::HTTPStatusMap.at(HTTPState::NoContent);
-		body = statusCode + ": " + statusMessage.description;
+		updateForHTTPState(HTTPState::NoContent);
 		break;
 	case HTTPMethod::HEAD:
-		body.clear();
-		headers["Content-Length"] = "0";
-		headers["Content-Type"] = "";
+		clearBody();
 		break;
 	case HTTPMethod::UNSUPPORTED:
-		statusCode = "405";
-		statusMessage = HTTPCommon::HTTPStatusMap.at(HTTPState::MethodNotAllowed);
-		body = statusCode + ": " + statusMessage.description;
+		updateForHTTPState(HTTPState::MethodNotAllowed);
 		break;
 	default:
-		statusCode = "501";
-		statusMessage = HTTPCommon::HTTPStatusMap.at(HTTPState::NotImplemented);
-		body = statusCode + ": " + statusMessage.description;
+		updateForHTTPState(HTTPState::NotImplemented);
 		break;
 	}
 
 	headers["Content-Length"] = std::to_string(body.size());
 	headers["Server"] = "Webserv_Didi_Ferre_Goksu";
 	headers["Connection"] = "keep-alive";
-
-	std::time_t now = std::time(NULL);
-	char dateBuffer[100];
-	std::strftime(dateBuffer, sizeof(dateBuffer),
-				  "%a, %d %b %Y %H:%M:%S GMT", std::gmtime(&now));
-	headers["Date"] = dateBuffer;
+	headers["Date"] = setDate();
 
 	std::string response =
 		protocolVersionToString(request.protocolVersion) + " " +
@@ -161,4 +133,32 @@ std::string HTTPResponse::parseResponseStr(const HTTPRequest request, std::strin
 			  << RESET << std::endl;
 
 	return response;
+}
+
+void HTTPResponse::clearBody()
+{
+	body.clear();
+	headers["Content-Length"] = "0";
+	headers["Content-Type"] = "";
+}
+
+void HTTPResponse::updateForHTTPState(HTTPState state)
+{
+	HTTPMesage statusMessage = HTTPCommon::HTTPStatusMap.at(state);
+	statusCode = statusMessage.code;
+	reasonPhrase = statusMessage.message;
+
+	if (state == HTTPState::NoContent)
+	{
+		clearBody();
+	}
+	else if (state == HTTPState::Ok)
+	{
+		// Body remains unchanged
+	}
+	else
+	{
+		body = statusCode + ": " + statusMessage.description;
+		headers["Content-Length"] = std::to_string(body.length());
+	}
 }
