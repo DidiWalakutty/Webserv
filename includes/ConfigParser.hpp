@@ -5,6 +5,9 @@
 #include <vector>
 #include <fstream>
 #include <optional>
+#include <algorithm>
+#include <cctype>
+#include <iostream>
 
 /* The ConfigParser class is responsible for:
 * - Reading a configuration file
@@ -17,7 +20,9 @@ class ConfigParser {
 	private:
 		std::vector<ServerConfig> _servers; // Stores all parsed servers
 
-		// --- Text Helpers ---
+		// --- File/Line Helpers ---
+		bool isConfFile(const std::string& file) const;		// Check if file has .conf extension
+		bool isEmptyFile(const std::string& file) const;	// Check if file is empty
 		void removeComments(std::string& line);
 		void trimWhitespace(std::string& line);
 		bool isLineEmpty(const std::string& line) const;
@@ -37,11 +42,11 @@ class ConfigParser {
 		std::optional<HTTPMethod> stringToHTTPMethod(const std::string& method) const;
 
 	public:
-		ConfigParser() = default;
-		~ConfigParser() = default;
-
+		ConfigParser();
+		~ConfigParser();
+		
 		// --- Read, Parse and retrieve servers ---
-		bool parseConfigFile(const std::string& filepath);
+		bool parseConfigFile(const std::string& file);
 		const std::vector<ServerConfig>& getServers() const { return _servers; } // Returns the parsed server configurations
 
 		// --- Accessors for best location and error pages ---
