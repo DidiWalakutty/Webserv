@@ -42,10 +42,11 @@ struct ServerConfig
 {
 	std::string serverName;         		/* Server name for virtual hosting */
 	std::string host;              			/* Server host (IP or domain)*/
+	std::string root;                		/* Root directory for the server */
 	int port;                       		/* Server port */
 
-	std::string root;                		/* Root directory for the server */
 	std::string index;               		/* Index file for the server */
+	std::vector<HTTPMethod> allowedMethods; /* Default allowed HTTP methods for the server */
 	size_t maxBodySize = 10485760; 			/* Max allowed body size in bytes for requests to this server: 10 mb. */
 
 	std::map<int, std::string> errorPages; 	/* Custom error pages mapped by HTTP status code */
