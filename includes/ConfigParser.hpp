@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cctype>
 #include <iostream>
+#include <sstream>
 
 /* The ConfigParser class is responsible for:
 * - Reading a configuration file
@@ -39,7 +40,7 @@ class ConfigParser {
 		bool validateServerConfig(const ServerConfig& server) const;
 		bool validateLocationConfig(const LocationConfig& location) const;
 		bool isValidHTTPMethod(const std::string& method) const;
-		std::optional<HTTPMethod> stringToHTTPMethod(const std::string& method) const;
+		std::optional<HTTPMethod> stringToHTTPMethod(const std::string& method);
 
 	public:
 		ConfigParser();
