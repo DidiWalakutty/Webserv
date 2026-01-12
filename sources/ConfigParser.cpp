@@ -31,15 +31,18 @@ bool ConfigParser::parseConfigFile(const std::string& file)
 
 	// -- Detect Server and Location Blocks and Parse ---
 	size_t currentLine = 0;
+	size_t servercount = 0;
 	while (currentLine < processedLines.size())
 	{
 		if (processedLines[currentLine] == "server {")
 		{
+			++servercount;
 			ServerConfig server = parseServerBlock(processedLines, currentLine);
 			if (validateServerConfig(server)) // in here, validate LocationsConfig as well
 				_servers.push_back(server);
 			else
 			{
+				// or print the error in validateserverconfig
 				std::cerr << "Error: Invalid server block starting at line: " << currentLine + 1 << std::endl;
 				return false;
 			}
@@ -49,17 +52,10 @@ bool ConfigParser::parseConfigFile(const std::string& file)
 			std::cerr << "Error: Unexpected line: " << processedLines[currentLine] << " outside server block at line: " << currentLine + 1 << std::endl;
 			return false;
 		}
-		// currentLine++; // Increment should be handled in parseServerBlock?
+		currentLine++;
 	}
-
-	// 4. Iterate through lines:
-	//		- detect server blocks
-	//		- call parseServerBlock()
-	//		- within parseServerBlock(), detect location blocks
-	//		- call parseLocationBlock()
 	// 5. Validate parsed servers
-	// 6. Store valid servers in _servers vector
-	return true; // Return true if parsing was successful
+	return true;
 }
 
 // This function also increments currentLine to the line after the server block
@@ -73,19 +69,11 @@ ServerConfig ConfigParser::parseServerBlock(const std::vector<std::string>& file
 	while (currentLine < fileLines.size() && fileLines[currentLine] != "}")
 	{
 		const std::string line = fileLines[currentLine]; // local copy we can modify
-		std::cout << "Current line in server block: " << currentLine + 1 << " -> " << line << std::endl;
 		// --- Check and parse location block ---
 		if (line.find("location") == 0 && line.back() == '{')
 		{
-			std::cout << "Inside location block parsing at line: " << currentLine + 1 << std::endl;
 			LocationConfig location = parseLocationBlock(fileLines, currentLine);
 			locations.push_back(location);
-			std::cout << "!Current line after location block: " << currentLine + 1 << std::endl;
-			std::cout << " > line is: " << fileLines[currentLine] << std::endl;
-			continue; // move to next line after location block
-			std::cout << "Current line after continue: " << currentLine + 1 << std::endl;
-			// Currently isn't correctly updating currentLine after location block!!!
-			// Make debugging prints easier to read and find.
 		}
 		else
 		{
@@ -114,8 +102,17 @@ ServerConfig ConfigParser::parseServerBlock(const std::vector<std::string>& file
 					server.port = std::stoi(value);
 				else if (key == "root")
 					server.root = value;
-				else if (key == "index")
+				else if (key == "index")			// directory index filename
 					server.index = value;
+				else if (key == "autoindex")		// directory listing on/off
+				{
+					if (value == "on")
+						server.autoIndex = true;
+					else if (value == "off")
+						server.autoIndex = false;
+					else
+						std::cerr << "Warning: Invalid autoindex value: '" << value << "' in server block at line: " << currentLine + 1 << std::endl;
+				}
 				else if (key == "allowed_methods")
 				{
 					server.allowedMethods.clear();
@@ -129,22 +126,13 @@ ServerConfig ConfigParser::parseServerBlock(const std::vector<std::string>& file
 							std::cerr << "Warning: Invalid HTTP method: '" << tokens[i] << "' in server block at line: " << currentLine + 1 << std::endl;
 					}
 				}
-				else if (key == "autoindex")
-				{
-					if (value == "on")
-						server.index = true;
-					else if (value == "off")
-						server.index = false;
-					else
-						std::cerr << "Warning: Invalid autoindex value: '" << value << "' in server block at line: " << currentLine + 1 << std::endl;
-				}
 				else if (key == "max_body_size")
 					server.maxBodySize = std::stoul(value);
 				else if (key == "error_page")
 				{
 					std::vector<std::string> tokens = splitByWhitespace(value);
 					
-					// value format: "<error_code> <path>"
+					// value format: <error_code> <path>
 					if (tokens.size() == 2)
 					{
 						int errorCode = std::stoi(tokens[0]);
@@ -158,7 +146,7 @@ ServerConfig ConfigParser::parseServerBlock(const std::vector<std::string>& file
 					std::cerr << "Warning: Unknown directive: '" << key << "' in server block at line: " << currentLine + 1 << std::endl;
 			}
 		}
-		++currentLine;		
+		++currentLine;
 	}
 	// --- Apply default values to all parsed locations if empty ---
 	for (size_t i = 0; i < locations.size(); ++i)
@@ -169,6 +157,12 @@ ServerConfig ConfigParser::parseServerBlock(const std::vector<std::string>& file
 			locations[i].index = server.index;
 		if (locations[i].allowedMethods.empty())
 			locations[i].allowedMethods = server.allowedMethods;
+		if (!locations[i].autoIndex)
+			locations[i].autoIndex = server.autoIndex;
+		if (!locations[i].uploadEnabled)
+			locations[i].uploadEnabled = false;
+		if (!locations[i].is_cgi)
+			locations[i].is_cgi = false;
 	}
 	server.locations = locations;
 	return server; 
@@ -184,9 +178,8 @@ LocationConfig ConfigParser::parseLocationBlock(const std::vector<std::string>& 
 	size_t bracePos = line.find('{');
 	location.path = line.substr(pathStart, bracePos - pathStart);
 	trimWhitespace(location.path);
-
 	++currentline;
-
+	
 	// --- Parse the info inside the location block ---
 	while (currentline < fileLines.size() && fileLines[currentline] != "}")
 	{
@@ -204,7 +197,6 @@ LocationConfig ConfigParser::parseLocationBlock(const std::vector<std::string>& 
 			if (!value.empty() && value.back() == ';')
 				value.pop_back();
 
-			std::cout << "Debug: Location directive key='" << key << "', value='" << value << "' at line: " << currentline + 1 << std::endl;
 			// --- Handle key-value pairs ---
 			if (key == "root")
 				location.root = value;
@@ -225,7 +217,7 @@ LocationConfig ConfigParser::parseLocationBlock(const std::vector<std::string>& 
 						std::cerr << "Warning: Invalid HTTP method: '" << tokens[i] << "' in location block at line: " << currentline + 1 << std::endl;					
 				}
 			}
-			else if (key == "redirect")
+			else if (key == "return")
 			{
 				std::vector<std::string> tokens = splitByWhitespace(value);
 				if (tokens.size() == 2)
@@ -234,14 +226,30 @@ LocationConfig ConfigParser::parseLocationBlock(const std::vector<std::string>& 
 					location.redirect.targetURL = tokens[1];
 				}
 				else
-					std::cerr << "Warning: Invalid redirect directive format in location block at line: " << currentline + 1 << std::endl;
+					std::cerr << "Warning: Invalid return directive format in location block at line: " << currentline + 1 << std::endl;
+			}
+			else if (key == "uploadEnabled")
+			{
+				if (value == "true")
+					location.uploadEnabled = true;
+				else if (value == "false")
+					location.uploadEnabled = false;
+				else
+					std::cerr << "Warning: Invalid choice for uploadEnabled in location block at line: " << currentline + 1 << std::endl;
+			}
+			else if (key == "is_cgi")
+			{
+				if (value == "true")
+					location.is_cgi = true;
+				else if (value == "false")
+					location.is_cgi = false;
+				else
+					std::cerr << "Warning: Invalid choice for is_cgi in location block at line: " << currentline + 1 << std::endl;
 			}
 			else
 				std::cerr << "Warning: Unknown directive: '" << key << "' in location block at line: " << currentline + 1 << std::endl;
 		}
-		std::cout << "Debug: Processed location line at " << currentline + 1 << std::endl;
 		++currentline;
-		std::cout << "Debug: End of location parsing at line: " << currentline + 1 << std::endl;
 	}
 	return location;
 }
