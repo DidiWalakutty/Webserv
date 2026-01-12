@@ -45,7 +45,8 @@ struct ServerConfig
 	std::string root;                		/* Root directory for the server */
 	int port;                       		/* Server port */
 
-	std::string index;               		/* Index file for the server */
+	std::string index;               		/* Index file for the server: filename */
+	bool autoIndex = false;         		/* Enable or disable directory listing for the server */
 	std::vector<HTTPMethod> allowedMethods; /* Default allowed HTTP methods for the server */
 	size_t maxBodySize = 10485760; 			/* Max allowed body size in bytes for requests to this server: 10 mb. */
 
