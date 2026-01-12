@@ -84,16 +84,23 @@ bool ConfigParser::isLineEmpty(const std::string& line) const
 }
 
 // Splits a line by whitespace into tokens -> parseServerBlock, parseLocationBlock
-// std::vector<std::string> ConfigParser::splitByWhitespace(const std::string& line) const
-// {
-// 	// Implementation goes here
-// }
+std::vector<std::string> ConfigParser::splitByWhitespace(const std::string& str) const
+{
+    std::vector<std::string> tokens;
+    std::string token;
+    std::istringstream iss(str);
+    while (iss >> token)
+        tokens.push_back(token);
+    return tokens;
+}
 
-// // Splits a line by semicolon into tokens  -> parseServerBlock, parseLocationBlock
-// std::vector<std::string> ConfigParser::splitBySemicolon(const std::string& line) const
-// {
-// 	// Implementation goes here
-// }
-
-
-// printParsedConfig
+std::optional<HTTPMethod> ConfigParser::stringToHTTPMethod(const std::string& method)
+{
+	if (method == "GET")
+		return HTTPMethod::GET;
+	else if (method == "POST")
+		return HTTPMethod::POST;
+	else if (method == "DELETE")
+		return HTTPMethod::DELETE;
+	return std::nullopt;
+}
