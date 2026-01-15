@@ -10,11 +10,22 @@ bool ConfigParser::parseConfigFile(const std::string& file)
 	_servers.clear();
 
 	// -- Check file validity and if possible to open file ---
-	if (isConfFile(file) == false || isEmptyFile(file) == true)
+	if (isConfFile(file) == false)
 		return false;
 	
 	// --- Open file ---
 	std::ifstream infile(file);
+	if (!infile.is_open())
+	{
+		std::cerr << "Error: Could not open config file: " << file << std::endl;
+		return false;
+	}
+
+	if (infile.peek() == std::ifstream::traits_type::eof())
+	{
+		std::cerr << "Error: COnfig File is empty: " << file << std::endl;
+		return false;
+	}
 
 	// --- Preprocess Lines ---
 	std::vector<std::string> processedLines;	// Stores preprocessed lines for parsing to Server/Location blocks
@@ -31,18 +42,20 @@ bool ConfigParser::parseConfigFile(const std::string& file)
 
 	// -- Detect Server and Location Blocks and Parse ---
 	size_t currentLine = 0;
-	size_t servercount = 0;
+	size_t serverCount = 0;
 	while (currentLine < processedLines.size())
 	{
 		if (processedLines[currentLine] == "server {")
 		{
-			++servercount;
+			++serverCount;
 			ServerConfig server = parseServerBlock(processedLines, currentLine);
-			if (validateServerConfig(server)) // in here, validate LocationsConfig as well
+			if (validateServerConfig(server)) // passed by reference
+			{
 				_servers.push_back(server);
+				std::cerr << "--- Server nr: " << serverCount << " has been validated ---" << std::endl;
+			}
 			else
 			{
-				// or print the error in validateserverconfig
 				std::cerr << "Error: Invalid server block starting at line: " << currentLine + 1 << std::endl;
 				return false;
 			}
@@ -92,6 +105,11 @@ ServerConfig ConfigParser::parseServerBlock(const std::vector<std::string>& file
 				// Remove last char of value if it's a semicolon
 				if (!value.empty() && value.back() == ';')
 					value.pop_back();
+					
+				// Strip quotes around value
+				if (!value.empty() && (value.front() == '"' || value.front() == '\'') &&
+										(value.back() == '"' || value.back() == '\''))
+					value = value.substr(1, value.size() - 2);
 
 				// --- Handle key-value pairs ---
 				if (key == "server_name")
@@ -99,19 +117,35 @@ ServerConfig ConfigParser::parseServerBlock(const std::vector<std::string>& file
 				else if (key == "host")
 					server.host = value;
 				else if (key == "port")
-					server.port = std::stoi(value);
+				{
+					try {
+						server.port = std::stoi(value);
+					} 
+					catch (const std::invalid_argument&) {
+						std::cerr << "Invalid Port - not a number - at line " << currentLine + 1 << std::endl;
+						server.port = 0;
+					} 
+					catch (const std::out_of_range&) {
+						std::cerr << "Invalid Port - out of range - at line " << currentLine + 1 << std::endl;
+						server.port = 0;
+					}
+				}
 				else if (key == "root")
 					server.root = value;
-				else if (key == "index")			// directory index filename
+				else if (key == "index")
 					server.index = value;
 				else if (key == "autoindex")		// directory listing on/off
 				{
-					if (value == "on")
+					if (value == "true" || value == "on")
 						server.autoIndex = true;
-					else if (value == "off")
+					else if (value == "false" || value == "off")
 						server.autoIndex = false;
 					else
+					{
 						std::cerr << "Warning: Invalid autoindex value: '" << value << "' in server block at line: " << currentLine + 1 << std::endl;
+						server.autoIndex = false;
+						std::cerr << "Auto Index was defaulted to " << server.autoIndex << std::endl;
+					}
 				}
 				else if (key == "allowed_methods")
 				{
@@ -127,7 +161,19 @@ ServerConfig ConfigParser::parseServerBlock(const std::vector<std::string>& file
 					}
 				}
 				else if (key == "max_body_size")
-					server.maxBodySize = std::stoul(value);
+				{
+					try {
+						server.maxBodySize = std::stoul(value);
+					}
+					catch (const std::invalid_argument&) {
+						std::cerr << "Invalid Max_Body_size at line " << currentLine + 1 << std::endl;
+						server.maxBodySize = 0;
+					}
+					catch (const std::out_of_range&) {
+						std::cerr << "Invalid Max_Body_size - too big - at line " << currentLine + 1 << std::endl;
+						server.maxBodySize = 0;
+					}
+				}
 				else if (key == "error_page")
 				{
 					std::vector<std::string> tokens = splitByWhitespace(value);
@@ -147,22 +193,6 @@ ServerConfig ConfigParser::parseServerBlock(const std::vector<std::string>& file
 			}
 		}
 		++currentLine;
-	}
-	// --- Apply default values to all parsed locations if empty ---
-	for (size_t i = 0; i < locations.size(); ++i)
-	{
-		if (locations[i].root.empty())
-			locations[i].root = server.root;
-		if (locations[i].index.empty())
-			locations[i].index = server.index;
-		if (locations[i].allowedMethods.empty())
-			locations[i].allowedMethods = server.allowedMethods;
-		if (!locations[i].autoIndex)
-			locations[i].autoIndex = server.autoIndex;
-		if (!locations[i].uploadEnabled)
-			locations[i].uploadEnabled = false;
-		if (!locations[i].is_cgi)
-			locations[i].is_cgi = false;
 	}
 	server.locations = locations;
 	return server; 
@@ -203,7 +233,14 @@ LocationConfig ConfigParser::parseLocationBlock(const std::vector<std::string>& 
 			else if (key == "index")
 				location.index = value;
 			else if (key == "autoindex")
-				location.autoIndex = (value == "on");	// if value is "on", set to true
+			{
+				if (value == "on" || value == "true")
+					location.autoIndex = true;
+				else if (value == "off" || value == "false")
+					location.autoIndex = false;
+				else
+					std::cerr << "Warning: Invalid autoindex at line " << currentline + 1 << std::endl;
+			}
 			else if (key == "allowed_methods")
 			{
 				location.allowedMethods.clear();
@@ -222,7 +259,17 @@ LocationConfig ConfigParser::parseLocationBlock(const std::vector<std::string>& 
 				std::vector<std::string> tokens = splitByWhitespace(value);
 				if (tokens.size() == 2)
 				{
-					location.redirect.statusCode = std::stoi(tokens[0]);
+					try {
+						location.redirect.statusCode = std::stoi(tokens[0]);
+					}
+					catch (const std::invalid_argument&) {
+						std::cerr << "Warning: Return statuscode is not a number at line: " << currentline + 1 << std::endl;
+						location.redirect.statusCode = 0;
+					}
+					catch (const std::out_of_range&) {
+						std::cerr << "Warning: Return status code is too big. Check line: " << currentline + 1 << std::endl;
+						location.redirect.statusCode = 0;
+					}
 					location.redirect.targetURL = tokens[1];
 				}
 				else
