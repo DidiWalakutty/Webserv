@@ -19,23 +19,6 @@ bool ConfigParser::isConfFile(const std::string& file) const
 	return true;
 }
 
-// Checks if the file is empty by peeking at the first character
-bool ConfigParser::isEmptyFile(const std::string& file) const
-{
-	std::ifstream infile(file);
-	if (!infile.is_open())
-	{
-		std::cerr << "Error: Could not open config file: " << file << std::endl;
-		return true;
-	}
-	if (infile.peek() == std::ifstream::traits_type::eof())
-	{
-		std::cerr << "Error: Config file is empty: " << file << std::endl;
-		return true;
-	}
-	return false;
-}
-
 // Removes all # comments, and // comments only if they appear after a semicolon.
 void ConfigParser::removeComments(std::string& line)
 {
