@@ -16,6 +16,10 @@
 * - Validating values and settings (host, port, paths, methods, etc.)
 * - Filling ServerConfig and LocationConfig structures
 */
+// Min and max body_size
+static const size_t MIN_CONFIG_BODY_SIZE = 1;							// 1 byte
+static const size_t MAX_CONFIG_BODY_SIZE = 10 * 1024 * 1024;	// 10 MB
+
 
 class ConfigParser {
 	private:
@@ -23,7 +27,6 @@ class ConfigParser {
 
 		// --- File/Line Helpers ---
 		bool isConfFile(const std::string& file) const;		// Check if file has .conf extension
-		bool isEmptyFile(const std::string& file) const;	// Check if file is empty
 		void removeComments(std::string& line);
 		void trimWhitespace(std::string& line);
 		bool isLineEmpty(const std::string& line) const;
@@ -37,8 +40,8 @@ class ConfigParser {
 		LocationConfig parseLocationBlock(const std::vector<std::string>& fileLines, size_t& currentLine);
 
 		// --- Validation Data ---
-		bool validateServerConfig(const ServerConfig& server) const;
-		bool validateLocationConfig(const LocationConfig& location) const;
+		bool validateServerConfig(ServerConfig& server);
+		// bool validateLocationConfig(const LocationConfig& location) const;
 		bool isValidHTTPMethod(const std::string& method) const;
 		std::optional<HTTPMethod> stringToHTTPMethod(const std::string& method);
 
