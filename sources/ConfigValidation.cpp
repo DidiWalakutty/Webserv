@@ -1,6 +1,5 @@
 #include "../includes/ConfigParser.hpp"
 
-// Underscores _ are invalid in official DNS hostnames.
 static bool isValidServerName(const std::string& name)
 {
 	if (name.empty())
@@ -12,7 +11,7 @@ static bool isValidServerName(const std::string& name)
 	{
 		if (!isalnum(c) && c != '-' && c != '.' && c != '_')
 		{
-			std::cerr << "Invalid character found in server name: " << c << ". Please avoid spaces and special characters." << std::endl;
+			std::cerr << "Invalid character found in server name: '" << c << "'. Please avoid spaces and special characters." << std::endl;
 			return false;
 		}
 	}
@@ -35,7 +34,7 @@ static bool isValidIPv4(const std::string& ip)
 	{
 		if (block.empty())
 			return false;
-		// if block-length > 1, it can't start with 0.
+		// if block-length > 1, it can't start with 0 -> '001.8.10.30'.
 		if (block.size() > 1 && block[0] == '0')
 			return false;
 		for (char c : block)
@@ -56,32 +55,32 @@ static bool isValidHost(const std::string& host)
 		return (false);
 	}
 	
-	// Decide if host looks like an IPv4 (digits and dots only)
+	// Decide if host looks like an IPv4 (digits and dots only).
 	bool looksIPv4 = true;
 	for (char c : host)
 	{
-		if (!isdigit(c) && c != '.')
+		if (!isdigit(c) && c != '.' && c != '-' && c != '+' )
 		{
 			looksIPv4 = false;
 			break;
 		}
 	}
 
-	// If so, validate it
+	// If so, validate it.
 	if (looksIPv4)
 	{
 		if (!isValidIPv4(host))
 		{
-			std::cerr << "Host name - IP is invalid" << std::endl;
+			std::cerr << "Host name - IP is invalid:\nHost is ID'd as a possible IP (digits and dots).\nIP contains 3 dots, no leading '0's in a block and no +/- operators." << std::endl;
 			return false;
 		}
 		return true;
 	}
 
 	// Else, validate domain name
-	if (host.size() > 63)
+	if (host.size() > 42)
 	{
-		std::cerr << "Host name cannot be more than 63 characters" << std::endl;
+		std::cerr << "Host name cannot be more than 42 characters" << std::endl;
 		return false;
 	}
 	for (char c : host)
@@ -95,34 +94,40 @@ static bool isValidHost(const std::string& host)
 	return true;
 }
 
-static bool isValidIndex(const std::string& index)
+static bool isValidLocationPath(const std::string& path)
 {
-	if (!index.empty() && index.find('/') != std::string::npos)
+	if (path.empty())
+	return false;
+	
+	if (path.find("..") != std::string::npos)
+	return false;
+	
+	if (path.find("//") != std::string::npos)
+	return false;
+	
+	for (char c : path)
 	{
-		std::cerr << "Index must be a filename, not a path" << std::endl;
-		return false;
+		if (!isalnum(c) && c != '/' && c != '-' && c != '_' && c != '.')
+			return false;
 	}
-	if (index.size() >= 5 && index.substr(index.size()-5) == ".html")
+	return true;
+}
+
+static bool isValidRedirectTarget(const std::string& path)
+{
+	if (path.empty())
+		return false;
+	
+	if (path.find("..") != std::string::npos)
+		return false;
+	
+	if (path.find(' ') != std::string::npos)
+		return false;
+
+	if (path.find("http://") == 0 || path.find("https://") == 0)
 		return true;
-	else
-	{
-		std::cerr << "Warning: index should end with .html";
-		return false;
-	}
-	return false;	
-}
 
-// isFile: true = filename, false = directory/root
-static bool isValidPath(const std::string& path, bool isFilename)
-{
-
-}
-
-// Checks if all paths (root, index + locations) in the server are valid (not if they're existing)
-// Checks per server every loop in parse configline
-static bool validatePaths(const ServerConfig& server)
-{
-
+	return isValidLocationPath(path);
 }
 
 // Check each code and path pair.
@@ -164,14 +169,139 @@ static bool isValidErrorPages(const std::map<int, std::string>& errorPages)
 			std::cerr << "Error page: filename doesn't match status code. Filename: " << filename << ", Status code: " << statusCode << std::endl;
 			return false;
 		}
+
+		if (!isValidRedirectTarget(path))
+		{
+			std::cerr << "Invalid syntax for Redirect Target: " << path << std::endl;
+			return false;
+		}
 		++current;
 	}
 	return true;
 } 
 
+// Checks root syntax
+static bool isValidRoot(const std::string& root)
+{
+	if (root.empty())
+	return false;
+	
+	if (root.find("..") != std::string::npos)
+		return false;
+		
+	if (root.find("//") != std::string::npos)
+	return false;
+	
+	if (root.find("\\") != std::string::npos)
+	return false;
+	
+	for (size_t i = 0; i < root.size(); ++i)
+	{
+		unsigned char c = root[i];
+		if (!std::isprint(c))
+		return false;
+	}
+	return true;
+}
+
+// Checks index syntax (filename).
+// Will only accept isalnum() + special chars.
+// Must end with .html and contain 1 dot. 
+static bool isValidIndex(const std::string& name)
+{
+	if (name.empty())
+	return false;
+	
+	if (name.find('/') != std::string::npos)
+	{
+		std::cerr << "Index should not contain a '\'' character. It's not a path." << std::endl;
+		return false;
+	}
+
+	if (name.find("..") != std::string::npos)
+	return false;	
+
+	// finds last position of dot
+	size_t dot = name.rfind('.');
+	if (dot == std::string::npos || dot == 0 || dot == name.size() -1)
+	return false;
+	
+	for (char c : name)
+	{
+		if (!isalnum(c) && c != '-' && c != '_' && c != '.')
+		return false;
+	}
+
+	if (name.size() >= 5 && name.substr(name.size()-5) == ".html")
+		return true;
+	return false;
+}
+
+// static bool isValidLocationMethodsCombo(const LocationConfig&loc, const ServerConfig& server)
+// {
+
+// }
+
+// Checks all server + location paths on syntax.
+// We'll send a true boolean if the file is a filename, and false for directory/root.
+static bool validatePathsAndMethods(const ServerConfig& server)
+{
+	if (!isValidRoot(server.root))
+	{
+		std::cerr << "Invalid syntax for server root: " << server.root << std::endl;
+		return false;
+	}
+
+	if (!isValidIndex(server.index))
+	{
+		std::cerr << "Invalid syntax for server index: " << server.index << std::endl;
+		return false;
+	}
+
+	for (size_t i = 0; i < server.locations.size(); ++i)
+	{
+		const LocationConfig& loc = server.locations[i];
+		if (!isValidLocationPath(loc.path))
+		{
+			std::cerr << "Invalid syntax for location path: " << loc.path << std::endl;
+			return false;
+		}
+
+		if (!isValidRoot(loc.root))
+		{
+			std::cerr << "Invalid syntax for location root: " << loc.root << std::endl;
+			return false;
+		}
+
+		if (!isValidIndex(loc.index))
+		{
+			std::cerr << "Invalid syntax for location index: " << loc.index << std::endl;
+			return false;
+		}
+		
+		if (!loc.redirect.targetURL.empty())
+		{
+			if (!isValidRedirectTarget(loc.redirect.targetURL))
+			{
+				std::cerr << "Invalid syntax for location's Redirect url: '" << loc.redirect.targetURL << std::endl;
+				return false;
+			}
+		}
+	}
+
+	// if (!isValidLocationMethodsCombo(server))
+	// 	return false;
+
+	return true;
+}
+
+
+
+
 bool ConfigParser::validateServerConfig(ServerConfig& server)
 {
 	// --- VALIDATE Server ---
+
 	if (!isValidServerName(server.serverName))
 		return (false);
 	
@@ -185,7 +315,6 @@ bool ConfigParser::validateServerConfig(ServerConfig& server)
 	}
 	
 	// Without a root, URL -> filesystem mapping is impossible.
-	// Existence should be check at request time, not startup.
 	if (server.root.empty())
 	{
 		std::cerr << "Server root is required and cannot be empty." << std::endl;
@@ -196,11 +325,8 @@ bool ConfigParser::validateServerConfig(ServerConfig& server)
 	if (server.index.empty())
 	{
 		server.index = "index.html";
-		std::cerr << "Index was empty in .conf file. Now set to default:" << server.index << std::endl;
-		std::cout << "!!!Index file was set to a default" << std::endl;
+		std::cerr << "Index was empty in .conf file. Now set to default: " << server.index << std::endl;
 	}
-	if (!isValidIndex(server.index))
-		return false;
 	
 	if (!isValidErrorPages(server.errorPages))
 		return false;
@@ -208,8 +334,7 @@ bool ConfigParser::validateServerConfig(ServerConfig& server)
 	if (server.allowedMethods.empty())
 	{
 		server.allowedMethods.push_back(HTTPMethod::GET);
-		std::cerr << "No (valid) allowed methods specified. Default set to GET." << std::endl;
-		std::cout << "!!! Allowed methods was set to a default" << std::endl;
+		std::cerr << "No (valid) allowed methods specified. Now set to default: GET." << std::endl;
 	}
 	
 	if (server.maxBodySize < MIN_CONFIG_BODY_SIZE || server.maxBodySize > MAX_CONFIG_BODY_SIZE)
@@ -218,7 +343,7 @@ bool ConfigParser::validateServerConfig(ServerConfig& server)
 		return false;
 	}
 	
-	// --- Fix Location Inheritance after parsing + validating Server ---
+	// --- Fix empty Location Inheritance + updated with valid Server config if empty ---
 	for (size_t i = 0; i < server.locations.size(); ++i)
 	{
 		LocationConfig& location = server.locations[i];
@@ -236,18 +361,17 @@ bool ConfigParser::validateServerConfig(ServerConfig& server)
 			location.uploadEnabled = false;
 		if (!location.is_cgi.has_value())
 			location.is_cgi = false;
-
-		// --- VALIDATE Location --- 
+	}
+	// Checks Syntax
+	if (!validatePathsAndMethods(server))
+		return false;
+	
+		// Check duplicates across servers.
+		// // --- VALIDATE Location --- 
 		// if (!validateLocationConfig(location))
 		// {
 		// 	std::cerr << "Invalid location at path: " << location.path << "in server: " << server.serverName << std::endl;
 		// 	return false;
 		// }
-
-		// Check if all paths could be valid (sanity check, so no '//', or '..' etc)
-		// if (!validatePaths(server))
-		// 	return false;
-		// Check duplicates across servers.
-	}
 	return true;
 }
