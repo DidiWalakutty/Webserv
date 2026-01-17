@@ -4,14 +4,14 @@ static bool isValidServerName(const std::string& name)
 {
 	if (name.empty())
 	{
-		std::cerr << "Server name is empty" << std::endl;
+		std::cerr << "Error: Server name is empty" << std::endl;
 		return false;
 	}
 	for (char c : name)
 	{
 		if (!isalnum(c) && c != '-' && c != '.' && c != '_')
 		{
-			std::cerr << "Invalid character found in server name: '" << c << "'. Please avoid spaces and special characters." << std::endl;
+			std::cerr << "Error: Invalid character found in server name: '" << c << "'. Please avoid spaces and special characters." << std::endl;
 			return false;
 		}
 	}
@@ -51,7 +51,7 @@ static bool isValidHost(const std::string& host)
 {
 	if (host.empty())
 	{
-		std::cerr << "Host cannot be empty." << std::endl;
+		std::cerr << "Error: Host cannot be empty." << std::endl;
 		return (false);
 	}
 	
@@ -71,7 +71,7 @@ static bool isValidHost(const std::string& host)
 	{
 		if (!isValidIPv4(host))
 		{
-			std::cerr << "Host name - IP is invalid:\nHost is ID'd as a possible IP (digits and dots).\nIP contains 3 dots, no leading '0's in a block and no +/- operators." << std::endl;
+			std::cerr << "Error: Host name - IP is invalid:\nHost is ID'd as a possible IP (digits and dots).\nIP contains 3 dots, no leading '0's in a block and no +/- operators." << std::endl;
 			return false;
 		}
 		return true;
@@ -80,14 +80,14 @@ static bool isValidHost(const std::string& host)
 	// Else, validate domain name
 	if (host.size() > 42)
 	{
-		std::cerr << "Host name cannot be more than 42 characters" << std::endl;
+		std::cerr << "Error: Host name cannot be more than 42 characters" << std::endl;
 		return false;
 	}
 	for (char c : host)
 	{
 		if (!isalnum(c) && c != '.' && c != '-')
 		{
-			std::cerr << "Host name contains forbidden characters (spaces or special symbols)." << std::endl;
+			std::cerr << "Error: Host name contains forbidden characters (spaces or special symbols)." << std::endl;
 			return false;
 		}
 	}
@@ -146,19 +146,19 @@ static bool isValidErrorPages(const std::map<int, std::string>& errorPages)
 
 		if (statusCode < 400 || statusCode > 599)
 		{
-			std::cerr << "Invalid error_page status code: " << statusCode << 
+			std::cerr << "Error: Invalid error_page status code: " << statusCode << 
 			". Status code should be between 400 and 599." << std::endl;
 			return false;
 		}
 		if (path.empty())
 		{
-			std::cerr << "Path for status code: " << statusCode << " is empty." << std::endl;
+			std::cerr << "Error: Path for status code: " << statusCode << " is empty." << std::endl;
 			return false;
 		}
 		
 		if (path.substr(0, ErrorPagePrefix.size()) != ErrorPagePrefix)
 		{
-			std::cerr << "Error page must start with '" << ErrorPagePrefix << ": " << path << std::endl;
+			std::cerr << "Error: Error page must start with '" << ErrorPagePrefix << ": " << path << std::endl;
 			return false;
 		}
 
@@ -166,13 +166,13 @@ static bool isValidErrorPages(const std::map<int, std::string>& errorPages)
 		std::string match = std::to_string(statusCode) + ".html";
 		if (filename != match)
 		{
-			std::cerr << "Error page: filename doesn't match status code. Filename: " << filename << ", Status code: " << statusCode << std::endl;
+			std::cerr << "Error: Error page: filename doesn't match status code. Filename: " << filename << ", Status code: " << statusCode << std::endl;
 			return false;
 		}
 
 		if (!isValidRedirectTarget(path))
 		{
-			std::cerr << "Invalid syntax for Redirect Target: " << path << std::endl;
+			std::cerr << "Error: Invalid syntax for Redirect Target: " << path << std::endl;
 			return false;
 		}
 		++current;
@@ -214,7 +214,7 @@ static bool isValidIndex(const std::string& name)
 	
 	if (name.find('/') != std::string::npos)
 	{
-		std::cerr << "Index should not contain a '\'' character. It's not a path." << std::endl;
+		std::cerr << "Error: Index should not contain a '\'' character. It's not a path." << std::endl;
 		return false;
 	}
 
@@ -248,13 +248,13 @@ static bool validatePathsAndMethods(const ServerConfig& server)
 {
 	if (!isValidRoot(server.root))
 	{
-		std::cerr << "Invalid syntax for server root: " << server.root << std::endl;
+		std::cerr << "Error: Invalid syntax for server root: " << server.root << std::endl;
 		return false;
 	}
 
 	if (!isValidIndex(server.index))
 	{
-		std::cerr << "Invalid syntax for server index: " << server.index << std::endl;
+		std::cerr << "Error: Invalid syntax for server index: " << server.index << std::endl;
 		return false;
 	}
 
@@ -263,19 +263,19 @@ static bool validatePathsAndMethods(const ServerConfig& server)
 		const LocationConfig& loc = server.locations[i];
 		if (!isValidLocationPath(loc.path))
 		{
-			std::cerr << "Invalid syntax for location path: " << loc.path << std::endl;
+			std::cerr << "Error: Invalid syntax for location path: " << loc.path << std::endl;
 			return false;
 		}
 
 		if (!isValidRoot(loc.root))
 		{
-			std::cerr << "Invalid syntax for location root: " << loc.root << std::endl;
+			std::cerr << "Error: Invalid syntax for location root: " << loc.root << std::endl;
 			return false;
 		}
 
 		if (!isValidIndex(loc.index))
 		{
-			std::cerr << "Invalid syntax for location index: " << loc.index << std::endl;
+			std::cerr << "Error: Invalid syntax for location index: " << loc.index << std::endl;
 			return false;
 		}
 		
@@ -283,7 +283,7 @@ static bool validatePathsAndMethods(const ServerConfig& server)
 		{
 			if (!isValidRedirectTarget(loc.redirect.targetURL))
 			{
-				std::cerr << "Invalid syntax for location's Redirect url: '" << loc.redirect.targetURL << std::endl;
+				std::cerr << "Error: Invalid syntax for location's Redirect url: '" << loc.redirect.targetURL << std::endl;
 				return false;
 			}
 		}
@@ -310,14 +310,14 @@ bool ConfigParser::validateServerConfig(ServerConfig& server)
 	
 	if (server.port < 1 || server.port > 65535)
 	{
-		std::cerr << "Invalid Port: " << server.port << " for server: " << server.serverName << std::endl;
+		std::cerr << "Error: Invalid Port: " << server.port << " for server: " << server.serverName << std::endl;
 		return false;
 	}
 	
 	// Without a root, URL -> filesystem mapping is impossible.
 	if (server.root.empty())
 	{
-		std::cerr << "Server root is required and cannot be empty." << std::endl;
+		std::cerr << "Error: Server root is required and cannot be empty." << std::endl;
 		return false;
 	}
 	
@@ -339,7 +339,7 @@ bool ConfigParser::validateServerConfig(ServerConfig& server)
 	
 	if (server.maxBodySize < MIN_CONFIG_BODY_SIZE || server.maxBodySize > MAX_CONFIG_BODY_SIZE)
 	{
-		std::cerr << "max_body_size must be between " << MIN_CONFIG_BODY_SIZE << " and " << MAX_CONFIG_BODY_SIZE << " bytes" << std::endl;
+		std::cerr << "Error: max_body_size must be between " << MIN_CONFIG_BODY_SIZE << " and " << MAX_CONFIG_BODY_SIZE << " bytes" << std::endl;
 		return false;
 	}
 	
