@@ -4,6 +4,9 @@
 #include "../includes/Config.hpp"
 #include "../includes/ConfigParser.hpp"
 
+// g++ -std=c++17 -Wall -Wextra -Werror ConfigParser.cpp ConfigParsingUtils.cpp configmaintester.cpp ConfigValidation.cpp -o configTest
+
+
 std::string method_to_string(HTTPMethod m)
 {
     switch (m)
@@ -78,8 +81,8 @@ void print_server(const ServerConfig& server)
     std::cout << "\n";
 	std::cout << "autoindex: " << (server.autoIndex ? "on" : "off") << "\n";
     std::cout << "max_body_size: " << server.maxBodySize << "\n";
-
-
+	std::cout << std::endl;
+	
     if (!server.errorPages.empty())
     {
         std::cout << "error pages:\n";
