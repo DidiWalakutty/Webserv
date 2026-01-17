@@ -36,8 +36,8 @@ class ConfigParser {
 		std::vector<std::string> splitBySemicolon(const std::string& line) const;
 
 		// --- Parse Server and Location Blocks ---
-		ServerConfig parseServerBlock(const std::vector<std::string>& fileLines, size_t& currentLine);
-		LocationConfig parseLocationBlock(const std::vector<std::string>& fileLines, size_t& currentLine);
+		ServerConfig parseServerBlock(const std::vector<std::string>& fileLines, size_t& currentLine, bool& parsing_error);
+		LocationConfig parseLocationBlock(const std::vector<std::string>& fileLines, size_t& currentLine, bool& parsing_error);
 
 		// --- Validation Data ---
 		bool validateServerConfig(ServerConfig& server);
