@@ -4,6 +4,27 @@ ConfigParser::ConfigParser() {}
 
 ConfigParser::~ConfigParser() {}
 
+static bool duplicatesAcrossServers(const std::vector<ServerConfig>& servers)
+{
+	for (size_t i = 0; i < servers.size(); ++i)
+	{
+		for (size_t j = i + 1; j < servers.size(); ++j)
+		{
+			if (servers[i].host == servers[j].host && 
+				servers[i].port == servers[j].port &&
+				servers[i].serverName == servers[j].serverName)
+			{
+				std::cerr << "Error: Duplicate server definition detected:\n" 
+						  << " host: " << servers[i].host << "\n"
+						  << " port: " << servers[i].port << "\n"
+						  << " servername: " << servers[i].serverName << std::endl;
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
 bool ConfigParser::parseConfigFile(const std::string& file)
 {
 	// --- Clear previous _servers ---
@@ -69,6 +90,9 @@ bool ConfigParser::parseConfigFile(const std::string& file)
 			return false;
 		}
 	}
+	// Check duplicates across servers.
+	if (duplicatesAcrossServers(_servers))
+		return false;
 	return true;
 }
 
@@ -228,9 +252,28 @@ ServerConfig ConfigParser::parseServerBlock(const std::vector<std::string>& file
 				// value format: <error_code> <path>
 				if (tokens.size() == 2)
 				{
-					int errorCode = std::stoi(tokens[0]);
-					std::string errorPath = tokens[1];
-					server.errorPages[errorCode] = errorPath;
+					try {
+						int errorCode = std::stoi(tokens[0]);
+						std::string errorPath = tokens[1];
+						
+						if (server.errorPages.count(errorCode))
+						{
+							std::cerr << "Error: Duplicate error_page for code: " << errorCode << " at line: " << currentLine + 1 << std::endl;
+							parsing_error = true;
+						}
+						else
+						{
+							server.errorPages[errorCode] = errorPath;
+						}
+					} 
+					catch (const std::invalid_argument&) {
+						std::cerr << "Error: Error Page - not a number - at line " << currentLine + 1 << std::endl;
+						parsing_error = true;
+					}
+					catch (const std::out_of_range&) {
+						std::cerr << "Error: Error Page - out of range - at line " << currentLine + 1 << std::endl;
+						parsing_error = true;
+					}
 				}
 				else
 				{
@@ -271,6 +314,7 @@ LocationConfig ConfigParser::parseLocationBlock(const std::vector<std::string>& 
 	const std::string line = fileLines[currentline];
 	size_t pathStart = line.find("location") + 8; // gives what's after "location"
 	size_t bracePos = line.find('{');
+
 	location.path = line.substr(pathStart, bracePos - pathStart);
 	trimWhitespace(location.path);
 	
