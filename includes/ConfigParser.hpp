@@ -9,6 +9,7 @@
 #include <cctype>
 #include <iostream>
 #include <sstream>
+#include <set>
 
 /* The ConfigParser class is responsible for:
 * - Reading a configuration file
