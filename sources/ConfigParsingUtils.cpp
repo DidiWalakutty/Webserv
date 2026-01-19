@@ -67,7 +67,7 @@ bool ConfigParser::isLineEmpty(const std::string& line) const
 }
 
 // Splits a line by whitespace into tokens -> parseServerBlock, parseLocationBlock
-std::vector<std::string> ConfigParser::splitByWhitespace(const std::string& str) const
+	std::vector<std::string> ConfigParser::splitByWhitespace(const std::string& str) const
 {
     std::vector<std::string> tokens;
     std::string token;
