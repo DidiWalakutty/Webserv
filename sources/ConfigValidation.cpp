@@ -184,22 +184,22 @@ static bool isValidErrorPages(const std::map<int, std::string>& errorPages)
 static bool isValidRoot(const std::string& root)
 {
 	if (root.empty())
-	return false;
+		return false;
 	
 	if (root.find("..") != std::string::npos)
 		return false;
 		
 	if (root.find("//") != std::string::npos)
-	return false;
+		return false;
 	
 	if (root.find("\\") != std::string::npos)
-	return false;
+		return false;
 	
 	for (size_t i = 0; i < root.size(); ++i)
 	{
 		unsigned char c = root[i];
 		if (!std::isprint(c))
-		return false;
+			return false;
 	}
 	return true;
 }
@@ -214,7 +214,7 @@ static bool isValidIndex(const std::string& name)
 	
 	if (name.find('/') != std::string::npos)
 	{
-		std::cerr << "Error: Index should not contain a '\'' character. It's not a path." << std::endl;
+		std::cerr << "Error: Index should not contain a '/'' character. It's not a path." << std::endl;
 		return false;
 	}
 
@@ -237,10 +237,99 @@ static bool isValidIndex(const std::string& name)
 	return false;
 }
 
-// static bool isValidLocationMethodsCombo(const LocationConfig&loc, const ServerConfig& server)
-// {
+static bool validateMethodsAndBools(const LocationConfig& loc)
+{
+	// Convert optional<bool> config values into real booleans.
+	// value_or(false) means: use the configured value if present, otherwise default to false.
+	// This prevents confusing "option exists" with "option is true".
+	bool isCgi = loc.is_cgi.value_or(false);
+	bool upload = loc.uploadEnabled.value_or(false);
+	bool autoIdx = loc.autoIndex.value_or(false);
 
-// }
+	if (loc.path.empty())
+	{
+		std::cerr << "Error: Location path cannot be empty" << std::endl;
+		return false;
+	}
+
+	if (loc.path == "/uploads" && (!upload || !autoIdx))
+	{
+		std::cerr << "Error: Location '/upload' must have uploadEnabled and autoindex set to true" << std::endl;
+		return false;
+	}
+
+	if (loc.path == "/cgi-bin" && !isCgi)
+	{
+		std::cerr << "Error: Location '/cgi-bin' must have is_cgi set to true" << std::endl;
+		return false;
+	}
+
+	if (loc.path == "/images" && !autoIdx)
+	{
+		std::cerr << "Error: Location '/images' must have autoIndex set to true" << std::endl;
+		return false;		
+	}
+
+	if (isCgi)
+	{
+		for (HTTPMethod m : loc.allowedMethods)
+		{
+			if (m != HTTPMethod::GET && m != HTTPMethod::POST)
+			{
+				std::cerr << "Error: CGI location only allows GET and/or POST." << std::endl;
+				return false;
+			}
+		}
+		if (upload || autoIdx)
+		{
+			std::cerr << "Error: CGI location cannot have uploadEnabled or autoIndex set to true" << std::endl;
+			return false;
+		}
+	}
+
+	if (upload)
+	{
+		bool hasPost = false;
+		bool hasDelete = false;
+		for (HTTPMethod m : loc.allowedMethods)
+		{
+			if (m == HTTPMethod::POST)
+				hasPost = true;
+			if (m == HTTPMethod::DELETE)
+				hasDelete = true;
+		}
+		if (!hasPost || !hasDelete)
+		{
+			std::cerr << "Error: UploadEnable requires both POST and DELETE methods" << std::endl;
+			return false;
+		}
+		if (isCgi)
+		{
+			std::cerr << "Error: UploadEnabled cannot have is_cgi set to true." << std::endl;
+			return false;
+		}
+	}
+
+	if (!loc.redirect.targetURL.empty())
+	{
+		if (!loc.allowedMethods.empty() || upload || autoIdx || isCgi || !loc.root.empty() || !loc.index.empty())
+		{
+			std::cerr << "Error: Redirect location should be empty, except for status code and target url" << std::endl;
+			return false;
+		}
+	}
+
+	for (HTTPMethod m : loc.allowedMethods)
+	{
+		if (m != HTTPMethod::GET && m != HTTPMethod::POST && m != HTTPMethod::DELETE)
+		{
+			std::cerr << "Error: only HTTP methods GET, POST and DELETE are allowed." << std::endl;
+			return false;
+		}
+	}
+
+	return true;
+}
 
 // Checks all server + location paths on syntax.
 // We'll send a true boolean if the file is a filename, and false for directory/root.
@@ -261,24 +350,26 @@ static bool validatePathsAndMethods(const ServerConfig& server)
 	for (size_t i = 0; i < server.locations.size(); ++i)
 	{
 		const LocationConfig& loc = server.locations[i];
+
 		if (!isValidLocationPath(loc.path))
 		{
 			std::cerr << "Error: Invalid syntax for location path: " << loc.path << std::endl;
 			return false;
 		}
 
-		if (!isValidRoot(loc.root))
+		if (loc.redirect.targetURL.empty() && !isValidRoot(loc.root))
 		{
 			std::cerr << "Error: Invalid syntax for location root: " << loc.root << std::endl;
 			return false;
 		}
 
-		if (!isValidIndex(loc.index))
+		if (loc.redirect.targetURL.empty() && !isValidIndex(loc.index))
 		{
 			std::cerr << "Error: Invalid syntax for location index: " << loc.index << std::endl;
 			return false;
 		}
 		
+		// Check syntax for Redirect
 		if (!loc.redirect.targetURL.empty())
 		{
 			if (!isValidRedirectTarget(loc.redirect.targetURL))
@@ -287,16 +378,31 @@ static bool validatePathsAndMethods(const ServerConfig& server)
 				return false;
 			}
 		}
+		
+		if (!validateMethodsAndBools(loc))
+			return false;
 	}
 
-	// if (!isValidLocationMethodsCombo(server))
-	// 	return false;
 
 	return true;
 }
 
+static bool duplicateLocations(const ServerConfig& server)
+{
+	std::set<std::string> seen;
 
+	for (size_t i = 0; i < server.locations.size(); ++i)
+	{
+		const std::string& path = server.locations[i].path;
 
+		if (!seen.insert(path).second)
+		{
+			std::cerr << "Error: Duplicate location path detected: " << path << " in server: " << server.serverName << std::endl;
+			return true;
+		}
+	}
+	return false;
+}
 
 bool ConfigParser::validateServerConfig(ServerConfig& server)
 {
@@ -362,16 +468,30 @@ bool ConfigParser::validateServerConfig(ServerConfig& server)
 		if (!location.is_cgi.has_value())
 			location.is_cgi = false;
 	}
+
+	// If location /redirect, all other info must be empty
+	for (size_t i = 0; i < server.locations.size(); ++i)
+	{
+		LocationConfig& loc = server.locations[i];
+
+		if (!loc.redirect.targetURL.empty())
+		{
+			loc.root.clear();
+			loc.index.clear();
+			loc.allowedMethods.clear();
+			loc.autoIndex = false;
+			loc.uploadEnabled = false;
+			loc.is_cgi = false;
+		}
+	}
+
+	// Check duplicate location paths
+	if (duplicateLocations(server))
+		return false;
+
 	// Checks Syntax
 	if (!validatePathsAndMethods(server))
 		return false;
-	
-		// Check duplicates across servers.
-		// // --- VALIDATE Location --- 
-		// if (!validateLocationConfig(location))
-		// {
-		// 	std::cerr << "Invalid location at path: " << location.path << "in server: " << server.serverName << std::endl;
-		// 	return false;
-		// }
+
 	return true;
 }
