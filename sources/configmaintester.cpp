@@ -7,6 +7,7 @@
 // g++ -std=c++17 -Wall -Wextra -Werror ConfigParser.cpp ConfigParsingUtils.cpp configmaintester.cpp ConfigValidation.cpp -o configTest
 
 
+// Helper function to print HTTPMethod
 std::string method_to_string(HTTPMethod m)
 {
     switch (m)
@@ -28,6 +29,7 @@ void print_methods(const std::vector<HTTPMethod>& methods)
     }
 }
 
+// Print LocationConfig details
 void print_location(const LocationConfig& loc)
 {
     std::cout << "  Location:\n";
@@ -65,7 +67,7 @@ void print_location(const LocationConfig& loc)
     }
 }
 
-
+// Print Serverconfig details
 void print_server(const ServerConfig& server)
 {
     std::cout << "=================================\n";
@@ -107,37 +109,57 @@ int main()
     ConfigParser parser;
     std::string filepath = "../config/default.conf";
 
-    if (parser.parseConfigFile(filepath))
+	// --- Parse + Validate .conf file ---
+    if (!parser.parseConfigFile(filepath))
 	{
-		const std::vector<ServerConfig>& servers = parser.getServers();
-		for (size_t i = 0; i < servers.size(); ++i)
-			print_server(servers[i]);
+		std::cout << "Error parsing config" << std::endl;
+		return 1;
 	}
-    else
-		std::cout << "error in parsing" << std::endl;
+    
+	const std::vector<ServerConfig>& servers = parser.getServers();
+	
+	// --- Print Servers ---
+	// for (size_t i = 0; i < servers.size(); ++i)
+	// 	print_server(servers[i]);
+
+	// --- Test paths to simulate requests ---
+	std::vector<std::string> testPaths = {
+		"/", 
+		"/images", 
+		"/images/logo.png", 
+		"/uploads/file.txt", 
+		"/cgi-bin/script.php",
+		"/nothing/hi"
+	};
+
+	for (size_t s = 0; s < servers.size(); ++s)
+	{
+		const ServerConfig& server = servers[s];
+
+		std::cout << "\nServer: " << server.serverName
+                  << " (" << server.host << ":" << server.port << ")\n";
+        std::cout << "========================\n";
+		for (size_t i = 0; i < testPaths.size(); ++i)
+		{
+			const std::string& path = testPaths[i];
+            const LocationConfig* loc = server.get_best_location(path);
+			std::cout << "Request Path: " << path << "\n";
+			
+			if (loc)
+			{
+				std::cout << "Found: " << std::endl;
+				std::cout << "requested path: " << path << std::endl;
+				std::cout << "best match: " << loc->path << std::endl;
+				std::cout << std::endl;
+				// print_location(*loc);
+			}
+			else
+			{
+				std::cerr << "No matching location found\n" << std::endl;
+				std::cout << "------------------------\n";
+			}
+		}
+	}
 
     return 0;
 }
-
-
-
-// #include "ConfigParser.hpp"
-
-// // argc <= 2, if 2, argv[1] is config file path
-// // otherwise use default path "./config/default.conf" at argv[1]
-
-// // For actual main function
-// // if (argc <= 2)
-// // {
-// // 	ConfigParser config;
-// // 	std::string input;
-// // 	if (argc == 1)
-// // 		input = "./config/default.conf";
-// // 	else
-// // 		input = argv[1];
-// // 	if (!config.parseConfigFile(input))
-// // 		return 1;
-// // 	config.printParsedConfig();
-// // 	return 0;
-// // }
-
