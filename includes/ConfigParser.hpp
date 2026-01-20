@@ -10,6 +10,7 @@
 #include <iostream>
 #include <sstream>
 #include <set>
+#include <filesystem>
 
 /* The ConfigParser class is responsible for:
 * - Reading a configuration file
@@ -57,6 +58,10 @@ class ConfigParser {
 		// --- Accessors for best location and error pages ---
 		const LocationConfig* getBestLocation(const ServerConfig& server, const std::string& path) const;
 		const std::string* getErrorPage(const ServerConfig& server, int errorCode) const;
+
+		// --- Check if file exists or if path is a directory ---
+		bool file_exists(const std::string& path);
+		bool is_directory(const std::string& path);
 		
 		// For debugging: print parsed config
 		void printParsedConfig() const;

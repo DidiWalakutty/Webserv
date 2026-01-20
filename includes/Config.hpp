@@ -56,4 +56,5 @@ struct ServerConfig
 
 	const LocationConfig* get_best_location(const std::string& urlPath) const; /* Returns best matching location for a URL path */
 	const std::string* get_error_page(int errorCode) const; 					/* Returns custom error page for a given HTTP error code. */
+	std::string build_filesystem_path(const std::string& urlPath) const;
 };
