@@ -124,42 +124,41 @@ int main()
 
 	// --- Test paths to simulate requests ---
 	std::vector<std::string> testPaths = {
-		"/", 
-		"/images", 
-		"/images/logo.png", 
-		"/uploads/file.txt", 
-		"/cgi-bin/script.php",
-		"/nothing/hi"
-	};
+        "/", 
+        "/images", 
+        "/images/logo.png", 
+        "/uploads/file.txt", 
+        "/cgi-bin/script.php",
+        "/nothing/hi",
+        "images/logo.png/",     // missing leading slash
+        "/images//logo.png",    // double slashes
+        "/uploads/evil?.txt",   // forbidden character
+        "/cgi-bin/../etc/passwd"// directory traversal
+    };
 
-	for (size_t s = 0; s < servers.size(); ++s)
-	{
-		const ServerConfig& server = servers[s];
+	 for (size_t s = 0; s < servers.size(); ++s)
+    {
+        const ServerConfig& server = servers[s];
 
-		std::cout << "\nServer: " << server.serverName
+        std::cout << "\n====================================\n";
+        std::cout << "Server: " << server.serverName
                   << " (" << server.host << ":" << server.port << ")\n";
-        std::cout << "========================\n";
-		for (size_t i = 0; i < testPaths.size(); ++i)
+        std::cout << "====================================\n";
+
+        for (size_t i = 0; i < testPaths.size(); ++i)
 		{
 			const std::string& path = testPaths[i];
-            const LocationConfig* loc = server.get_best_location(path);
-			std::cout << "Request Path: " << path << "\n";
-			
-			if (loc)
-			{
-				std::cout << "Found: " << std::endl;
-				std::cout << "requested path: " << path << std::endl;
-				std::cout << "best match: " << loc->path << std::endl;
-				std::cout << std::endl;
-				// print_location(*loc);
-			}
+			std::cout << "\nRequested Path: " << path << "\n";
+
+			std::string fsPath = server.build_filesystem_path(path);
+			if (!fsPath.empty())
+				std::cout << "Filesystem path: " << fsPath << "\n";
 			else
-			{
-				std::cerr << "No matching location found\n" << std::endl;
-				std::cout << "------------------------\n";
-			}
+				std::cout << "No matching location found\n";
+
+			std::cout << "------------------------------------\n";
 		}
-	}
+    }
 
     return 0;
 }
