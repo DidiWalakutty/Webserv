@@ -11,17 +11,17 @@ bool is_directory(const std::string& path)
 	return (std::filesystem::exists(path) && std::filesystem::is_directory(path));
 }
 
-// Returns a pointer to the best-matching LocationConfig path.
+// Returns a pointer to the best-matching LocationParse path.
 // If file doesn't exist, example: '/nothing/hi', serving_errorpages will
 // see it doesnt exist and return an appropriate error_page.
-const LocationConfig* ServerConfig::get_best_location(const std::string& urlPath) const
+const LocationParse* ServerParse::get_best_location(const std::string& urlPath) const
 {
-	const LocationConfig* bestMatch = nullptr;
+	const LocationParse* bestMatch = nullptr;
 	size_t longestMatch = 0;
 
 	for (size_t i = 0; i < locations.size(); ++i)
 	{
-		const LocationConfig& loc = locations[i];
+		const LocationParse& loc = locations[i];
 		std::string locationPath = loc.path;		// location path from the config
 		std::string requestPath = urlPath;			// incoming request path
 
@@ -70,7 +70,7 @@ static std::string joinPaths(const std::string& root, const std::string& url)
 
 // request url: /images/logo.png, location path: /images.
 // We want the full path: www/html/images/logo.png	
-std::string ServerConfig::build_filesystem_path(const std::string& reqPath) const
+std::string ServerParse::build_filesystem_path(const std::string& reqPath) const
 {
 	std::string urlPath = reqPath;
 
@@ -105,7 +105,7 @@ std::string ServerConfig::build_filesystem_path(const std::string& reqPath) cons
 	}
 
 	// Find best matching location
-	const LocationConfig* location = get_best_location(urlPath);
+	const LocationParse* location = get_best_location(urlPath);
 	
 	if (!location)
 		return ("");

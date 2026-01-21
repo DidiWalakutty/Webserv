@@ -4,7 +4,7 @@ ConfigParser::ConfigParser() {}
 
 ConfigParser::~ConfigParser() {}
 
-static bool duplicatesAcrossServers(const std::vector<ServerConfig>& servers)
+static bool duplicatesAcrossServers(const std::vector<ServerParse>& servers)
 {
 	for (size_t i = 0; i < servers.size(); ++i)
 	{
@@ -69,8 +69,8 @@ bool ConfigParser::parseConfigFile(const std::string& file)
 		if (processedLines[currentLine] == "server {")
 		{
 			++serverCount;
-			ServerConfig server = parseServerBlock(processedLines, currentLine, parsing_error);
-			if (validateServerConfig(server) && !parsing_error)
+			ServerParse server = parseServerBlock(processedLines, currentLine, parsing_error);
+			if (validateServerParse(server) && !parsing_error)
 			{
 				_servers.push_back(server);
 				std::cerr << "--- Server nr: " << serverCount << " has been validated ---" << std::endl;
@@ -96,10 +96,10 @@ bool ConfigParser::parseConfigFile(const std::string& file)
 
 // This function also increments currentLine to the line after the server block
 // Parses a server block and its nested location blocks
-ServerConfig ConfigParser::parseServerBlock(const std::vector<std::string>& fileLines, size_t& currentLine, bool& parsing_error)
+ServerParse ConfigParser::parseServerBlock(const std::vector<std::string>& fileLines, size_t& currentLine, bool& parsing_error)
 {
-	ServerConfig server;
-	std::vector<LocationConfig> locations; 	// Temporary storage for locations to update default location values if empty
+	ServerParse server;
+	std::vector<LocationParse> locations; 	// Temporary storage for locations to update default location values if empty
 	bool location_error = false;
 
 	// -> loc. and serv. handle their own brackets 
@@ -123,7 +123,7 @@ ServerConfig ConfigParser::parseServerBlock(const std::vector<std::string>& file
 				return server;
 			}
 
-			LocationConfig location = parseLocationBlock(fileLines, currentLine, location_error);
+			LocationParse location = parseLocationBlock(fileLines, currentLine, location_error);
 			locations.push_back(location);
 			continue;
 		}
@@ -308,9 +308,9 @@ ServerConfig ConfigParser::parseServerBlock(const std::vector<std::string>& file
 	return server; 
 }
 
-LocationConfig ConfigParser::parseLocationBlock(const std::vector<std::string>& fileLines, size_t& currentline, bool& location_error)
+LocationParse ConfigParser::parseLocationBlock(const std::vector<std::string>& fileLines, size_t& currentline, bool& location_error)
 {
-	LocationConfig location;
+	LocationParse location;
 
 	// --- Extract the "location /path {" line ---
 	const std::string line = fileLines[currentline];

@@ -19,8 +19,8 @@ struct Redirect
 };
 
 /* Configuration related to a single URL path */
-/* Each LocationConfig corresponds to a single "route" in your server */
-struct LocationConfig
+/* Each LocationParse corresponds to a single "route" in your server */
+struct LocationParse
 {
 	std::string path;   		/* URL path for this location "/", "/upload"*, "/images" */
 	std::string root;   		/* Filesystem/Root directory for this location to serve from "www/uploads"*/
@@ -38,7 +38,7 @@ struct LocationConfig
 
 /* Configuration for a server block */
 /* Contains all the locations for a server */
-struct ServerConfig
+struct ServerParse
 {
 	std::string serverName;         		/* Server name for virtual hosting */
 	std::string host;              			/* Server host (IP or domain)*/
@@ -51,9 +51,9 @@ struct ServerConfig
 	size_t maxBodySize = 10485760; 			/* Max allowed body size in bytes for requests to this server: 10 mb. */
 
 	std::map<int, std::string> errorPages; 	/* Custom error pages mapped by HTTP status code */
-	std::vector<LocationConfig> locations; 	/* List of location configurations*/
+	std::vector<LocationParse> locations; 	/* List of location configurations*/
 
-	const LocationConfig* get_best_location(const std::string& urlPath) const; /* Returns best matching location for a URL path */
+	const LocationParse* get_best_location(const std::string& urlPath) const; /* Returns best matching location for a URL path */
 	const std::string* get_error_page(int errorCode) const; 					/* Returns custom error page for a given HTTP error code. */
 	std::string build_filesystem_path(const std::string& urlPath) const;
 };

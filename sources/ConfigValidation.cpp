@@ -237,7 +237,7 @@ static bool isValidIndex(const std::string& name)
 	return false;
 }
 
-static bool validateMethodsAndBools(const LocationConfig& loc)
+static bool validateMethodsAndBools(const LocationParse& loc)
 {
 	bool hasGet = false;
 	bool hasPost = false;
@@ -370,7 +370,7 @@ static bool validateMethodsAndBools(const LocationConfig& loc)
 
 // Checks all server + location paths on syntax.
 // We'll send a true boolean if the file is a filename, and false for directory/root.
-static bool validatePathsAndMethods(const ServerConfig& server)
+static bool validatePathsAndMethods(const ServerParse& server)
 {
 	if (!isValidRoot(server.root))
 	{
@@ -386,7 +386,7 @@ static bool validatePathsAndMethods(const ServerConfig& server)
 
 	for (size_t i = 0; i < server.locations.size(); ++i)
 	{
-		const LocationConfig& loc = server.locations[i];
+		const LocationParse& loc = server.locations[i];
 
 		// --- Check Location Path ---
 		if (!isValidLocationPath(loc.path))
@@ -441,7 +441,7 @@ static bool validatePathsAndMethods(const ServerConfig& server)
 	return true;
 }
 
-static bool duplicateLocations(const ServerConfig& server)
+static bool duplicateLocations(const ServerParse& server)
 {
 	std::set<std::string> seen;
 
@@ -458,7 +458,7 @@ static bool duplicateLocations(const ServerConfig& server)
 	return false;
 }
 
-bool ConfigParser::validateServerConfig(ServerConfig& server)
+bool ConfigParser::validateServerParse(ServerParse& server)
 {
 	// --- VALIDATE Server ---
 
@@ -506,7 +506,7 @@ bool ConfigParser::validateServerConfig(ServerConfig& server)
 	// --- Fix empty Location Inheritance + updated with valid Server config if empty ---
 	for (size_t i = 0; i < server.locations.size(); ++i)
 	{
-		LocationConfig& location = server.locations[i];
+		LocationParse& location = server.locations[i];
 
 		if (location.root.empty())
 			location.root = server.root;
@@ -519,7 +519,7 @@ bool ConfigParser::validateServerConfig(ServerConfig& server)
 	// If location /redirect, all other info must be empty
 	for (size_t i = 0; i < server.locations.size(); ++i)
 	{
-		LocationConfig& loc = server.locations[i];
+		LocationParse& loc = server.locations[i];
 
 		if (!loc.redirect.targetURL.empty())
 		{

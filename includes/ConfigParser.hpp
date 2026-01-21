@@ -15,7 +15,7 @@
 * - Reading a configuration file
 * - Parsing server and location blocks from config file
 * - Validating values and settings (host, port, paths, methods, etc.)
-* - Filling ServerConfig and LocationConfig structures
+* - Filling ServerParse and LocationParse structures
 */
 // Min and max body_size
 static const size_t MIN_CONFIG_BODY_SIZE = 1;							// 1 byte
@@ -24,7 +24,7 @@ static const size_t MAX_CONFIG_BODY_SIZE = 10 * 1024 * 1024;	// 10 MB
 
 class ConfigParser {
 	private:
-		std::vector<ServerConfig> _servers; // Stores all parsed servers
+		std::vector<ServerParse> _servers; // Stores all parsed servers
 
 		// --- File/Line Helpers ---
 		bool isConfFile(const std::string& file) const;		// Check if file has .conf extension
@@ -37,12 +37,12 @@ class ConfigParser {
 		std::vector<std::string> splitBySemicolon(const std::string& line) const;
 
 		// --- Parse Server and Location Blocks ---
-		ServerConfig parseServerBlock(const std::vector<std::string>& fileLines, size_t& currentLine, bool& parsing_error);
-		LocationConfig parseLocationBlock(const std::vector<std::string>& fileLines, size_t& currentLine, bool& parsing_error);
+		ServerParse parseServerBlock(const std::vector<std::string>& fileLines, size_t& currentLine, bool& parsing_error);
+		LocationParse parseLocationBlock(const std::vector<std::string>& fileLines, size_t& currentLine, bool& parsing_error);
 
 		// --- Validation Data ---
-		bool validateServerConfig(ServerConfig& server);
-		// bool validateLocationConfig(const LocationConfig& location) const;
+		bool validateServerParse(ServerParse& server);
+		// bool validateLocationParse(const LocationParse& location) const;
 		bool isValidHTTPMethod(const std::string& method) const;
 		bool stringToHTTPMethod(const std::string& method, HTTPMethod& outMethod);
 
@@ -52,11 +52,11 @@ class ConfigParser {
 		
 		// --- Read, Parse and retrieve servers ---
 		bool parseConfigFile(const std::string& file);
-		const std::vector<ServerConfig>& getServers() const { return _servers; } // Returns the parsed server configurations
+		const std::vector<ServerParse>& getServers() const { return _servers; } // Returns the parsed server configurations
 
 		// --- Accessors for best location and error pages ---
-		const LocationConfig* getBestLocation(const ServerConfig& server, const std::string& path) const;
-		const std::string* getErrorPage(const ServerConfig& server, int errorCode) const;
+		const LocationParse* getBestLocation(const ServerParse& server, const std::string& path) const;
+		const std::string* getErrorPage(const ServerParse& server, int errorCode) const;
 
 		// --- Check if file exists or if path is a directory ---
 		bool file_exists(const std::string& path);

@@ -29,8 +29,8 @@ void print_methods(const std::vector<HTTPMethod>& methods)
     }
 }
 
-// Print LocationConfig details
-void print_location(const LocationConfig& loc)
+// Print LocationParse details
+void print_location(const LocationParse& loc)
 {
     std::cout << "  \nLocation:\n";
     std::cout << "    path: " << loc.path << "\n";
@@ -67,11 +67,11 @@ void print_location(const LocationConfig& loc)
     }
 }
 
-// Print Serverconfig details
-void print_server(const ServerConfig& server)
+// Print ServerParse details
+void print_server(const ServerParse& server)
 {
     std::cout << "=================================\n";
-    std::cout << "ServerConfig\n";
+    std::cout << "ServerParse\n";
     std::cout << "---------------------------------\n";
     std::cout << "server_name: " << server.serverName << "\n";
     std::cout << "host: " << server.host << "\n";
@@ -116,7 +116,7 @@ int main()
 		return 1;
 	}
     
-	const std::vector<ServerConfig>& servers = parser.getServers();
+	const std::vector<ServerParse>& servers = parser.getServers();
 	
 	// --- Print Servers ---
 	for (size_t i = 0; i < servers.size(); ++i)
@@ -138,7 +138,7 @@ int main()
 
 	//  for (size_t s = 0; s < servers.size(); ++s)
     // {
-    //     const ServerConfig& server = servers[s];
+    //     const ServerParse& server = servers[s];
 
     //     std::cout << "\n====================================\n";
     //     std::cout << "Server: " << server.serverName
