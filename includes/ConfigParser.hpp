@@ -43,8 +43,8 @@ class ConfigParser {
 		// --- Validation Data ---
 		bool validateServerParse(ServerParse& server);
 		// bool validateLocationParse(const LocationParse& location) const;
-		bool isValidHTTPMethod(const std::string& method) const;
-		bool stringToHTTPMethod(const std::string& method, HTTPMethod& outMethod);
+		bool isValidHTTPConfMeth(const std::string& method) const;
+		bool stringToHTTPConfMeth(const std::string& method, HTTPConfMeth& outMethod);
 
 	public:
 		ConfigParser();
@@ -63,5 +63,5 @@ class ConfigParser {
 		bool is_directory(const std::string& path);
 		
 		// For debugging: print parsed config
-		void printParsedConfig() const;
+		void print_server(const ServerParse& server) const;
 };

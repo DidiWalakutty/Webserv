@@ -4,7 +4,7 @@
 #include <vector>
 #include <map>
 
-enum class HTTPMethod
+enum class HTTPConfMeth
 {
 	GET,
 	POST,
@@ -25,7 +25,7 @@ struct LocationParse
 	std::string path;   		/* URL path for this location "/", "/upload"*, "/images" */
 	std::string root;   		/* Filesystem/Root directory for this location to serve from "www/uploads"*/
 	std::string index;  		/* Index file (default index.html). Default file to serve if URL is a directory */
-	std::vector<HTTPMethod> allowedMethods; 	/* Allowed HTTP methods */
+	std::vector<HTTPConfMeth> allowedMethods; 	/* Allowed HTTP methods */
 
 	bool autoIndex = false; 	/* Enable or disable directory listing */
 	bool is_cgi = false;   		/* True if this location executes CGI scripts */
@@ -33,7 +33,7 @@ struct LocationParse
 	
 	Redirect redirect;							/* Optional redirect for this location (status code + target URL)*/
 
-	bool method_allowed(HTTPMethod m) const;	/* Checks if a specific HTTP method is allowed */
+	bool method_allowed(HTTPConfMeth m) const;	/* Checks if a specific HTTP method is allowed */
 };
 
 /* Configuration for a server block */
@@ -44,7 +44,7 @@ struct ServerParse
 	std::string host;              			/* Server host (IP or domain)*/
 	std::string root;                		/* Root directory for the server */
 	std::string index;               		/* Index file for the server: filename */
-	std::vector<HTTPMethod> allowedMethods; /* Default allowed HTTP methods for the server */
+	std::vector<HTTPConfMeth> allowedMethods; /* Default allowed HTTP methods for the server */
 	int port = 0;                       		/* Server port */
 
 	bool autoIndex = false;         		/* Enable or disable directory listing for the server */
