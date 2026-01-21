@@ -3,7 +3,6 @@
 #include <string>
 #include <vector>
 #include <map>
-#include <optional>
 
 enum class HTTPMethod
 {
@@ -28,9 +27,9 @@ struct LocationConfig
 	std::string index;  		/* Index file (default index.html). Default file to serve if URL is a directory */
 	std::vector<HTTPMethod> allowedMethods; 	/* Allowed HTTP methods */
 
-	std::optional<bool> autoIndex; 	/* Enable or disable directory listing */
-	std::optional<bool> is_cgi;   		/* True if this location executes CGI scripts */
-	std::optional<bool> uploadEnabled; /* True if file uploads are allowed in this location */
+	bool autoIndex = false; 	/* Enable or disable directory listing */
+	bool is_cgi = false;   		/* True if this location executes CGI scripts */
+	bool uploadEnabled = false; /* True if file uploads are allowed in this location */
 	
 	Redirect redirect;							/* Optional redirect for this location (status code + target URL)*/
 
@@ -46,7 +45,7 @@ struct ServerConfig
 	std::string root;                		/* Root directory for the server */
 	std::string index;               		/* Index file for the server: filename */
 	std::vector<HTTPMethod> allowedMethods; /* Default allowed HTTP methods for the server */
-	int port;                       		/* Server port */
+	int port = 0;                       		/* Server port */
 
 	bool autoIndex = false;         		/* Enable or disable directory listing for the server */
 	size_t maxBodySize = 10485760; 			/* Max allowed body size in bytes for requests to this server: 10 mb. */

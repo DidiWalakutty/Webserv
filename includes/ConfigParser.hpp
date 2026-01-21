@@ -4,7 +4,6 @@
 #include <string>
 #include <vector>
 #include <fstream>
-#include <optional>
 #include <algorithm>
 #include <cctype>
 #include <iostream>
@@ -45,7 +44,7 @@ class ConfigParser {
 		bool validateServerConfig(ServerConfig& server);
 		// bool validateLocationConfig(const LocationConfig& location) const;
 		bool isValidHTTPMethod(const std::string& method) const;
-		std::optional<HTTPMethod> stringToHTTPMethod(const std::string& method);
+		bool stringToHTTPMethod(const std::string& method, HTTPMethod& outMethod);
 
 	public:
 		ConfigParser();
