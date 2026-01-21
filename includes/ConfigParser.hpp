@@ -1,0 +1,67 @@
+#pragma once
+
+#include "Config.hpp"
+#include <string>
+#include <vector>
+#include <fstream>
+#include <algorithm>
+#include <cctype>
+#include <iostream>
+#include <sstream>
+#include <set>
+#include <filesystem>
+
+/* The ConfigParser class is responsible for:
+* - Reading a configuration file
+* - Parsing server and location blocks from config file
+* - Validating values and settings (host, port, paths, methods, etc.)
+* - Filling ServerConfig and LocationConfig structures
+*/
+// Min and max body_size
+static const size_t MIN_CONFIG_BODY_SIZE = 1;							// 1 byte
+static const size_t MAX_CONFIG_BODY_SIZE = 10 * 1024 * 1024;	// 10 MB
+
+
+class ConfigParser {
+	private:
+		std::vector<ServerConfig> _servers; // Stores all parsed servers
+
+		// --- File/Line Helpers ---
+		bool isConfFile(const std::string& file) const;		// Check if file has .conf extension
+		void removeComments(std::string& line);
+		void trimWhitespace(std::string& line);
+		bool isLineEmpty(const std::string& line) const;
+
+		// --- Split by Token ---
+		std::vector<std::string> splitByWhitespace(const std::string& line) const;
+		std::vector<std::string> splitBySemicolon(const std::string& line) const;
+
+		// --- Parse Server and Location Blocks ---
+		ServerConfig parseServerBlock(const std::vector<std::string>& fileLines, size_t& currentLine, bool& parsing_error);
+		LocationConfig parseLocationBlock(const std::vector<std::string>& fileLines, size_t& currentLine, bool& parsing_error);
+
+		// --- Validation Data ---
+		bool validateServerConfig(ServerConfig& server);
+		// bool validateLocationConfig(const LocationConfig& location) const;
+		bool isValidHTTPMethod(const std::string& method) const;
+		bool stringToHTTPMethod(const std::string& method, HTTPMethod& outMethod);
+
+	public:
+		ConfigParser();
+		~ConfigParser();
+		
+		// --- Read, Parse and retrieve servers ---
+		bool parseConfigFile(const std::string& file);
+		const std::vector<ServerConfig>& getServers() const { return _servers; } // Returns the parsed server configurations
+
+		// --- Accessors for best location and error pages ---
+		const LocationConfig* getBestLocation(const ServerConfig& server, const std::string& path) const;
+		const std::string* getErrorPage(const ServerConfig& server, int errorCode) const;
+
+		// --- Check if file exists or if path is a directory ---
+		bool file_exists(const std::string& path);
+		bool is_directory(const std::string& path);
+		
+		// For debugging: print parsed config
+		void printParsedConfig() const;
+};
