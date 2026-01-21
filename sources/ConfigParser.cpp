@@ -11,13 +11,11 @@ static bool duplicatesAcrossServers(const std::vector<ServerConfig>& servers)
 		for (size_t j = i + 1; j < servers.size(); ++j)
 		{
 			if (servers[i].host == servers[j].host && 
-				servers[i].port == servers[j].port &&
-				servers[i].serverName == servers[j].serverName)
+				servers[i].port == servers[j].port)
 			{
 				std::cerr << "Error: Duplicate server definition detected:\n" 
 						  << " host: " << servers[i].host << "\n"
-						  << " port: " << servers[i].port << "\n"
-						  << " servername: " << servers[i].serverName << std::endl;
+						  << " port: " << servers[i].port << std::endl;
 				return true;
 			}
 		}
@@ -203,7 +201,7 @@ ServerConfig ConfigParser::parseServerBlock(const std::vector<std::string>& file
 			else if (key == "index")
 				server.index = value;
 			else if (key == "autoindex")		// directory listing on/off
-			{
+			{ 
 				if (value == "true" || value == "on")
 					server.autoIndex = true;
 				else if (value == "false" || value == "off")
@@ -212,7 +210,7 @@ ServerConfig ConfigParser::parseServerBlock(const std::vector<std::string>& file
 				{
 					std::cerr << "Warning: Invalid autoindex value: '" << value << "' in server block at line: " << currentLine + 1 << std::endl;
 					server.autoIndex = false;
-					std::cerr << "Auto Index was defaulted to " << server.autoIndex << std::endl;
+					std::cerr << "Auto Index was defaulted to " << (server.autoIndex ? "true" : "false") << std::endl;
 				}
 			}
 			else if (key == "allowed_methods")
@@ -221,12 +219,16 @@ ServerConfig ConfigParser::parseServerBlock(const std::vector<std::string>& file
 				std::vector<std::string> tokens = splitByWhitespace(value);
 				for (size_t i = 0; i < tokens.size(); ++i)
 				{
-					std::optional<HTTPMethod> method = stringToHTTPMethod(tokens[i]);
-					if (method)
-						server.allowedMethods.push_back(method.value());
+					HTTPMethod method; 
+					if (stringToHTTPMethod(tokens[i], method))
+					{
+						server.allowedMethods.push_back(method);
+					}
 					else
+					{
 						std::cerr << "Warning: Invalid HTTP method: '" << tokens[i] << "' in server block at line: " << currentLine + 1 << std::endl;
 					// !!!check what we want to do if invalid http method
+					}
 				}
 			}
 			else if (key == "max_body_size")
@@ -315,6 +317,10 @@ LocationConfig ConfigParser::parseLocationBlock(const std::vector<std::string>& 
 	size_t pathStart = line.find("location") + 8; // gives what's after "location"
 	size_t bracePos = line.find('{');
 
+	location.autoIndex = false;
+	location.uploadEnabled = false;
+	location.is_cgi = false;
+
 	location.path = line.substr(pathStart, bracePos - pathStart);
 	trimWhitespace(location.path);
 	
@@ -393,12 +399,16 @@ LocationConfig ConfigParser::parseLocationBlock(const std::vector<std::string>& 
 				std::vector<std::string> tokens = splitByWhitespace(value);
 				for (size_t i = 0; i < tokens.size(); ++i)
 				{
-					std::optional<HTTPMethod> method = stringToHTTPMethod(tokens[i]);
-					if (method)
-						location.allowedMethods.push_back(method.value());
+					HTTPMethod method;
+					if (stringToHTTPMethod(tokens[i], method))
+					{
+						location.allowedMethods.push_back(method);
+					}
 					else
+					{
 						std::cerr << "Warning: Invalid HTTP method: '" << tokens[i] << "' in location block at line: " << currentline + 1 << std::endl;					
 						// what do we want to do???
+					}
 				}
 			}
 			else if (key == "return")
@@ -452,6 +462,7 @@ LocationConfig ConfigParser::parseLocationBlock(const std::vector<std::string>& 
 					location.is_cgi = false;
 					std::cerr << "Is_cgi was defaulted to " << (location.is_cgi ? "true" : "false") << std::endl;
 				}
+	
 			}
 			else
 			{

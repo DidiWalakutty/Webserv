@@ -239,12 +239,23 @@ static bool isValidIndex(const std::string& name)
 
 static bool validateMethodsAndBools(const LocationConfig& loc)
 {
-	// Convert optional<bool> config values into real booleans.
-	// value_or(false) means: use the configured value if present, otherwise default to false.
-	// This prevents confusing "option exists" with "option is true".
-	bool isCgi = loc.is_cgi.value_or(false);
-	bool upload = loc.uploadEnabled.value_or(false);
-	bool autoIdx = loc.autoIndex.value_or(false);
+	bool hasGet = false;
+	bool hasPost = false;
+	bool hasDelete = false;
+
+	for (size_t i = 0; i < loc.allowedMethods.size(); ++i)
+	{
+		HTTPMethod m = loc.allowedMethods[i];
+		switch (m)
+		{
+			case HTTPMethod::GET:    hasGet = true; break;
+			case HTTPMethod::POST:   hasPost = true; break;
+			case HTTPMethod::DELETE: hasDelete = true; break;
+			default:
+				std::cerr << "Error: Unknown HTTP method found in location." << std::endl;
+				return false;
+		}
+	}
 
 	if (loc.path.empty())
 	{
@@ -252,58 +263,75 @@ static bool validateMethodsAndBools(const LocationConfig& loc)
 		return false;
 	}
 
-	if (loc.path == "/uploads" && (!upload || !autoIdx))
+	if (loc.path == "/uploads")
 	{
-		std::cerr << "Error: Location '/upload' must have uploadEnabled and autoindex set to true" << std::endl;
-		return false;
-	}
-
-	if (loc.path == "/cgi-bin" && !isCgi)
-	{
-		std::cerr << "Error: Location '/cgi-bin' must have is_cgi set to true" << std::endl;
-		return false;
-	}
-
-	if (loc.path == "/images" && !autoIdx)
-	{
-		std::cerr << "Error: Location '/images' must have autoIndex set to true" << std::endl;
-		return false;		
-	}
-
-	if (isCgi)
-	{
-		for (HTTPMethod m : loc.allowedMethods)
+		if (!loc.uploadEnabled || !loc.autoIndex)
 		{
-			if (m != HTTPMethod::GET && m != HTTPMethod::POST)
-			{
-				std::cerr << "Error: CGI location only allows GET and/or POST." << std::endl;
-				return false;
-			}
+			std::cerr << "Error: Location '/upload' must have uploadEnabled and autoindex set to true" << std::endl;
+			return false;
 		}
-		if (upload || autoIdx)
+		if (!hasPost)
 		{
-			std::cerr << "Error: CGI location cannot have uploadEnabled or autoIndex set to true" << std::endl;
+			std::cerr << "Error: Location '/upload', must have atleast HTTPMethod POST" << std::endl;
 			return false;
 		}
 	}
 
-	if (upload)
+	if (loc.path == "/cgi-bin")
 	{
-		bool hasPost = false;
-		bool hasDelete = false;
-		for (HTTPMethod m : loc.allowedMethods)
+		if (!loc.is_cgi)
 		{
-			if (m == HTTPMethod::POST)
-				hasPost = true;
-			if (m == HTTPMethod::DELETE)
-				hasDelete = true;
+			std::cerr << "Error: Location '/cgi-bin' must have is_cgi set to true" << std::endl;
+			return false;
 		}
+		if (!hasGet)
+		{
+			std::cerr << "Error: Location 'cgi-bin' must have atleast HTTPMethod GET" << std::endl;
+			return false;
+		}
+	}
+
+	if (loc.path == "/images")
+	{
+		if (!loc.autoIndex)
+		{
+			std::cerr << "Error: Location '/images' must have autoIndex set to true" << std::endl;
+			return false;		
+		}
+		if (!hasGet)
+		{
+			std::cerr << "Error: Location /images' must have atleast HTTPMethod GET" << std::endl;
+			return false;
+		}
+	}
+
+	if (loc.is_cgi)
+	{
+		if (hasDelete)
+		{
+			std::cerr << "Error: CGI location cannot allow DELETE method." << std::endl;
+			return false;
+		}
+		if (!hasGet && !hasPost)
+		{
+			std::cerr << "Error: CGI Location must allow GET and/or POST." << std::endl;
+			return false;
+		}
+		if (loc.uploadEnabled || loc.autoIndex)
+		{
+			std::cerr << "Error: CGI location cannot have uploadEnabled or autoIndex set to true." << std::endl;
+			return false;
+		}
+	}
+
+	if (loc.uploadEnabled)
+	{
 		if (!hasPost || !hasDelete)
 		{
 			std::cerr << "Error: UploadEnable requires both POST and DELETE methods" << std::endl;
 			return false;
 		}
-		if (isCgi)
+		if (loc.is_cgi)
 		{
 			std::cerr << "Error: UploadEnabled cannot have is_cgi set to true." << std::endl;
 			return false;
@@ -312,9 +340,18 @@ static bool validateMethodsAndBools(const LocationConfig& loc)
 
 	if (!loc.redirect.targetURL.empty())
 	{
-		if (!loc.allowedMethods.empty() || upload || autoIdx || isCgi || !loc.root.empty() || !loc.index.empty())
+		if (!loc.allowedMethods.empty() || loc.uploadEnabled || loc.autoIndex || loc.is_cgi || !loc.root.empty() || !loc.index.empty())
 		{
 			std::cerr << "Error: Redirect location should be empty, except for status code and target url" << std::endl;
+			return false;
+		}
+	}
+
+	if (loc.redirect.targetURL.empty() && loc.path == "/")
+	{
+		if (!hasGet)
+		{
+			std::cout << "Error: Location: " << loc.path << " should have HTTPMethod GET." << std::endl;
 			return false;
 		}
 	}
@@ -351,38 +388,55 @@ static bool validatePathsAndMethods(const ServerConfig& server)
 	{
 		const LocationConfig& loc = server.locations[i];
 
+		// --- Check Location Path ---
 		if (!isValidLocationPath(loc.path))
 		{
 			std::cerr << "Error: Invalid syntax for location path: " << loc.path << std::endl;
 			return false;
 		}
 
-		if (loc.redirect.targetURL.empty() && !isValidRoot(loc.root))
+		// --- Check Redirect Consistency First ---
+		if ((loc.redirect.statusCode != 0 && loc.redirect.targetURL.empty()) || \
+			(loc.redirect.statusCode == 0 && !loc.redirect.targetURL.empty()))
+		{
+			std::cerr << "Error: Redirect must define both status code and target url in location block: " << loc.path << std::endl;
+			return false;
+		}
+		if (loc.redirect.statusCode != 0)
+		{
+			if (!loc.allowedMethods.empty() || loc.uploadEnabled || loc.autoIndex || \
+				loc.is_cgi || !loc.root.empty() || !loc.index.empty())
+			{
+				std::cerr << "Error: Redirection location should be empty, except for status code and target url" << std::endl;
+				return false;
+			}
+
+			if (!isValidRedirectTarget(loc.redirect.targetURL))
+			{
+				std::cerr << "Error: Invalid syntax for location's Redirect url: " << loc.redirect.targetURL << std::endl;
+				return false;
+			}
+			continue;
+		}
+
+		// --- Check regular Location ---
+		if (!isValidRoot(loc.root))
 		{
 			std::cerr << "Error: Invalid syntax for location root: " << loc.root << std::endl;
 			return false;
 		}
 
-		if (loc.redirect.targetURL.empty() && !isValidIndex(loc.index))
+		// --- Check Index if not redirect ---
+		if (!isValidIndex(loc.index))
 		{
 			std::cerr << "Error: Invalid syntax for location index: " << loc.index << std::endl;
 			return false;
 		}
-		
-		// Check syntax for Redirect
-		if (!loc.redirect.targetURL.empty())
-		{
-			if (!isValidRedirectTarget(loc.redirect.targetURL))
-			{
-				std::cerr << "Error: Invalid syntax for location's Redirect url: '" << loc.redirect.targetURL << std::endl;
-				return false;
-			}
-		}
-		
+
+		// --- Check Syntax for Redirects ---
 		if (!validateMethodsAndBools(loc))
 			return false;
 	}
-
 
 	return true;
 }
@@ -460,13 +514,6 @@ bool ConfigParser::validateServerConfig(ServerConfig& server)
 			location.index = server.index;
 		if (location.allowedMethods.empty())
 			location.allowedMethods = server.allowedMethods;
-
-		if (!location.autoIndex.has_value())
-			location.autoIndex = server.autoIndex;
-		if (!location.uploadEnabled.has_value())
-			location.uploadEnabled = false;
-		if (!location.is_cgi.has_value())
-			location.is_cgi = false;
 	}
 
 	// If location /redirect, all other info must be empty

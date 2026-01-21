@@ -32,28 +32,28 @@ void print_methods(const std::vector<HTTPMethod>& methods)
 // Print LocationConfig details
 void print_location(const LocationConfig& loc)
 {
-    std::cout << "  Location:\n";
+    std::cout << "  \nLocation:\n";
     std::cout << "    path: " << loc.path << "\n";
     std::cout << "    root: " << loc.root << "\n";
     std::cout << "    index: " << loc.index << "\n";
 
     std::cout << "    autoindex: ";
-    if (loc.autoIndex.has_value())
-        std::cout << (*loc.autoIndex ? "on" : "off") << "\n";
+    if (loc.autoIndex)
+        std::cout << "true" << "\n";
     else
-        std::cout << "n/a\n";
+        std::cout << "false\n";
 
     std::cout << "    is_cgi: ";
-    if (loc.is_cgi.has_value())
-        std::cout << (*loc.is_cgi ? "true" : "false") << "\n";
+    if (loc.is_cgi)
+        std::cout << "true" << "\n";
     else
-        std::cout << "n/a\n";
+        std::cout << "false\n";
 
     std::cout << "    uploadEnabled: ";
-    if (loc.uploadEnabled.has_value())
-        std::cout << (*loc.uploadEnabled ? "true" : "false") << "\n";
+    if (loc.uploadEnabled)
+        std::cout << "true" << "\n";
     else
-        std::cout << "n/a\n";
+        std::cout << "false\n";
 
     std::cout << "    allowed methods: ";
     print_methods(loc.allowedMethods);
@@ -81,7 +81,7 @@ void print_server(const ServerConfig& server)
     std::cout << "allowed methods: ";
     print_methods(server.allowedMethods);
     std::cout << "\n";
-	std::cout << "autoindex: " << (server.autoIndex ? "on" : "off") << "\n";
+	std::cout << "autoindex: " << server.autoIndex << "\n";
     std::cout << "max_body_size: " << server.maxBodySize << "\n";
 	std::cout << std::endl;
 	
@@ -119,46 +119,46 @@ int main()
 	const std::vector<ServerConfig>& servers = parser.getServers();
 	
 	// --- Print Servers ---
-	// for (size_t i = 0; i < servers.size(); ++i)
-	// 	print_server(servers[i]);
+	for (size_t i = 0; i < servers.size(); ++i)
+		print_server(servers[i]);
 
 	// --- Test paths to simulate requests ---
-	std::vector<std::string> testPaths = {
-        "/", 
-        "/images", 
-        "/images/logo.png", 
-        "/uploads/file.txt", 
-        "/cgi-bin/script.php",
-        "/nothing/hi",
-        "images/logo.png/",     // missing leading slash
-        "/images//logo.png",    // double slashes
-        "/uploads/evil?.txt",   // forbidden character
-        "/cgi-bin/../etc/passwd"// directory traversal
-    };
+	// std::vector<std::string> testPaths = {
+    //     "/", 
+    //     "/images", 
+    //     "/images/logo.png", 
+    //     "/uploads/file.txt", 
+    //     "/cgi-bin/script.php",
+    //     "/nothing/hi",
+    //     "images/logo.png/",     // missing leading slash
+    //     "/images//logo.png",    // double slashes
+    //     "/uploads/evil?.txt",   // forbidden character
+    //     "/cgi-bin/../etc/passwd"// directory traversal
+    // };
 
-	 for (size_t s = 0; s < servers.size(); ++s)
-    {
-        const ServerConfig& server = servers[s];
+	//  for (size_t s = 0; s < servers.size(); ++s)
+    // {
+    //     const ServerConfig& server = servers[s];
 
-        std::cout << "\n====================================\n";
-        std::cout << "Server: " << server.serverName
-                  << " (" << server.host << ":" << server.port << ")\n";
-        std::cout << "====================================\n";
+    //     std::cout << "\n====================================\n";
+    //     std::cout << "Server: " << server.serverName
+    //               << " (" << server.host << ":" << server.port << ")\n";
+    //     std::cout << "====================================\n";
 
-        for (size_t i = 0; i < testPaths.size(); ++i)
-		{
-			const std::string& path = testPaths[i];
-			std::cout << "\nRequested Path: " << path << "\n";
+    //     for (size_t i = 0; i < testPaths.size(); ++i)
+	// 	{
+	// 		const std::string& path = testPaths[i];
+	// 		std::cout << "\nRequested Path: " << path << "\n";
 
-			std::string fsPath = server.build_filesystem_path(path);
-			if (!fsPath.empty())
-				std::cout << "Filesystem path: " << fsPath << "\n";
-			else
-				std::cout << "No matching location found\n";
+	// 		std::string fsPath = server.build_filesystem_path(path);
+	// 		if (!fsPath.empty())
+	// 			std::cout << "Filesystem path: " << fsPath << "\n";
+	// 		else
+	// 			std::cout << "No matching location found\n";
 
-			std::cout << "------------------------------------\n";
-		}
-    }
+	// 		std::cout << "------------------------------------\n";
+	// 	}
+    // }
 
     return 0;
 }

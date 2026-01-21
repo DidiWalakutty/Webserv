@@ -77,13 +77,22 @@ bool ConfigParser::isLineEmpty(const std::string& line) const
     return tokens;
 }
 
-std::optional<HTTPMethod> ConfigParser::stringToHTTPMethod(const std::string& method)
+bool ConfigParser::stringToHTTPMethod(const std::string& method, HTTPMethod& outmethod)
 {
 	if (method == "GET")
-		return HTTPMethod::GET;
+	{
+		outmethod = HTTPMethod::GET;
+		return true;
+	}
 	else if (method == "POST")
-		return HTTPMethod::POST;
+	{
+		outmethod = HTTPMethod::POST;
+		return true;
+	}
 	else if (method == "DELETE")
-		return HTTPMethod::DELETE;
-	return std::nullopt;
+	{
+		outmethod = HTTPMethod::DELETE;
+		return true;
+	}
+	return false;
 }
