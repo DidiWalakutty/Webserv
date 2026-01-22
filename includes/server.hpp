@@ -4,6 +4,7 @@
 #include "HTTPResponse.hpp"
 #include "HTTPCommon.hpp"
 #include "HTTPRequest.hpp"
+#include "Config.hpp"
 
 #pragma once
 
@@ -16,23 +17,6 @@
  * as well as the @ref Server class for creating, configuring and managing a web server using Epoll.
  */
 
-/** @brief Configuration for the server sockets. */
-struct SocketConfig
-{
-	int domain = AF_INET;					/**< @brief Specifies what kind of addresses or network the server will use. */
-	int type = SOCK_STREAM | SOCK_NONBLOCK; /**< @brief Specifies what kind of communication type the server will use. */
-	int protocol = 0;						/**< @brief Specifies what kind of protocol to use within the domain. A value of 0 will choose a protocol automatically. */
-};
-
-/** @brief Configuration for the server. */
-struct ServerConfig
-{
-	int maxEvents = 64; /**< @brief Specifies the maximum number of events that the server will poll for at a time. */
-
-	SocketConfig socketConfig{}; /**< @brief Specifies how the server's sockets will work. */
-
-	std::vector<int> ports = {8080}; /**< @brief Specifies on which ports the server will listen to. */
-};
 
 /**
  * @brief Web server class.
@@ -50,12 +34,12 @@ struct ServerConfig
 class Server
 {
 private:
-	ServerConfig config{};
+	std::vector<ServerParse> _servers;	/**< @brief Parsed server blocks from config file */
 
-	int epollFD = -1;				/**< @brief Contains the file descriptor of the Epoll instance. */
-	std::vector<int> serverSockets; /**< @brief Contains the server's socket file descriptors. */
-
-	std::vector<int> clients; /**< @brief Contains the client file descriptors that are connected to the server. */
+	int epollFD = -1;					/**< @brief Epoll instance of the file descriptor */
+	std::vector<int> serverSockets; 	/**< @brief Listening sockets (one per ServerParse) */
+	std::vector<int> clients; 			/**< @brief Connected client sockets. */
+	const int _maxEvents = 64;
 
 	void CreateSockets(); /**< @brief Creates and configures the server's sockets. */
 	void CreateEpoll();	  /**< @brief Creates and configures the server's Epoll instance. */
@@ -101,9 +85,10 @@ public:
 
 	/**
 	 * @brief Initiates and configures the server.
-	 * @param serverConfig The configuration for the server.
+	 * @param ServerParse The configuration for the server.
 	 */
-	Server(const ServerConfig &serverConfig);
+	/**< @brief Construct server engine with parsed configs */
+	Server(const std::vector<ServerParse>& serverConfigs);
 
 	~Server();
 
