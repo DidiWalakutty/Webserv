@@ -21,8 +21,8 @@
 static const size_t MIN_CONFIG_BODY_SIZE = 1;							// 1 byte
 static const size_t MAX_CONFIG_BODY_SIZE = 10 * 1024 * 1024;	// 10 MB
 
-
-class ConfigParser {
+// --- Reads + Validates .conf file ---
+class ConfigParser {	
 	private:
 		std::vector<ServerParse> _servers; // Stores all parsed servers
 
