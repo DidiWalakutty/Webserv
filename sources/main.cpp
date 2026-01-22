@@ -4,8 +4,6 @@
 
 int main(int argc, char **argv)
 {
-	// handle signal - Ctrl
-
 	if (argc <= 2)
 	{
 		ConfigParser	parser;
@@ -22,26 +20,17 @@ int main(int argc, char **argv)
 			return 1;
 		}
 
-		// Gets parsed + validated server configurations from the .conf file
-		// Gives a vector of ServerParse objects
+		// Gets vector of Parsed + Validated server configurations
 		const std::vector<ServerParse>& servers = parser.getServers();
 		
 		// Print Servers
-		for (size_t i = 0; i < servers.size(); ++i)
-			parser.print_server(servers[i]);
+		// for (size_t i = 0; i < servers.size(); ++i)
+		// 	parser.print_server(servers[i]);
 
-		// --- !!! ---
-		// Probably need to convert my ServerParse to ServerConfig, which we need to pass to Server
-		// But his ServerConfig contains other info my ServerParse doesn't have:
-		// maxEvents, SocketConfig and a vector of int ports.
-		// -----------
 
-		// --- 1) Start/init the servers + (epoll??)
-		// ServerConfig serverConfig{};
-		// Server webserv(serverConfig);
-
-		// webserv.Start();
-
+		// Fill constructor and Start webserv
+		Server webserv(servers);
+		webserv.Start();
 	}
 
 	return (0);
