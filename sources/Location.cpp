@@ -1,14 +1,16 @@
-#include "../includes/ConfigParser.hpp"
+#include "ConfigParser.hpp"
 
 // Checks if anything exists at that path and if a normal file (not directory)
 bool file_exists(const std::string& path)
 {
-	return (std::filesystem::exists(path) && std::filesystem::is_regular_file(path)); 
+	struct stat buffer;
+	return (stat(path.c_str(), &buffer) == 0 && S_ISREG(buffer.st_mode));
 }
 
 bool is_directory(const std::string& path)
 {
-	return (std::filesystem::exists(path) && std::filesystem::is_directory(path));
+	struct stat buffer;
+	return (stat(path.c_str(), &buffer) == 0 && S_ISDIR(buffer.st_mode));
 }
 
 // Returns a pointer to the best-matching LocationParse path.
@@ -47,7 +49,7 @@ const LocationParse* ServerParse::get_best_location(const std::string& urlPath) 
 }
 
 // Joins two parts together that normalizes the slash between them
-static std::string joinPaths(const std::string& root, const std::string& url)
+std::string joinPaths(const std::string& root, const std::string& url)
 {
 	if (root.empty())
 		return (url);
@@ -109,7 +111,6 @@ std::string ServerParse::build_filesystem_path(const std::string& reqPath) const
 	
 	if (!location)
 		return ("");
-	std::cout << "Best location: " << location->path << std::endl;
 	
 	// Remove the matching location prefix from the request path
 	std::string urlRemainder = urlPath;
