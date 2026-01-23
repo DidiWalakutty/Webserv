@@ -122,7 +122,7 @@ void Server::CreateSockets()
 		// inet_ntop(AF_INET, &address.sin_addr, buf, sizeof(buf));
 		// std::cout << "Bound socketFD " << socketFD << " to " << buf << ":" << ntohs(address.sin_port) << std::endl;
 
-		if (listen(socketFD, SOMAXCONN) < 0)							// Makes the socket start acception connections
+		if (listen(socketFD, SOMAXCONN) < 0)			// Makes the socket start acception connections
 		{
 			throw(std::runtime_error("Failed to listen on server socket."));
 		}
@@ -313,6 +313,7 @@ void Server::RemoveClient(const int &clientFD)
 			  << "Removed FD: " << clientFD << std::endl;
 }
 
+// Resize at end resizes buffer to actual received data
 std::vector<char> Server::ReadClient(const int &FD, const size_t size)
 {
 	std::vector<char> result;
@@ -320,18 +321,17 @@ std::vector<char> Server::ReadClient(const int &FD, const size_t size)
 
 	ssize_t readSize = read(FD, result.data(), size);
 
-	if (readSize == 0)
+	if (readSize == 0)	// client closed connection
 	{
 		RemoveClient(FD);
 		result.clear();
 	}
-
-	if (readSize < 0 && errno != EAGAIN)
+	if (readSize < 0 && errno != EAGAIN)	// error
 	{
 		throw(std::runtime_error("Failed to read client."));
 	}
 
-	// result.resize(readSize); check if needed.
+	result.resize(readSize);
 	return (result);
 }
 
@@ -346,6 +346,10 @@ std::vector<char> Server::ReadClient(const int &FD, const size_t size)
  * - Handles client errors, disconnects, and cleanup automatically.
  * - Runs until Server::running is set to false (e.g., on SIGINT).
  * - Cleans up all sockets and epoll instance when the loop ends.
+ * 
+ * - epoll_event: List of notifications from the kernel. Each element contains:
+ * 				- events[i].data.fd -> which socket
+ * 				- events[i].events  -> what happened (readable, error etc)
  */
 void Server::Start()
 {
@@ -361,18 +365,17 @@ void Server::Start()
 
 	while (running)
 	{
-		int count = epoll_wait(epollFD, events, _maxEvents, 1000);
+		int count = epoll_wait(epollFD, events, _maxEvents, -1);
 		if (count < 0) 
 		{
 			std::cerr << "epoll_wait failed: " << strerror(errno) << std::endl;
 			break;
 		}
 		
-		for (int i = 0; i < count; i++)
+		for (int i = 0; i < count; i++)	// handles each socket that changed state.
 		{
 			if (IsServerSocket(events[i].data.fd))	// Accept new connection + add client
 			{
-				 std::cout << " -> It's a server socket, accepting client..." << std::endl;
 				AddClient(events[i]);
 				continue;
 			}
@@ -384,13 +387,15 @@ void Server::Start()
 				continue;
 			}
 
-			if (events[i].events & EPOLLIN)		// If it's readable, parse HTTP + write response
+			if (events[i].events & EPOLLIN)		// If socket received input
 			{
+				// --- Read Request ---
 				std::vector<char> data = ReadClient(events[i].data.fd, 512);
 				if (data.size() > 0)
 					std::cout << std::endl
 							  << BOLDYELLOW << "Read FD: " << events[i].data.fd << std::endl;
 
+				// --- Parse Request ---
 				HTTPRequest request;
 				try
 				{
@@ -402,12 +407,42 @@ void Server::Start()
 				catch (const HTTPRequest::HTTPRequestException &exc)
 				{
 					std::cerr << "Failed to parse HTTP request: " << exc.what() << std::endl;
+					// Added, check if is good?
+					RemoveClient(events[i].data.fd);
+					continue;
 				}
 				if (data.size() == 0)
 					RemoveClient(events[i].data.fd);
 
+				// --- Select appropriate server based on Host header ---
+				// the value of the Host header from the request, or empty if the client didn’t send it.
+				const std::string hostHeader = request.headers.count("HOST") ? request.headers.at("HOST") : "";
+				const ServerParse* serverPtr = nullptr;
+
+				for (size_t s = 0; s < _servers.size(); s++)
+				{
+					if (_servers[s].serverName == hostHeader)
+					{
+						serverPtr = &_servers[s];
+						break;
+					}
+				}
+
+				if (!serverPtr && !_servers.empty())
+					serverPtr = &_servers[0];	// fallback
+				
+				if (!serverPtr)
+				{
+					std::cerr << "Failed to find server configuration for request. Removing client FD: " << events[i].data.fd << std::endl;
+					RemoveClient(events[i].data.fd);
+					continue;
+				}
+
+
+				// --- Build and Send Response ---
 				HTTPResponse response;
-				std::string responseStr = response.buildResponse(request);
+				std::string responseStr = response.buildResponse(request, *serverPtr);
+				// send back HTTP Response to client
 				ssize_t writeSize = write(events[i].data.fd, responseStr.c_str(), responseStr.size());
 				// std::cout << std::endl
 				// 		  << BOLDGREEN << "Wrote FD: " << events[i].data.fd << std::endl;
