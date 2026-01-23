@@ -137,4 +137,4 @@ public:
  * @param str
  * @return const std::string
  */
-const std::string cleanWhiteSpace(std::string str);
+std::string cleanWhiteSpace(std::string str);

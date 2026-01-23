@@ -1,6 +1,6 @@
 CC = c++
-CFLAGS = -std=c++20 -Iincludes/ -Wall -Wall -Werror -O3
-LDFLAGS = 
+CFLAGS = -std=c++20 -Iincludes/ -Wall -Werror -O3
+LDFLAGS =
 
 SRCDIR = sources
 SOURCES = $(wildcard $(SRCDIR)/*.cpp)

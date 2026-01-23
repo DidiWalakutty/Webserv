@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Config.hpp"
+#include <sys/stat.h>
 #include <string>
 #include <vector>
 #include <fstream>
@@ -9,7 +10,6 @@
 #include <iostream>
 #include <sstream>
 #include <set>
-#include <filesystem>
 
 /* The ConfigParser class is responsible for:
 * - Reading a configuration file
@@ -57,10 +57,6 @@ class ConfigParser {
 		// --- Accessors for best location and error pages ---
 		const LocationParse* getBestLocation(const ServerParse& server, const std::string& path) const;
 		const std::string* getErrorPage(const ServerParse& server, int errorCode) const;
-
-		// --- Check if file exists or if path is a directory ---
-		bool file_exists(const std::string& path);
-		bool is_directory(const std::string& path);
 		
 		// For debugging: print parsed config
 		void print_server(const ServerParse& server) const;

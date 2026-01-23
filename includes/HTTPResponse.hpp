@@ -1,5 +1,6 @@
 #include "HTTPCommon.hpp"
 #include "HTTPRequest.hpp"
+#include "Config.hpp"
 
 #pragma once
 
@@ -33,14 +34,8 @@ public:
 	 * @param request The HTTP request object.
 	 * @return The constructed HTTPResponse string.
 	 */
-	std::string buildResponse(HTTPRequest request);
-
-	/**
-	 * @brief Parses the requested resource path to determine the file path.
-	 * @param request The HTTP request object.
-	 * @return The file path corresponding to the requested resource.
-	 */
-	std::string parsePath(HTTPRequest request);
+	/// -- !! -- Updated
+	std::string buildResponse(HTTPRequest request, const ServerParse& server);
 
 	/**
 	 * @brief Determines the Content-Type based on the file extension.
