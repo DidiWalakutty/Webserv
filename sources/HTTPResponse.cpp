@@ -15,20 +15,6 @@ void HTTPResponse::printResponse() const
 				  << body << std::endl;
 }
 
-std::string HTTPResponse::parsePath(HTTPRequest request)
-{
-	std::string filePath = request.resourcePath;
-	if (filePath.front() == '/')
-	{
-		filePath = "." + filePath;
-	}
-	if (filePath == "./" || filePath.empty())
-	{
-		filePath = "./html/home.html";
-	}
-	return filePath;
-}
-
 std::string HTTPResponse::parseContentType(const std::string filePath)
 {
 	if (filePath.ends_with(".html"))
@@ -54,39 +40,78 @@ std::string HTTPResponse::setDate()
 	return ss.str().end()[-1] == '\n' ? ss.str().substr(0, ss.str().length() - 1) : ss.str();
 }
 
-std::string HTTPResponse::buildResponse(HTTPRequest request)
+// Updated the buildresponse to create the correct path and checking if it exists.
+std::string HTTPResponse::buildResponse(HTTPRequest request, const ServerParse& server)
 {
 	protocolVersion = request.protocolVersion;
 
+	// Default to 404
 	HTTPMesage statusMessage = HTTPCommon::HTTPStatusMap.at(HTTPState::NotFound);
 
-	std::string filePath = parsePath(request);
-
-	std::cout << "Attempting to read file: " << filePath << std::endl;
-	std::ifstream file(filePath);
-
-	if (file.good())
+	// Get Location info for index
+	const LocationParse* location = server.get_best_location(request.resourcePath);
+	std::string filePath;
+	
+	if (!location)
 	{
-		std::cout << "File found and opened successfully" << std::endl;
-		std::stringstream buffer;
-		buffer << file.rdbuf();
-		body = buffer.str();
-		file.close();
-		updateForHTTPState(HTTPState::Ok);
+		std::cout << "No matching location for: " << request.resourcePath << std::endl;
+		updateForHTTPState(HTTPState::NotFound);
 	}
 	else
 	{
-		std::cout << "File not found, using status message" << std::endl;
-		updateForHTTPState(HTTPState::NotFound);
+		// --- Build initial path ---
+		filePath = server.build_filesystem_path(request.resourcePath);
+		if (filePath.empty())
+		{
+			std::cout << "Invalid path or no matching location for: " << request.resourcePath << std::endl;
+			updateForHTTPState(HTTPState::NotFound);
+		}
+		else
+		{
+			// --- Directory handling ---
+			if (server.is_directory(filePath))
+			{
+				if (!location->index.empty())
+				{
+					filePath = server.joinPaths(filePath, location->index);
+				}
+				else
+				{
+					// No index -> forbidden
+					std::cout << "Directory without index: " << filePath << std::endl;
+					updateForHTTPState(HTTPState::Forbidden);
+				}
+			}
+			// --- Check if file exists, also if dir. ---
+			if (server.file_exists(filePath))
+			{
+				std::ifstream file(filePath);
+				std::stringstream buffer;
+				buffer << file.rdbuf();
+				body = buffer.str();
+				file.close();
+				updateForHTTPState(HTTPState::Ok);
+				std::cout << "File found and opened successfully" << std::endl;
+			}
+			else
+			{
+				std::cout << "File not found, using status message" << std::endl;
+				updateForHTTPState(HTTPState::NotFound);
+			}
+		}
+
 	}
 
+	// --- Build final response string ---
 	std::string responseStr = parseResponseStr(request, statusMessage, filePath);
 
 	std::cout << BOLDBLUE << "Built Response String for request: " << methodToString(request.method) << std::endl;
 	std::cout << responseStr << RESET << std::endl;
+
 	return responseStr;
 }
 
+// Perhaps need to check if a file was actually created/updated abd set to state created(201)?
 std::string HTTPResponse::parseResponseStr(const HTTPRequest request, HTTPMesage statusMessage, std::string filePath)
 {
 	switch (request.method)
