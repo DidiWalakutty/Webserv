@@ -17,7 +17,7 @@ bool HTTPRequest::parseRequest(const std::string raw)
 
 	// --- Find Method ---
 	size_t methodEnd = requestLine.find(' ');
-	// throw HTTPRequestException("Invalid request line: " + requestLine);
+	
 	if (methodEnd == std::string::npos)
 		return false;
 	std::string strMethod = requestLine.substr(0, methodEnd);
@@ -69,7 +69,7 @@ bool HTTPRequest::parseRequest(const std::string raw)
 		if (contentLength > MAX_BODY_SIZE)
 			throw HTTPRequestException("Content-Length exceeds maximum allowed size");
 	}
-	// --- !!! --- Patch or Delete??
+	// --- !!! --- Patch or Delete needed??
 	else if (strMethod == "POST" || strMethod == "PUT" || strMethod == "PATCH")
 	{
 		throw HTTPRequestException("Missing required Content-Length header for method: " + strMethod);
