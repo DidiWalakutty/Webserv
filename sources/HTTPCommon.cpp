@@ -116,7 +116,7 @@ std::string HTTPCommon::protocolVersionToString(HTTPProtocolVersion version)
 	}
 };
 
-const std::string cleanWhiteSpace(std::string str)
+std::string cleanWhiteSpace(std::string str)
 {
 	str.erase(0, str.find_first_not_of(" \t\r\n"));
 	str.erase(str.find_last_not_of(" \t\r\n") + 1);
