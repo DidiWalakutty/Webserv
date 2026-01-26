@@ -17,8 +17,16 @@ Updates:
 5.	Start():
 	Select the appropriate server based on host header -> NEEDS TESTING, so connect to server we want to use and check
 6.	buildResponse():
-	Updated the filepath to better location matching + validating if that filepath exists
-	If directory, we need to serve the file in the index, so also gets the right location block.
+	- Reset state first: clear headers and body to prevent leftovers from previous responses.
+	- Set default HTTPState to Ok.
+	- Updated the filepath to better location matching + validating if that filepath exists.
+	- If directory, we need to serve the file in the index, so also gets the right location block.
+	- Now does early return on errors, otherwise we'd overwrite a state.
+	- Previously we passed a statusMessage into parseResponseStr, but that value always stayed 404.
+	- We did update the statusCode, but didn't send that to parseResponseStr.
+	- Directory handling doesn’t early-return on errors, which made headers/body get overwritten consistently.
+7.	parseResponseStr():
+	- Now uses statusCode of class and is a formatter only.
 
 To Do:
 1.	Start():
@@ -39,3 +47,5 @@ Questions:
 	- Content Lenght
 	Do we accept any others? If so, which and how to handle those?
 3.	In Start(), I added a RemoveClient() when we couldn't parse the HTTP Request. Good?
+
+
