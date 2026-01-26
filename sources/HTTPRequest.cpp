@@ -4,7 +4,6 @@ bool HTTPRequest::parseRequest(const std::string raw)
 {
 	if (raw.empty())
 		throw HTTPRequestException("Empty (raw) request string");
-	// return false;
 	
 	// istringstream: treats a string like input we can read from line by line + token by token.
 	std::istringstream stream(raw);
