@@ -100,37 +100,45 @@ std::string HTTPResponse::buildResponse(HTTPRequest request, const ServerParse& 
 }
 
 // Perhaps need to check if a file was actually created/updated abd set to state created(201)?
-std::string HTTPResponse::parseResponseStr(const HTTPRequest request, std::string filePath)
+std::string HTTPResponse::parseResponseStr(const HTTPRequest request, const std::string filePath)
 {
 	switch (request.method)
 	{
 		case HTTPMethod::GET:
+			handleGET(request, filePath);
 			break;
 		case HTTPMethod::POST:
+			handlePOST(request, filePath); // pass upload dir as filepath
 			break;
 		case HTTPMethod::PUT:
 			break;
 		case HTTPMethod::DELETE:
+			handleDELETE(request, filePath);
 			updateForHTTPState(HTTPState::NoContent);
 			break;
 		case HTTPMethod::HEAD:
+			handleHEAD(request, filePath);
 			clearBody();
 			break;
 		case HTTPMethod::UNSUPPORTED:
-			updateForHTTPState(HTTPState::MethodNotAllowed);
+			handleErrorPages(HTTPState::MethodNotAllowed);
 			break;
 		default:
-			if (statusCode == "200")
-				updateForHTTPState(HTTPState::NotImplemented);
+			handleErrorPages(HTTPState::NotImplemented);
 			break;
 	}
 
+	// --- Common Headers ---
 	headers["Content-Length"] = std::to_string(body.size());
 	headers["Server"] = "Webserv_Didi_and_Goksu";
 	headers["Connection"] = "keep-alive";
 	headers["Date"] = setDate();
 
+	// --- Set content type if not already set ---
+	if (headers.find("Content-Type") == headers.end())
+		headers["Content-Type"] = parseContentType(filePath);
 
+	// --- Build HTTP Response String ---
 	std::string response =
 		protocolVersionToString(request.protocolVersion) + " " +
 		statusCode + " " + reasonPhrase + "\r\n";

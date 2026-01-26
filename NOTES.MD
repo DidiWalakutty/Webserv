@@ -30,12 +30,14 @@ Updates:
 
 To Do:
 1.	Start():
-	Select the appropriate server based on host header -> NEEDS TESTING, so connect to server we want to use and check.
+	Select the appropriate server based on host header -> needs extra testing, so connect to server we want to use and check.
 2.	parseResponseStr():
 	We might need to check (somewhere) that in case of POST or PUT, the file was actually
 	created/updated and set state to created -> 201?
 3.	isValidBody():
 	Always returns true, so needs checks.
+4.	parseContentType():
+	Currently doesn't work, says ends_with doesn't exist.
 
 Questions:
 1.  Which HTTP Methods do we accept for HTTP Requests?

@@ -24,6 +24,16 @@ public:
 	HTTPResponse &operator=(const HTTPResponse &other) = default;
 	~HTTPResponse() = default;
 
+private:
+	// Handler functions
+	const ServerParse& serverParse;
+	void handleGET(const HTTPRequest& request, const std::string& filePath);
+	void handleHEAD(const HTTPRequest& request, const std::string& filePath);
+	void handlePOST(const HTTPRequest& request, const std::string& uploadDir);	// for uploads and cgi
+	void handleDELETE(const HTTPRequest& request, const std::string& filePath);
+	void handleErrorPages(HTTPState state);
+
+
 	/**
 	 * @brief Prints the HTTP response details to the standard output.
 	 */
@@ -58,7 +68,7 @@ public:
 	 */
 	// std::string parseResponseStr(const HTTPRequest request, HTTPMessage statusMessage, std::string filePath);
 	// checking if update works better, because statusmessage isn't updated correctly
-	std::string parseResponseStr(const HTTPRequest request, std::string filePath);
+	std::string parseResponseStr(const HTTPRequest request, const std::string filePath);
 
 	/**
 	 * @brief Clears the response body and resets related headers.
