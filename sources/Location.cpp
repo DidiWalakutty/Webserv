@@ -1,13 +1,13 @@
 #include "ConfigParser.hpp"
 
 // Checks if anything exists at that path and if a normal file (not directory)
-bool file_exists(const std::string& path)
+bool ServerParse::file_exists(const std::string& path) const
 {
 	struct stat buffer;
 	return (stat(path.c_str(), &buffer) == 0 && S_ISREG(buffer.st_mode));
 }
 
-bool is_directory(const std::string& path)
+bool ServerParse::is_directory(const std::string& path) const
 {
 	struct stat buffer;
 	return (stat(path.c_str(), &buffer) == 0 && S_ISDIR(buffer.st_mode));
@@ -49,7 +49,7 @@ const LocationParse* ServerParse::get_best_location(const std::string& urlPath) 
 }
 
 // Joins two parts together that normalizes the slash between them
-std::string joinPaths(const std::string& root, const std::string& url)
+std::string ServerParse::joinPaths(const std::string& root, const std::string& url) const
 {
 	if (root.empty())
 		return (url);
