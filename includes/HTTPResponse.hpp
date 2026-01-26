@@ -34,7 +34,6 @@ public:
 	 * @param request The HTTP request object.
 	 * @return The constructed HTTPResponse string.
 	 */
-	/// -- !! -- Updated
 	std::string buildResponse(HTTPRequest request, const ServerParse& server);
 
 	/**
@@ -57,7 +56,9 @@ public:
 	 * @param filePath The file path string.
 	 * @return The constructed HTTP response string.
 	 */
-	std::string parseResponseStr(const HTTPRequest request, HTTPMesage statusMessage, std::string filePath);
+	// std::string parseResponseStr(const HTTPRequest request, HTTPMessage statusMessage, std::string filePath);
+	// checking if update works better, because statusmessage isn't updated correctly
+	std::string parseResponseStr(const HTTPRequest request, std::string filePath);
 
 	/**
 	 * @brief Clears the response body and resets related headers.
