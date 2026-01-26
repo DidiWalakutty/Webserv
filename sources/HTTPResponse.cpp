@@ -41,121 +41,104 @@ std::string HTTPResponse::setDate()
 }
 
 // Updated the buildresponse to create the correct path and checking if it exists.
+// 
 std::string HTTPResponse::buildResponse(HTTPRequest request, const ServerParse& server)
 {
 	protocolVersion = request.protocolVersion;
-
-	// Default to 404
-	HTTPMesage statusMessage = HTTPCommon::HTTPStatusMap.at(HTTPState::NotFound);
-
-	// Get Location info for index
+	
+	headers.clear();
+	body.clear();
+	updateForHTTPState(HTTPState::Ok);
+	
+	// --- Get Location info for index ---
 	const LocationParse* location = server.get_best_location(request.resourcePath);
 	std::string filePath;
 	
 	if (!location)
 	{
-		std::cout << "No matching location for: " << request.resourcePath << std::endl;
 		updateForHTTPState(HTTPState::NotFound);
+		return parseResponseStr(request, "");
 	}
-	else
+
+	// --- Build initial path ---
+	filePath = server.build_filesystem_path(request.resourcePath);
+	if (filePath.empty())
 	{
-		// --- Build initial path ---
-		filePath = server.build_filesystem_path(request.resourcePath);
-		if (filePath.empty())
+		updateForHTTPState(HTTPState::NotFound);
+		return parseResponseStr(request, "");
+	}
+
+	if (server.is_directory(filePath))
+	{
+		if (!location->index.empty())
 		{
-			std::cout << "Invalid path or no matching location for: " << request.resourcePath << std::endl;
-			updateForHTTPState(HTTPState::NotFound);
+			filePath = server.joinPaths(filePath, location->index);
 		}
 		else
 		{
-			// --- Directory handling ---
-			if (server.is_directory(filePath))
-			{
-				if (!location->index.empty())
-				{
-					filePath = server.joinPaths(filePath, location->index);
-				}
-				else
-				{
-					// No index -> forbidden
-					std::cout << "Directory without index: " << filePath << std::endl;
-					updateForHTTPState(HTTPState::Forbidden);
-				}
-			}
-			// --- Check if file exists, also if dir. ---
-			if (server.file_exists(filePath))
-			{
-				std::ifstream file(filePath);
-				std::stringstream buffer;
-				buffer << file.rdbuf();
-				body = buffer.str();
-				file.close();
-				updateForHTTPState(HTTPState::Ok);
-				std::cout << "File found and opened successfully" << std::endl;
-			}
-			else
-			{
-				std::cout << "File not found, using status message" << std::endl;
-				updateForHTTPState(HTTPState::NotFound);
-			}
+			// No index -> forbidden
+			updateForHTTPState(HTTPState::Forbidden);
+			return parseResponseStr(request, filePath);
 		}
-
 	}
 
-	// --- Build final response string ---
-	std::string responseStr = parseResponseStr(request, statusMessage, filePath);
+	if (!server.file_exists(filePath))
+	{
+		updateForHTTPState(HTTPState::NotFound);
+		return parseResponseStr(request, filePath);
+	}
 
-	std::cout << BOLDBLUE << "Built Response String for request: " << methodToString(request.method) << std::endl;
-	std::cout << responseStr << RESET << std::endl;
+	// Else, filePath exists
+	std::ifstream file(filePath);
+	std::stringstream buffer;
+	buffer << file.rdbuf();
+	body = buffer.str();
+	file.close();
+	std::cout << "File found and opened successfully" << std::endl;
 
-	return responseStr;
+	return parseResponseStr(request, filePath);
 }
 
 // Perhaps need to check if a file was actually created/updated abd set to state created(201)?
-std::string HTTPResponse::parseResponseStr(const HTTPRequest request, HTTPMesage statusMessage, std::string filePath)
+std::string HTTPResponse::parseResponseStr(const HTTPRequest request, std::string filePath)
 {
 	switch (request.method)
 	{
-	case HTTPMethod::GET:
-		break;
-	case HTTPMethod::POST:
-		break;
-	case HTTPMethod::PUT:
-		break;
-	case HTTPMethod::DELETE:
-		updateForHTTPState(HTTPState::NoContent);
-		break;
-	case HTTPMethod::HEAD:
-		clearBody();
-		break;
-	case HTTPMethod::UNSUPPORTED:
-		updateForHTTPState(HTTPState::MethodNotAllowed);
-		break;
-	default:
-		updateForHTTPState(HTTPState::NotImplemented);
-		break;
+		case HTTPMethod::GET:
+			break;
+		case HTTPMethod::POST:
+			break;
+		case HTTPMethod::PUT:
+			break;
+		case HTTPMethod::DELETE:
+			updateForHTTPState(HTTPState::NoContent);
+			break;
+		case HTTPMethod::HEAD:
+			clearBody();
+			break;
+		case HTTPMethod::UNSUPPORTED:
+			updateForHTTPState(HTTPState::MethodNotAllowed);
+			break;
+		default:
+			if (statusCode == "200")
+				updateForHTTPState(HTTPState::NotImplemented);
+			break;
 	}
 
 	headers["Content-Length"] = std::to_string(body.size());
-	headers["Server"] = "Webserv_Didi_Ferre_Goksu";
+	headers["Server"] = "Webserv_Didi_and_Goksu";
 	headers["Connection"] = "keep-alive";
 	headers["Date"] = setDate();
 
+
 	std::string response =
 		protocolVersionToString(request.protocolVersion) + " " +
-		statusCode + " " + statusMessage.message + "\r\n";
+		statusCode + " " + reasonPhrase + "\r\n";
 
 	for (const auto &h : headers)
 		response += h.first + ": " + h.second + "\r\n";
 
 	response += "\r\n" + body;
-
-	std::cout << BOLDBLUE
-			  << "Built Response String for request: "
-			  << methodToString(request.method)
-			  << std::endl
-			  << response
-			  << RESET << std::endl;
 
 	return response;
 }
@@ -169,7 +152,7 @@ void HTTPResponse::clearBody()
 
 void HTTPResponse::updateForHTTPState(HTTPState state)
 {
-	HTTPMesage statusMessage = HTTPCommon::HTTPStatusMap.at(state);
+	HTTPMessage statusMessage = HTTPCommon::HTTPStatusMap.at(state);
 	statusCode = statusMessage.code;
 	reasonPhrase = statusMessage.message;
 
