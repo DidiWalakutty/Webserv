@@ -1,4 +1,6 @@
 #include "server.hpp"
+#include "Config.hpp"
+#include "ConfigParser.hpp"
 
 #include <iostream>
 #include <stdexcept>
@@ -8,7 +10,7 @@
 #include <fcntl.h>
 #include <signal.h>
 #include <string>
-#include <cstring> // delete later
+#include <cstring>
 
 void Interrupt(int sig)
 {
