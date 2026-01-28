@@ -442,8 +442,8 @@ void Server::Start()
 
 
 				// --- Build and Send Response ---
-				HTTPResponse response;
-				std::string responseStr = response.buildResponse(request, *serverPtr);
+				HTTPResponse response(*serverPtr);
+				std::string responseStr = response.buildResponse(request);
 				// send back HTTP Response to client
 				ssize_t writeSize = write(events[i].data.fd, responseStr.c_str(), responseStr.size());
 				// std::cout << std::endl

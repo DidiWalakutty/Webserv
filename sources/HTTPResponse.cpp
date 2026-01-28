@@ -1,5 +1,10 @@
 #include "HTTPResponse.hpp"
 
+HTTPResponse::HTTPResponse(const ServerParse& server)
+	: serverParse(server)
+{
+}
+
 void HTTPResponse::printResponse() const
 {
 	std::cout << "Protocol Version: " << protocolVersionToString(protocolVersion) << std::endl;
@@ -41,8 +46,7 @@ std::string HTTPResponse::setDate()
 }
 
 // Updated the buildresponse to create the correct path and checking if it exists.
-// 
-std::string HTTPResponse::buildResponse(HTTPRequest request, const ServerParse& server)
+std::string HTTPResponse::buildResponse(HTTPRequest request)
 {
 	protocolVersion = request.protocolVersion;
 	
@@ -51,7 +55,7 @@ std::string HTTPResponse::buildResponse(HTTPRequest request, const ServerParse& 
 	updateForHTTPState(HTTPState::Ok);
 	
 	// --- Get Location info for index ---
-	const LocationParse* location = server.get_best_location(request.resourcePath);
+	const LocationParse* location = serverParse.get_best_location(request.resourcePath);
 	std::string filePath;
 	
 	if (!location)
@@ -61,18 +65,18 @@ std::string HTTPResponse::buildResponse(HTTPRequest request, const ServerParse& 
 	}
 
 	// --- Build initial path ---
-	filePath = server.build_filesystem_path(request.resourcePath);
+	filePath = serverParse.build_filesystem_path(request.resourcePath);
 	if (filePath.empty())
 	{
 		updateForHTTPState(HTTPState::NotFound);
 		return parseResponseStr(request, "");
 	}
 
-	if (server.is_directory(filePath))
+	if (serverParse.is_directory(filePath))
 	{
 		if (!location->index.empty())
 		{
-			filePath = server.joinPaths(filePath, location->index);
+			filePath = serverParse.joinPaths(filePath, location->index);
 		}
 		else
 		{
@@ -82,7 +86,7 @@ std::string HTTPResponse::buildResponse(HTTPRequest request, const ServerParse& 
 		}
 	}
 
-	if (!server.file_exists(filePath))
+	if (!serverParse.file_exists(filePath))
 	{
 		updateForHTTPState(HTTPState::NotFound);
 		return parseResponseStr(request, filePath);
@@ -129,6 +133,7 @@ std::string HTTPResponse::parseResponseStr(const HTTPRequest request, const std:
 	}
 
 	// --- Common Headers ---
+	// shouldnt be updated if done in handle functions
 	headers["Content-Length"] = std::to_string(body.size());
 	headers["Server"] = "Webserv_Didi_and_Goksu";
 	headers["Connection"] = "keep-alive";

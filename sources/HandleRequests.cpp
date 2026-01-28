@@ -40,7 +40,7 @@ void HTTPResponse::handlePOST(const HTTPRequest& request, const std::string& upl
 
 	// --- Unique filename for the upload ---
 	std::string fileName = "upload_" + std::to_string(std::time(nullptr));
-	std::string filePath = ServerParse::joinPaths(uploadDir, fileName);
+	std::string filePath = serverParse.joinPaths(uploadDir, fileName);
 
 	// --- Write the body to the file ---
 	std::ofstream outFile(filePath, std::ios::binary);
@@ -53,13 +53,33 @@ void HTTPResponse::handlePOST(const HTTPRequest& request, const std::string& upl
 	}
 
 	outFile << request.body;
-	outFile.close();
+	if (!outFile.good())
+	{
+		outFile.close();
+		handleErrorPages(HTTPState::InternalServerError);
+		return ;
+	}
 
 	// --- Successfull creation
+	outFile.close();
+
 	body = "File uploaded as: " + fileName;
 	updateForHTTPState(HTTPState::Created);
 	headers["Content-Type"] = "text/plain";
 }
+
+void HTTPResponse::handleDELETE(const HTTPRequest& request, const std::string& filePath)
+{
+	// should check if the file/location isn't already empty.
+	// check for rights???
+	// delete
+}
+
+void HTTPResponse::handleHEAD(const HTTPRequest& request, const std::string& filePath)
+{
+
+}
+
 
 // Looks for an HTML file based on the status code.
 // If exists, reads it into body, otherwise uses a simple fallback message.

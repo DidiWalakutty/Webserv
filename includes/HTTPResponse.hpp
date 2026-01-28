@@ -20,31 +20,31 @@ public:
 	std::string body;
 
 	HTTPResponse() = default;
+	HTTPResponse(const ServerParse &server);
 	HTTPResponse(const HTTPResponse &other) = default;
 	HTTPResponse &operator=(const HTTPResponse &other) = default;
 	~HTTPResponse() = default;
-
-private:
-	// Handler functions
-	const ServerParse& serverParse;
-	void handleGET(const HTTPRequest& request, const std::string& filePath);
-	void handleHEAD(const HTTPRequest& request, const std::string& filePath);
-	void handlePOST(const HTTPRequest& request, const std::string& uploadDir);	// for uploads and cgi
-	void handleDELETE(const HTTPRequest& request, const std::string& filePath);
-	void handleErrorPages(HTTPState state);
-
-
-	/**
-	 * @brief Prints the HTTP response details to the standard output.
-	 */
-	void printResponse() const;
 
 	/**
 	 * @brief Builds an HTTP response based on the status and request.
 	 * @param request The HTTP request object.
 	 * @return The constructed HTTPResponse string.
 	 */
-	std::string buildResponse(HTTPRequest request, const ServerParse& server);
+	std::string buildResponse(HTTPRequest request);
+
+private:
+	// Handler functions
+	ServerParse serverParse;	// field in class
+	void handleGET(const HTTPRequest& request, const std::string& filePath);
+	void handleHEAD(const HTTPRequest& request, const std::string& filePath);
+	void handlePOST(const HTTPRequest& request, const std::string& uploadDir);	// for uploads and cgi
+	void handleDELETE(const HTTPRequest& request, const std::string& filePath);
+	void handleErrorPages(HTTPState state);
+
+	/**
+	 * @brief Prints the HTTP response details to the standard output.
+	 */
+	void printResponse() const;
 
 	/**
 	 * @brief Determines the Content-Type based on the file extension.
