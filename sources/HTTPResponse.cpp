@@ -106,6 +106,7 @@ std::string HTTPResponse::buildResponse(HTTPRequest request)
 // Perhaps need to check if a file was actually created/updated abd set to state created(201)?
 std::string HTTPResponse::parseResponseStr(const HTTPRequest request, const std::string filePath)
 {
+	std::cout << "in parseresponsestr, we're: " << methodToString(request.method) << std::endl;
 	switch (request.method)
 	{
 		case HTTPMethod::GET:

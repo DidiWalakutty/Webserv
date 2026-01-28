@@ -4,6 +4,7 @@
 // Treats files as binary, exactly as is on disk.
 void HTTPResponse::handleGET(const HTTPRequest& request, const std::string& filePath)
 {
+	std::cout << "in GET" << std::endl;
 	std::ifstream file(filePath, std::ios::binary); // Treats the file as binary.
 	
 	// File not found, serve 404 page
@@ -24,6 +25,9 @@ void HTTPResponse::handleGET(const HTTPRequest& request, const std::string& file
 
 void HTTPResponse::handlePOST(const HTTPRequest& request, const std::string& uploadDir)
 {
+	std::cout << "in POST" << std::endl;
+	std::cout << "POST body size: " << request.body.size() << std::endl;
+	std::cout << "uploaddir: " << uploadDir << std::endl;
 	if (uploadDir.empty())
 	{
 		handleErrorPages(HTTPState::InternalServerError);
@@ -33,6 +37,7 @@ void HTTPResponse::handlePOST(const HTTPRequest& request, const std::string& upl
 	// Check if body is empty
 	if (request.body.empty())
 	{
+		std::cout << "body is empty" << std::endl;
 		// a request server can't parse (invalid HTTP headers, corrupted request body)
 		handleErrorPages(HTTPState::BadRequest);
 		return ;
@@ -40,7 +45,10 @@ void HTTPResponse::handlePOST(const HTTPRequest& request, const std::string& upl
 
 	// --- Unique filename for the upload ---
 	std::string fileName = "upload_" + std::to_string(std::time(nullptr));
-	std::string filePath = serverParse.joinPaths(uploadDir, fileName);
+	std::string filePath = uploadDir + fileName;
+
+	std::cout << "Filename: " << fileName << std::endl;
+	std::cout << "Uploading to: " << filePath << std::endl;
 
 	// --- Write the body to the file ---
 	std::ofstream outFile(filePath, std::ios::binary);
@@ -48,6 +56,7 @@ void HTTPResponse::handlePOST(const HTTPRequest& request, const std::string& upl
 	// Checks if creation was successful
 	if (!outFile.is_open())
 	{
+		std::cout << "couldnt create" << std::endl;
 		handleErrorPages(HTTPState::InternalServerError);
 		return ;
 	}
@@ -55,6 +64,7 @@ void HTTPResponse::handlePOST(const HTTPRequest& request, const std::string& upl
 	outFile << request.body;
 	if (!outFile.good())
 	{
+		std::cout << "couldn't good it" << std::endl;
 		outFile.close();
 		handleErrorPages(HTTPState::InternalServerError);
 		return ;
@@ -86,6 +96,7 @@ void HTTPResponse::handleHEAD(const HTTPRequest& request, const std::string& fil
 void HTTPResponse::handleErrorPages(HTTPState state)
 {
 	updateForHTTPState(state);
+	std::cout << "Error page is given: " << state << std::endl;
 	
 	// Path to error HTLM pages
 	std::string errorPath = "www/errors/" + statusCode + ".html";
