@@ -53,3 +53,5 @@ Questions:
 3.	In Start(), I added a RemoveClient() when we couldn't parse the HTTP Request. Good?
 
 
+Testing:
+1. Does upload, but filepath isn't correctly. Fix in buildresponse. When do we need the index as filepath, when just the directory???
