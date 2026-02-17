@@ -219,8 +219,8 @@ ServerParse ConfigParser::parseServerBlock(const std::vector<std::string>& fileL
 				std::vector<std::string> tokens = splitByWhitespace(value);
 				for (size_t i = 0; i < tokens.size(); ++i)
 				{
-					HTTPConfMeth method; 
-					if (stringToHTTPConfMeth(tokens[i], method))
+					HTTPMethod method; 
+					if (stringToHTTPMethod(tokens[i], method))
 					{
 						server.allowedMethods.push_back(method);
 					}
@@ -399,8 +399,8 @@ LocationParse ConfigParser::parseLocationBlock(const std::vector<std::string>& f
 				std::vector<std::string> tokens = splitByWhitespace(value);
 				for (size_t i = 0; i < tokens.size(); ++i)
 				{
-					HTTPConfMeth method;
-					if (stringToHTTPConfMeth(tokens[i], method))
+					HTTPMethod method;
+					if (stringToHTTPMethod(tokens[i], method))
 					{
 						location.allowedMethods.push_back(method);
 					}

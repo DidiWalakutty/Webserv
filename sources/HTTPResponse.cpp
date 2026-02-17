@@ -46,17 +46,18 @@ std::string HTTPResponse::setDate()
 }
 
 // Updated the buildresponse to create the correct path and checking if it exists.
+// We only need to serve the index.html file in case we use a GET / HEAD request.
 std::string HTTPResponse::buildResponse(HTTPRequest request)
 {
-	protocolVersion = request.protocolVersion;
+	std::cerr << "In buildResponse(), with request: " << methodToString(request.method) << " " << request.resourcePath << std::endl;
 	
+	protocolVersion = request.protocolVersion;
 	headers.clear();
 	body.clear();
 	updateForHTTPState(HTTPState::Ok);
 	
 	// --- Get Location info for index ---
 	const LocationParse* location = serverParse.get_best_location(request.resourcePath);
-	std::string filePath;
 	
 	if (!location)
 	{
@@ -65,40 +66,68 @@ std::string HTTPResponse::buildResponse(HTTPRequest request)
 	}
 
 	// --- Build initial path ---
-	filePath = serverParse.build_filesystem_path(request.resourcePath);
+	std::string filePath = serverParse.build_filesystem_path(request.resourcePath);
+	// std::cerr << "Initial file path is: " << filePath << std::endl; 
+	
 	if (filePath.empty())
 	{
 		updateForHTTPState(HTTPState::NotFound);
 		return parseResponseStr(request, "");
 	}
 
-	if (serverParse.is_directory(filePath))
+	// --- Directory handling (method aware) ---
+	bool isDir = serverParse.is_directory(filePath);
+
+	if (isDir)	
 	{
-		if (!location->index.empty())
+		// Only GET / HEAD use index
+		if (request.method == HTTPMethod::GET || request.method == HTTPMethod::HEAD)
 		{
-			filePath = serverParse.joinPaths(filePath, location->index);
+			if (!location->index.empty())
+			{
+				filePath = serverParse.joinPaths(filePath, location->index);
+				// std::cerr << "Index file found, filepath is: " << filePath << std::endl;
+			}
+			else
+			{
+				// No index -> forbidden
+				updateForHTTPState(HTTPState::Forbidden);
+				return parseResponseStr(request, filePath);
+			}
 		}
 		else
 		{
-			// No index -> forbidden
-			updateForHTTPState(HTTPState::Forbidden);
-			return parseResponseStr(request, filePath);
+			// For POST / PUT / DELETE, we keep the directory path and the handleX functions handle accordingly.
+			// Remove this + this else statement when done testing.
+			std::cerr << "Directory requested with other HTTP method then GET/Head, so filepath is: " << filePath << std::endl;
 		}
+		// If any other method, we keep the original filePath we created with build_filesystem_path().
 	}
 
+	// --- Existence Check ---
 	if (!serverParse.file_exists(filePath))
 	{
 		updateForHTTPState(HTTPState::NotFound);
 		return parseResponseStr(request, filePath);
 	}
 
-	// Else, filePath exists
-	std::ifstream file(filePath);
-	std::stringstream buffer;
-	buffer << file.rdbuf();
-	body = buffer.str();
-	file.close();
-	std::cout << "File found and opened successfully" << std::endl;
+	// --- Only read file for GET / HEAD ---
+	if (request.method == HTTPMethod::GET || request.method == HTTPMethod::HEAD)
+	{
+		std::ifstream file(filePath.c_str(), std::ios::binary);
+		if (!file.is_open())
+		{
+			updateForHTTPState(HTTPState::Forbidden);
+			return parseResponseStr(request, filePath);
+		}
+		
+		std::stringstream buffer;
+		buffer << file.rdbuf();
+		body = buffer.str();
+		file.close();
+		std::cout << "File found and opened successfully" << std::endl;
+	}
+	// For POST / PUT, body handling happens in their handleX functions.
 
 	return parseResponseStr(request, filePath);
 }

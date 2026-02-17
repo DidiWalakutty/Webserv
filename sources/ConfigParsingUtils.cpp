@@ -77,38 +77,38 @@ bool ConfigParser::isLineEmpty(const std::string& line) const
     return tokens;
 }
 
-bool ConfigParser::stringToHTTPConfMeth(const std::string& method, HTTPConfMeth& outmethod)
+bool ConfigParser::stringToHTTPMethod(const std::string& method, HTTPMethod& outmethod)
 {
 	if (method == "GET")
 	{
-		outmethod = HTTPConfMeth::GET;
+		outmethod = HTTPMethod::GET;
 		return true;
 	}
 	else if (method == "POST")
 	{
-		outmethod = HTTPConfMeth::POST;
+		outmethod = HTTPMethod::POST;
 		return true;
 	}
 	else if (method == "DELETE")
 	{
-		outmethod = HTTPConfMeth::DELETE;
+		outmethod = HTTPMethod::DELETE;
 		return true;
 	}
 	return false;
 }
 
-std::string method_to_string(HTTPConfMeth m)
+std::string method_to_string(HTTPMethod m)
 {
     switch (m)
     {
-        case HTTPConfMeth::GET: return "GET";
-        case HTTPConfMeth::POST: return "POST";
-        case HTTPConfMeth::DELETE: return "DELETE";
+        case HTTPMethod::GET: return "GET";
+        case HTTPMethod::POST: return "POST";
+        case HTTPMethod::DELETE: return "DELETE";
         default: return "UNKNOWN";
     }
 }
 
-static void print_methods(const std::vector<HTTPConfMeth>& methods)
+static void print_methods(const std::vector<HTTPMethod>& methods)
 {
     for (size_t i = 0; i < methods.size(); ++i)
     {

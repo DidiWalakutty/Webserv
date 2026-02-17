@@ -1,6 +1,9 @@
 #include "HTTPCommon.hpp"
 #include "HTTPRequest.hpp"
 #include "Config.hpp"
+#include <algorithm>
+#include <ctime>
+#include <sstream>
 
 #pragma once
 
@@ -41,6 +44,7 @@ private:
 	void handleDELETE(const HTTPRequest& request, const std::string& filePath);
 	void handleErrorPages(HTTPState state);
 
+	std::string generateUploadFilename(const std::string& prefix);
 	/**
 	 * @brief Prints the HTTP response details to the standard output.
 	 */

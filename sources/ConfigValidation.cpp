@@ -245,12 +245,12 @@ static bool validateMethodsAndBools(const LocationParse& loc)
 
 	for (size_t i = 0; i < loc.allowedMethods.size(); ++i)
 	{
-		HTTPConfMeth m = loc.allowedMethods[i];
+		HTTPMethod m = loc.allowedMethods[i];
 		switch (m)
 		{
-			case HTTPConfMeth::GET:    hasGet = true; break;
-			case HTTPConfMeth::POST:   hasPost = true; break;
-			case HTTPConfMeth::DELETE: hasDelete = true; break;
+			case HTTPMethod::GET:    hasGet = true; break;
+			case HTTPMethod::POST:   hasPost = true; break;
+			case HTTPMethod::DELETE: hasDelete = true; break;
 			default:
 				std::cerr << "Error: Unknown HTTP method found in location." << std::endl;
 				return false;
@@ -263,7 +263,7 @@ static bool validateMethodsAndBools(const LocationParse& loc)
 		return false;
 	}
 
-	if (loc.path == "/uploads")
+	if (loc.path == "/upload")
 	{
 		if (!loc.uploadEnabled || !loc.autoIndex)
 		{
@@ -272,7 +272,7 @@ static bool validateMethodsAndBools(const LocationParse& loc)
 		}
 		if (!hasPost)
 		{
-			std::cerr << "Error: Location '/upload', must have atleast HTTPConfMeth POST" << std::endl;
+			std::cerr << "Error: Location '/upload', must have atleast HTTPMethod POST" << std::endl;
 			return false;
 		}
 	}
@@ -286,7 +286,7 @@ static bool validateMethodsAndBools(const LocationParse& loc)
 		}
 		if (!hasGet)
 		{
-			std::cerr << "Error: Location 'cgi-bin' must have atleast HTTPConfMeth GET" << std::endl;
+			std::cerr << "Error: Location 'cgi-bin' must have atleast HTTPMethod GET" << std::endl;
 			return false;
 		}
 	}
@@ -300,7 +300,7 @@ static bool validateMethodsAndBools(const LocationParse& loc)
 		}
 		if (!hasGet)
 		{
-			std::cerr << "Error: Location /images' must have atleast HTTPConfMeth GET" << std::endl;
+			std::cerr << "Error: Location /images' must have atleast HTTPMethod GET" << std::endl;
 			return false;
 		}
 	}
@@ -351,14 +351,14 @@ static bool validateMethodsAndBools(const LocationParse& loc)
 	{
 		if (!hasGet)
 		{
-			std::cout << "Error: Location: " << loc.path << " should have HTTPConfMeth GET." << std::endl;
+			std::cout << "Error: Location: " << loc.path << " should have HTTPMethod GET." << std::endl;
 			return false;
 		}
 	}
 
-	for (HTTPConfMeth m : loc.allowedMethods)
+	for (HTTPMethod m : loc.allowedMethods)
 	{
-		if (m != HTTPConfMeth::GET && m != HTTPConfMeth::POST && m != HTTPConfMeth::DELETE)
+		if (m != HTTPMethod::GET && m != HTTPMethod::POST && m != HTTPMethod::DELETE)
 		{
 			std::cerr << "Error: only HTTP methods GET, POST and DELETE are allowed." << std::endl;
 			return false;
@@ -493,7 +493,7 @@ bool ConfigParser::validateServerParse(ServerParse& server)
 	
 	if (server.allowedMethods.empty())
 	{
-		server.allowedMethods.push_back(HTTPConfMeth::GET);
+		server.allowedMethods.push_back(HTTPMethod::GET);
 		std::cerr << "No (valid) allowed methods specified. Now set to default: GET." << std::endl;
 	}
 	

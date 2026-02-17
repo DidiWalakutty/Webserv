@@ -356,6 +356,7 @@ std::vector<char> Server::ReadClient(const int &FD, const size_t size)
 void Server::Start()
 {
 	std::cout << "--- Welcome to Webserv ---" << std::endl;
+	std::cout << "--- Server Side ---" << std::endl;
 	running = true;
 
 	epoll_event events[_maxEvents];
@@ -406,6 +407,7 @@ void Server::Start()
 					request.printRequest();
 					std::cout << RESET << std::endl;
 				}
+				// --- !!! Always handles request as error, even if it was successfull ---
 				catch (const HTTPRequest::HTTPRequestException &exc)
 				{
 					std::cerr << "Failed to parse HTTP request: " << exc.what() << std::endl;
