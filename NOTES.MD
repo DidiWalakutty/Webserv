@@ -40,11 +40,20 @@ To Do:
 	Shouldnt update headers if already done in functions.
 3.	isValidBody():
 	Always returns true, so needs checks.
-4.  Server():
-	POST uploads work correctly, but the server still logs an error after finishing the request. This happens because after responding, the client closes the connection and the server tries to parse an empty read as a new HTTP request. That triggers "Empty (raw) request string" even though nothing failed.
+4.  Server()/parseRequest():
+	If (raw.empty()) logs false empty requests, even if POST was handled correctly.
+	POST uploads work correctly through curl, but the server still logs an error after finishing the request. This happens because after responding, the client closes the connection and the server tries to parse an empty read as a new HTTP request. That triggers "Empty (raw) request string" even though nothing failed.
 	" Removed FD: 6
 	  Failed to parse HTTP request: Empty (raw) request string" even if it does everything correctly (uploading a .txt file).
 	So the server logs a failure after it was successful.
+5.  Issue with parsing a HTTP request in Start() at EPOLLIN. 
+	Currently not reading the full request, just a max of 512 bytes we just read.
+	It acts as if it's the complete HTTP request, parses it, and we don't receive the full body. parseRequest() sees incomplete body, so handles POST as empty body.
+	Currently treating each read() as one request, instead of handling the full request until the end. So we need to keep reading until the end of the request/body.
+	So it does work for small GET requests, but breaks for POST uploads. So we need to do the complete request and parse only once. Perhaps a per-client buffer that reads untill full request is received?
+6.  Make sure upload_index.html can't be deleted -> handleDELETE
+7.  In parseRequest(): Our validate header part is too strict for the website. It currently throws an error for any header that doesn’t exactly match "Name: Value". Modern browsers send extra headers like Sec-Fetch-Site or Sec-Fetch-Mode, which are valid but trigger Invalid header line errors. This causes ERR_EMPTY_RESPONSE on /upload and similar endpoints on the website. The parsing should accept any Header-Name: Value, trim whitespace, and stop only at the empty line that ends the header section. Unknown headers should not throw — they can be stored in the map or ignored. Parser needs to accept modern headers.
+8.	In parseRequest(): Currently only parses plain binary POSTS
 
 Questions:
 1.  Which HTTP Methods do we accept for HTTP Requests?

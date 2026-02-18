@@ -293,11 +293,6 @@ static bool validateMethodsAndBools(const LocationParse& loc)
 
 	if (loc.path == "/images")
 	{
-		if (!loc.autoIndex)
-		{
-			std::cerr << "Error: Location '/images' must have autoIndex set to true" << std::endl;
-			return false;		
-		}
 		if (!hasGet)
 		{
 			std::cerr << "Error: Location /images' must have atleast HTTPMethod GET" << std::endl;

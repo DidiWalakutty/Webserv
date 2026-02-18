@@ -20,21 +20,21 @@ void HTTPResponse::printResponse() const
 				  << body << std::endl;
 }
 
-std::string HTTPResponse::parseContentType(const std::string filePath)
-{
-	if (filePath.ends_with(".html"))
-		return "text/html";
-	else if (filePath.ends_with(".css"))
-		return "text/css";
-	else if (filePath.ends_with(".js"))
-		return "application/javascript";
-	else if (filePath.ends_with(".png"))
-		return "image/png";
-	else if (filePath.ends_with(".jpg") || filePath.ends_with(".jpeg"))
-		return "image/jpeg";
-	else
-		return "text/plain";
-}
+	std::string HTTPResponse::parseContentType(const std::string filePath)
+	{
+		if (filePath.ends_with(".html"))
+			return "text/html";
+		else if (filePath.ends_with(".css"))
+			return "text/css";
+		else if (filePath.ends_with(".js"))
+			return "application/javascript";
+		else if (filePath.ends_with(".png"))
+			return "image/png";
+		else if (filePath.ends_with(".jpg") || filePath.ends_with(".jpeg"))
+			return "image/jpeg";
+		else
+			return "text/plain";
+	}
 
 std::string HTTPResponse::setDate()
 {
@@ -98,6 +98,7 @@ std::string HTTPResponse::buildResponse(HTTPRequest request)
 		else
 		{
 			// For POST / PUT / DELETE, we keep the directory path and the handleX functions handle accordingly.
+			// Mae sure handleDELETE doesn't try to delete a directory, and handlePOST/PUT don't try to write to a directory.
 			// Remove this + this else statement when done testing.
 			std::cerr << "Directory requested with other HTTP method then GET/Head, so filepath is: " << filePath << std::endl;
 		}

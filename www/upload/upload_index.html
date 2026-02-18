@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>File Upload</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, #f8f6ff, #e6f0ff);
+            padding: 40px;
+        }
+
+        .container {
+            max-width: 700px;
+            margin: auto;
+            background: white;
+            padding: 30px;
+            border-radius: 16px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.08);
+        }
+
+        h1 {
+            margin-bottom: 20px;
+        }
+
+        input[type="file"] {
+            margin-bottom: 15px;
+        }
+
+        button {
+            padding: 10px 16px;
+            border: none;
+            border-radius: 8px;
+            background: #8fa8ff;
+            color: white;
+            cursor: pointer;
+            font-weight: 500;
+        }
+
+        button:hover {
+            background: #7a95f5;
+        }
+
+        .file-list {
+            margin-top: 30px;
+        }
+
+        .file-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            padding: 8px;
+            background: #f3f6ff;
+            border-radius: 6px;
+        }
+
+        .delete-btn {
+            background: #ff8f8f;
+        }
+
+        .delete-btn:hover {
+            background: #ff6b6b;
+        }
+    </style>
+</head>
+
+<body>
+<div class="container">
+    <h1>Upload a File</h1>
+
+    <form action="/upload" method="POST" enctype="multipart/form-data">
+        <input type="file" name="file" required>
+        <br>
+        <button type="submit">Upload</button>
+    </form>
+
+    <div class="file-list">
+        <h2>Uploaded Files</h2>
+        <div id="files"></div>
+    </div>
+</div>
+
+<script>
+async function loadFiles() {
+    const response = await fetch('/upload');
+    const text = await response.text();
+
+    // crude parsing of autoindex listing (simple server style)
+    const filesDiv = document.getElementById('files');
+    filesDiv.innerHTML = '';
+
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(text, 'text/html');
+    const links = doc.querySelectorAll('a');
+
+    links.forEach(link => {
+        const filename = link.getAttribute('href');
+        if (!filename || filename === '../') return;
+
+        const div = document.createElement('div');
+        div.className = 'file-item';
+
+        div.innerHTML = `
+            <span>${filename}</span>
+            <button class="delete-btn" onclick="deleteFile('${filename}')">Delete</button>
+        `;
+
+        filesDiv.appendChild(div);
+    });
+}
+
+async function deleteFile(filename) {
+    const response = await fetch('/upload/' + filename, {
+        method: 'DELETE'
+    });
+
+    if (response.ok) {
+        alert('File deleted');
+        loadFiles();
+    } else {
+        alert('Delete failed');
+    }
+}
+
+loadFiles();
+</script>
+
+</body>
+</html>

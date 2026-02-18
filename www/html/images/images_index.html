@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Image Gallery</title>
+<style>
+  body {
+    font-family: sans-serif;
+    padding: 30px;
+    background: #f0f2f5;
+  }
+  h1 { text-align: center; margin-bottom: 30px; }
+  .gallery {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+    justify-content: center;
+  }
+  .gallery img {
+    width: 180px;
+    height: 180px;
+    object-fit: cover;
+    border-radius: 12px;
+    box-shadow: 0 6px 12px rgba(0,0,0,0.08);
+    transition: transform 0.2s;
+  }
+  .gallery img:hover {
+    transform: scale(1.05);
+  }
+  .filename {
+    text-align: center;
+    font-size: 14px;
+    margin-top: 6px;
+    color: #555;
+  }
+</style>
+</head>
+<body>
+<h1>Image Gallery</h1>
+<div class="gallery">
+  <!-- IMAGES GO HERE -->
+</div>
+</body>
+</html>

@@ -1,9 +1,67 @@
 #include "HTTPResponse.hpp"
+#include "dirent.h"
+
+/**
+ * @brief Generates a dynamic HTML gallery page for all image files in a directory.
+ *
+ * @param imagesDir The path to the directory containing image files.
+ * @return std::string The full HTML page as a string.
+ *
+ * @details
+ * - Scans the given directory for files with .png, .jpg, .jpeg, or .gif extensions.
+ * - Ignores "." and ".." entries.
+ * - For each image, adds a thumbnail wrapped in a clickable <a> link to the full image.
+ * - Includes basic CSS styling for layout, thumbnails, hover effect, and filenames.
+ * - Returns the complete HTML page as a string, ready to be sent as the HTTP response body.
+ * 
+ * @note This function automatically reflects any new images added to the directory without 
+ *       needing to update the HTML manually.
+ */
+std::string generateImagesGallery(const std::string& imagesDir) 
+{
+    std::string html;
+    html += "<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"UTF-8\">"
+            "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">"
+            "<title>Image Gallery</title><style>"
+            "body{font-family:sans-serif;padding:30px;background:#f0f2f5;}"
+            "h1{text-align:center;margin-bottom:30px;}"
+            ".gallery{display:flex;flex-wrap:wrap;gap:20px;justify-content:center;}"
+            ".gallery img{width:180px;height:180px;object-fit:cover;border-radius:12px;box-shadow:0 6px 12px rgba(0,0,0,0.08);transition:transform 0.2s;}"
+            ".gallery img:hover{transform:scale(1.05);}"
+            ".filename{text-align:center;font-size:14px;margin-top:6px;color:#555;}"
+            "</style></head><body><h1>Image Gallery</h1><div class=\"gallery\">";
+
+    DIR *dir = opendir(imagesDir.c_str());
+    if (dir) {
+        struct dirent *entry;
+        while ((entry = readdir(dir)) != NULL) 
+		{
+            std::string name = entry->d_name;
+            if (name == "." || name == "..") continue;
+            // basic filter for images
+            if (name.find(".png") != std::string::npos || name.find(".jpg") != std::string::npos ||
+                name.find(".jpeg") != std::string::npos || name.find(".gif") != std::string::npos) 
+				{
+					html += "<div>";
+					html += "<a href=\"/images/" + name + "\">";
+					html += "<img src=\"/images/" + name + "\" alt=\"" + name + "\">";
+					html += "</a>";
+					html += "<div class=\"filename\">" + name + "</div>";
+					html += "</div>";
+		        }
+        }
+        closedir(dir);
+    }
+
+    html += "</div></body></html>";
+    return html;
+}
 
 /**
  * @brief Handles an HTTP GET request.
  *
  * @details
+ * - If HTTP request is for /images, generates a dynamic gallery page based on the contents of the images directory.
  * - Checks if the requested file exists on the server.
  * - Reads the file into memory (binary-safe, as is on disk) and sets it as the response body.
  * - Sets the Content-Type based on the file extension.
@@ -13,6 +71,20 @@
 void HTTPResponse::handleGET(const HTTPRequest& request, const std::string& filePath)
 {
 	std::cout << "in HandleGET" << std::endl;
+	std::cout << "Requested file path: " << filePath << std::endl;
+	
+	// --- Special Case: /images --- 
+	if (filePath == "www/html/images/images_index.html" || filePath == "www/html/images/images_index.html/")
+	{
+		std::string imagesDir = "www/html/images";
+		body = generateImagesGallery(imagesDir);
+		updateForHTTPState(HTTPState::Ok);
+		headers["Content-Type"] = "text/html";
+		headers["Content-Length"] = std::to_string(body.size());
+		return;
+	}
+
+	// --- Normal file handling ---
 	std::ifstream file(filePath, std::ios::binary); // Treats the file as binary.
 	
 	// File not found, serve 404 page
@@ -71,45 +143,51 @@ std::string HTTPResponse::generateUploadFilename(const std::string& prefix)
 void HTTPResponse::handlePOST(const HTTPRequest& request, const std::string& uploadDir)
 {
 	std::cout << "in HandlePOST" << std::endl;
-	// std::cout << "POST body size: " << request.body.size() << std::endl;
-	// std::cout << "uploaddir: " << uploadDir << std::endl;
 	
 	// --- Check if POST method is allowed for this location ---
 	const LocationParse* location = serverParse.get_best_location(request.resourcePath);
-	if (std::find(location->allowedMethods.begin(), location->allowedMethods.end(), HTTPMethod::POST) == location->allowedMethods.end())
+	if (!location || std::find(location->allowedMethods.begin(), location->allowedMethods.end(), HTTPMethod::POST) == location->allowedMethods.end())
 	{
 		perror("POST method not allowed for this location");
 		handleErrorPages(HTTPState::MethodNotAllowed);
 		return;
 	}
 	
-	if (uploadDir.empty())
+	if (uploadDir.empty() || request.body.empty() || request.body.size() > serverParse.maxBodySize)
 	{
-		handleErrorPages(HTTPState::InternalServerError);
+		handleErrorPages(request.body.empty() ? HTTPState::BadRequest : HTTPState::RequestTooLarge);
 		return ;
 	}
 	
-	if (request.body.empty())
-	{
-		// a request server can't parse (invalid HTTP headers, corrupted request body)
-		std::cout << "body is empty" << std::endl;
-		handleErrorPages(HTTPState::BadRequest);
-		return ;
-	}
+	// --- Detect file extension ---
+	std::string ext = ".txt"; // default extension
 
-	if (request.body.size() > serverParse.maxBodySize)
+	if (request.headers.count("Content-Type"))
 	{
-		std::cout << "Body size exceeds maximum allowed limit" << std::endl;
-		handleErrorPages(HTTPState::RequestTooLarge); // 413
-		return;
+		std::string ct = request.headers.at("Content-Type");
+		if (ct == "image/jpeg" || ct == "image/jpg")
+			ext = ".jpg";
+		else if (ct == "image/png")
+			ext = ".png";
+		else if (ct == "image/gif")
+			ext = ".gif";
+		else if (ct == "text/plain")
+			ext = ".txt";
+	}
+	else if (request.body.size() >= 4)	// try magic bytes
+	{
+		unsigned char* data = reinterpret_cast<unsigned char*>(const_cast<char*>(request.body.data()));
+		if (data[0] == 0xFF && data[1] == 0xD8 && data[2] == 0xFF)
+			ext = ".jpg";
+        else if (data[0] == 0x89 && data[1] == 0x50 && data[2] == 0x4E && data[3] == 0x47)
+			ext = ".png";
+        else if (data[0] == 0x47 && data[1] == 0x49 && data[2] == 0x46)   
+			ext = ".gif";
 	}
 	
 	// --- Unique filename for the upload: timestamp + static_counter ---
-	std::string fileName = generateUploadFilename("upload_");
+	std::string fileName = generateUploadFilename("upload_") + ext;
 	std::string filePath = uploadDir + fileName;
-
-	// std::cout << "Filename: " << fileName << std::endl;
-	// std::cout << "Uploading to: " << filePath << std::endl;
 
 	// --- Write the body to the file ---
 	std::ofstream outFile(filePath, std::ios::binary);
@@ -134,8 +212,8 @@ void HTTPResponse::handlePOST(const HTTPRequest& request, const std::string& upl
 	// --- Successfull creation
 	outFile.close();
 
+	headers["Content-Type"] = parseContentType(fileName);
 	body = "File uploaded as: " + fileName;
-	headers["Content-Type"] = "text/plain";
 	headers["Content-Length"] = std::to_string(body.size());
 	updateForHTTPState(HTTPState::Created);
 }
