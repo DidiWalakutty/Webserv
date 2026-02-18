@@ -37,7 +37,8 @@ std::string generateImagesGallery(const std::string& imagesDir)
         while ((entry = readdir(dir)) != NULL) 
 		{
             std::string name = entry->d_name;
-            if (name == "." || name == "..") continue;
+            if (name == "." || name == "..") 
+				continue;
             // basic filter for images
             if (name.find(".png") != std::string::npos || name.find(".jpg") != std::string::npos ||
                 name.find(".jpeg") != std::string::npos || name.find(".gif") != std::string::npos) 
@@ -58,6 +59,69 @@ std::string generateImagesGallery(const std::string& imagesDir)
 }
 
 /**
+ * @brief Generates a simple HTML autoindex page for uploaded files.
+ *
+ * @details
+ * - Opens the specified upload directory.
+ * - Iterates over all entries except "." and "..".
+ * - Generates an HTML page containing clickable links (<a>) for each file.
+ * - Used to provide directory listing for GET /upload.
+ * - Does not perform permission or method checks.
+ */
+std::string generateUploadAutoindex(const std::string& uploadDir)
+{
+    std::string html;
+    html += "<!DOCTYPE html><html><head><meta charset='UTF-8'><title>File Upload</title>"
+            "<style>"
+            "body{font-family:'Segoe UI',sans-serif;background:linear-gradient(135deg,#f8f6ff,#e6f0ff);padding:40px;}"
+            ".container{max-width:700px;margin:auto;background:white;padding:30px;border-radius:16px;box-shadow:0 10px 25px rgba(0,0,0,0.08);}"
+            ".file-item{display:flex;justify-content:space-between;margin-bottom:8px;padding:8px;background:#f3f6ff;border-radius:6px;}"
+            ".delete-btn{background:#ff8f8f;border:none;padding:4px 8px;border-radius:4px;cursor:pointer;}"
+            ".delete-btn:hover{background:#ff6b6b;}"
+            "button{padding:10px 16px;border:none;border-radius:8px;background:#8fa8ff;color:white;cursor:pointer;font-weight:500;}"
+            "button:hover{background:#7a95f5;}"
+            "</style></head><body>";
+
+    html += "<div class='container'>";
+    html += "<h1>Upload a File</h1>";
+    html += "<form action='/upload' method='POST' enctype='multipart/form-data'>";
+    html += "<input type='file' name='file' required><br>";
+    html += "<button type='submit'>Upload</button></form>";
+
+    html += "<div class='file-list'><h2>Uploaded Files</h2>";
+
+    DIR* dir = opendir(uploadDir.c_str());
+    if (dir)
+    {
+        struct dirent* entry;
+        while ((entry = readdir(dir)) != NULL)
+        {
+            std::string name = entry->d_name;
+			// Skips current + parent directories
+            if (name == "." || name == "..")
+				continue;
+
+            html += "<div class='file-item'>";
+            html += "<a href='/upload/" + name + "' target='_blank'>" + name + "</a>";
+            
+			// Only add delete button for non-HTML files
+			if (name.size() < 5 || name.substr(name.size() - 5) != ".html")
+			{
+				html += "<button class='delete-btn' onclick=\"fetch('/upload/" + name + "',{method:'DELETE'}).then(()=>location.reload())\">Delete</button>";
+			}
+			
+            html += "</div>";
+        }
+        closedir(dir);
+    }
+
+    html += "</div></div></body></html>";
+    return html;
+}
+
+
+
+/**
  * @brief Handles an HTTP GET request.
  *
  * @details
@@ -73,6 +137,16 @@ void HTTPResponse::handleGET(const HTTPRequest& request, const std::string& file
 	std::cout << "in HandleGET" << std::endl;
 	std::cout << "Requested file path: " << filePath << std::endl;
 	
+	// --- Special Case for /upload: generate autoindex if index file is requested --- 
+	if (filePath == "www/upload/upload_index.html" || filePath == "www/upload/upload_index.html/")
+	{
+		body = generateUploadAutoindex("www/upload");
+		headers["Content-Type"] = "text/html";
+		headers["Content-Length"] = std::to_string(body.size());
+		updateForHTTPState(HTTPState::Ok);
+		return;
+	}
+
 	// --- Special Case: /images --- 
 	if (filePath == "www/html/images/images_index.html" || filePath == "www/html/images/images_index.html/")
 	{
@@ -86,8 +160,6 @@ void HTTPResponse::handleGET(const HTTPRequest& request, const std::string& file
 
 	// --- Normal file handling ---
 	std::ifstream file(filePath, std::ios::binary); // Treats the file as binary.
-	
-	// File not found, serve 404 page
 	if (!file.is_open())
 	{
 		handleErrorPages(HTTPState::NotFound);
@@ -99,11 +171,21 @@ void HTTPResponse::handleGET(const HTTPRequest& request, const std::string& file
 	body = buffer.str();
 	file.close();
 
-	updateForHTTPState(HTTPState::Ok);
 	headers["Content-Type"] = parseContentType(filePath);
 	headers["Content-Length"] = std::to_string(body.size());
+	updateForHTTPState(HTTPState::Ok);
 }
 
+/**
+ * @brief Generates a unique filename for uploaded files.
+ *
+ * @details
+ * - Uses the current local date and time as part of the filename.
+ * - Format: prefix + YYYYMMDD_HHMMSS_counter
+ * - Adds a static incrementing counter to avoid collisions
+ *   when multiple uploads happen within the same second.
+ * - Returns only the filename (no directory or extension).
+ */
 std::string HTTPResponse::generateUploadFilename(const std::string& prefix)
 {
 	// --- Get current time ---
@@ -118,8 +200,7 @@ std::string HTTPResponse::generateUploadFilename(const std::string& prefix)
 	   << localTime->tm_mday
 	   << "_"
 	   << localTime->tm_hour
-	   << localTime->tm_min
-	   << localTime->tm_sec;
+	   << localTime->tm_min;
 
 	// --- Add static counter for uniqueness ---
 	static int counter = 0;
@@ -128,17 +209,16 @@ std::string HTTPResponse::generateUploadFilename(const std::string& prefix)
 	return ss.str();
 }
 
-
 /**
- * @brief Handles an HTTP POST request (typically file uploads).
+ * @brief Handles an HTTP POST request for file uploads.
  *
  * @details
- * - Receives client data in the request body.
- * - Saves the data to the specified upload directory with a unique filename.
- * - Returns 201 Created on success, and includes the filename in the response body.
- * - Returns 400 Bad Request if the request body is empty.
- * - Returns 500 Internal Server Error if file creation or writing fails.
- * - Does not serve existing files; only stores new data.
+ * - Validates that POST is allowed for the matched location.
+ * - Verifies request body presence and maximum body size.
+ * - Determines file extension using Content-Type header or magic bytes.
+ * - Generates a unique filename and writes the raw body to disk.
+ * - Returns 201 Created on success.
+ * - Redirects back to /upload to show updated autoindex with new file.
  */
 void HTTPResponse::handlePOST(const HTTPRequest& request, const std::string& uploadDir)
 {
@@ -153,12 +233,13 @@ void HTTPResponse::handlePOST(const HTTPRequest& request, const std::string& upl
 		return;
 	}
 	
+	// --- Check if request is valid/possible for upload ---
 	if (uploadDir.empty() || request.body.empty() || request.body.size() > serverParse.maxBodySize)
 	{
 		handleErrorPages(request.body.empty() ? HTTPState::BadRequest : HTTPState::RequestTooLarge);
 		return ;
 	}
-	
+
 	// --- Detect file extension ---
 	std::string ext = ".txt"; // default extension
 
@@ -185,21 +266,18 @@ void HTTPResponse::handlePOST(const HTTPRequest& request, const std::string& upl
 			ext = ".gif";
 	}
 	
-	// --- Unique filename for the upload: timestamp + static_counter ---
+	// --- Unique filename for the upload: timestamp + extension ---
 	std::string fileName = generateUploadFilename("upload_") + ext;
 	std::string filePath = uploadDir + fileName;
 
-	// --- Write the body to the file ---
+	// --- Save file ---
 	std::ofstream outFile(filePath, std::ios::binary);
-
-	// Checks if creation was successful
 	if (!outFile.is_open())
 	{
 		std::cout << "Couldn't create post" << std::endl;
 		handleErrorPages(HTTPState::InternalServerError);
 		return ;
 	}
-
 	outFile << request.body;
 	if (!outFile.good())
 	{
@@ -212,9 +290,8 @@ void HTTPResponse::handlePOST(const HTTPRequest& request, const std::string& upl
 	// --- Successfull creation
 	outFile.close();
 
-	headers["Content-Type"] = parseContentType(fileName);
-	body = "File uploaded as: " + fileName;
-	headers["Content-Length"] = std::to_string(body.size());
+	// --- Respond 201 and redirect back to GET /upload to show updated autoindex with new file ---
+	headers["Location"] = "/upload/"; 
 	updateForHTTPState(HTTPState::Created);
 }
 
@@ -241,6 +318,14 @@ void HTTPResponse::handleDELETE(const HTTPRequest& request, const std::string& f
 		return;
 	}
 
+	// --- Prevent deletion of HTML files ---
+	if (filePath.size() >= 5 && filePath.substr(filePath.size() - 5) == ".html")
+	{
+		perror("Attempted to delete an HTML file");
+		handleErrorPages(HTTPState::Forbidden);
+		return;
+	}
+
 	// --- Check if file exists ---
 	if (!serverParse.file_exists(filePath) || filePath.empty())
 	{
@@ -257,7 +342,7 @@ void HTTPResponse::handleDELETE(const HTTPRequest& request, const std::string& f
 	}
 
 	// --- Attempt to delete the file ---
-	if (std::remove(filePath.c_str()) != 0)	// deletes the file at filePath
+	if (std::remove(filePath.c_str()) != 0)		// deletion failed
 	{
 		// Could fail due to permissions or being a directory
 		perror("Error deleting file");
@@ -270,7 +355,6 @@ void HTTPResponse::handleDELETE(const HTTPRequest& request, const std::string& f
 	headers["Content-Type"] = "text/plain";
 	headers["Content-Length"] = std::to_string(body.size());
 	updateForHTTPState(HTTPState::NoContent);
-	
 }
 
 /**
@@ -333,7 +417,7 @@ void HTTPResponse::handleErrorPages(HTTPState state)
 	std::string errorPath = "www/errors/" + statusCode + ".html";
 	std::ifstream file(errorPath, std::ios::binary);
 
-	// Fallback if error page is missing
+	// --- If the error page exists, server it ---
 	if (file.is_open())
 	{
 		std::stringstream buffer;
@@ -345,9 +429,8 @@ void HTTPResponse::handleErrorPages(HTTPState state)
 		headers["Content-Type"] = "text/html";
 		headers["Content-Length"] = std::to_string(body.size());
 	}
-	else
+	else	// --- If the error page is missing, serve a simple plain-text message ---
 	{
-		// Fallback message if HTML file isn't found
 		body = statusCode + ": " + reasonPhrase;
 		headers["Content-Type"] = "text/plain";
 		headers["Content-Length"] = std::to_string(body.size());
