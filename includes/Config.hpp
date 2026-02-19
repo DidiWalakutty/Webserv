@@ -32,27 +32,27 @@ struct LocationParse
 
 /* Configuration for a server block */
 /* Contains all the locations for a server */
-struct ServerParse
-{
-	std::string serverName;         		/* Server name for virtual hosting */
-	std::string host;              			/* Server host (IP or domain)*/
-	std::string root;                		/* Root directory for the server */
-	std::string index;               		/* Index file for the server: filename */
-	std::vector<HTTPMethod> allowedMethods; /* Default allowed HTTP methods for the server */
-	int port = 0;                       		/* Server port */
+	struct ServerParse
+	{
+		std::string serverName;         		/* Server name for virtual hosting */
+		std::string host;              			/* Server host (IP or domain)*/
+		std::string root;                		/* Root directory for the server */
+		std::string index;               		/* Index file for the server: filename */
+		std::vector<HTTPMethod> allowedMethods; /* Default allowed HTTP methods for the server */
+		int port = 0;                       		/* Server port */
 
-	bool autoIndex = false;         		/* Enable or disable directory listing for the server */
-	size_t maxBodySize = 10485760; 			/* Max allowed body size in bytes for requests to this server: 10 mb. */
+		bool autoIndex = false;         		/* Enable or disable directory listing for the server */
+		size_t maxBodySize = 0; 				/* Max allowed body size in bytes for requests to this server: 10 mb. */
 
-	std::map<int, std::string> errorPages; 	/* Custom error pages mapped by HTTP status code */
-	std::vector<LocationParse> locations; 	/* List of location configurations*/
+		std::map<int, std::string> errorPages; 	/* Custom error pages mapped by HTTP status code */
+		std::vector<LocationParse> locations; 	/* List of location configurations*/
 
-	const LocationParse* get_best_location(const std::string& urlPath) const; /* Returns best matching location for a URL path */
-	const std::string* get_error_page(int errorCode) const; 					/* Returns custom error page for a given HTTP error code. */
-	std::string build_filesystem_path(const std::string& urlPath) const;
-	std::string joinPaths(const std::string& root, const std::string& url) const;
+		const LocationParse* get_best_location(const std::string& urlPath) const; /* Returns best matching location for a URL path */
+		const std::string* get_error_page(int errorCode) const; 					/* Returns custom error page for a given HTTP error code. */
+		std::string build_filesystem_path(const std::string& urlPath) const;
+		std::string joinPaths(const std::string& root, const std::string& url) const;
 
-	// --- Check if file exists or if path is a directory ---
-	bool file_exists(const std::string& path) const;
-	bool is_directory(const std::string& path) const;
-};
+		// --- Check if file exists or if path is a directory ---
+		bool file_exists(const std::string& path) const;
+		bool is_directory(const std::string& path) const;
+	};
