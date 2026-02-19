@@ -95,13 +95,6 @@ std::string HTTPResponse::buildResponse(HTTPRequest request)
 				return parseResponseStr(request, filePath);
 			}
 		}
-		else
-		{
-			// For POST / PUT / DELETE, we keep the directory path and the handleX functions handle accordingly.
-			// Mae sure handleDELETE doesn't try to delete a directory, and handlePOST/PUT don't try to write to a directory.
-			// Remove this + this else statement when done testing.
-			std::cerr << "Directory requested with other HTTP method then GET/Head, so filepath is: " << filePath << std::endl;
-		}
 		// If any other method, we keep the original filePath we created with build_filesystem_path().
 	}
 
