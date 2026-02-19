@@ -18,8 +18,11 @@
 * - Filling ServerParse and LocationParse structures
 */
 // Min and max body_size
-static const size_t MIN_CONFIG_BODY_SIZE = 1;							// 1 byte
-static const size_t MAX_CONFIG_BODY_SIZE = 10 * 1024 * 1024;	// 10 MB
+constexpr size_t KB = 1024;
+constexpr size_t MB = 1024 * KB;
+
+static const size_t MIN_CONFIG_BODY_SIZE = 1;					// 1 byte
+static const size_t MAX_CONFIG_BODY_SIZE = 10 * MB;	// 10 MB
 
 // --- Reads + Validates .conf file ---
 class ConfigParser {	
