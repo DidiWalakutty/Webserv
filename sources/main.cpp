@@ -30,6 +30,7 @@ int main(int argc, char **argv)
 
 		// Fill constructor and Start webserv
 		Server webserv(servers);
+		webserv.setMaxRequestSize(parser.getMaxBodySize(servers[0]));	// using first server's max body size as reference for reading
 		webserv.Start();
 	}
 

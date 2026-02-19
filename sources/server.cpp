@@ -12,6 +12,9 @@
 #include <string>
 #include <cstring>
 
+const int MAX_CLIENTS = 10;
+const size_t READ_BUFFER_SIZE = 65536;  // 64KB per read
+
 void Interrupt(int sig)
 {
 	if (sig == SIGINT)
@@ -106,6 +109,8 @@ void Server::CreateSockets()
 		{
 			throw(std::runtime_error("Failed to set socket option,"));
 		}
+		
+		SetNonBlocking(socketFD);
 
 		sockaddr_in address{};							// struct that holds IP + port for the socket
 		address.sin_family = AF_INET;					// IPv4
@@ -129,9 +134,13 @@ void Server::CreateSockets()
 			throw(std::runtime_error("Failed to listen on server socket."));
 		}
 
-		SetNonBlocking(socketFD);
 		serverSockets.push_back(socketFD);
 	}
+}
+
+void Server::setMaxRequestSize(size_t size)
+{
+	maxRequestSize = size;
 }
 
 void Server::CreateEpoll()
@@ -316,24 +325,40 @@ void Server::RemoveClient(const int &clientFD)
 }
 
 // Resize at end resizes buffer to actual received data
-std::vector<char> Server::ReadClient(const int &FD, const size_t size)
+std::vector<char> Server::ReadClient(const int &FD)
 {
+	std::vector<char> tempBuffer(READ_BUFFER_SIZE);
+	ssize_t totalBytesRead = 0;
 	std::vector<char> result;
-	result.resize(size);
 
-	ssize_t readSize = read(FD, result.data(), size);
+	ssize_t bytesRead = read(FD, tempBuffer.data(), READ_BUFFER_SIZE);
 
-	if (readSize == 0)	// client closed connection
+	if (bytesRead < 0 && errno != EAGAIN)	// error
+	{
+		throw(std::runtime_error("Failed to read client."));
+	}
+	else if (bytesRead == 0 && totalBytesRead == 0)	// client closed connection
 	{
 		RemoveClient(FD);
-		result.clear();
 	}
-	if (readSize < 0 && errno != EAGAIN)	// error
+	else if (bytesRead >= 0)	// data read
+	{
+		totalBytesRead += bytesRead;
+		result.insert(result.end(), tempBuffer.data(), tempBuffer.data() + bytesRead);
+		tempBuffer.clear();
+	}
+	while (bytesRead > 0 && totalBytesRead < maxRequestSize)	// read until no more data or max request size reached
+	{
+		totalBytesRead += bytesRead;
+		result.insert(result.end(), tempBuffer.data(), tempBuffer.data() + bytesRead);
+		tempBuffer.clear();
+		bytesRead = read(FD, tempBuffer.data(), READ_BUFFER_SIZE);
+	}
+	if (bytesRead < 0 && errno != EAGAIN)	// error
 	{
 		throw(std::runtime_error("Failed to read client."));
 	}
 
-	result.resize(readSize);
 	return (result);
 }
 
@@ -377,10 +402,20 @@ void Server::Start()
 		
 		for (int i = 0; i < count; i++)	// handles each socket that changed state.
 		{
-			if (IsServerSocket(events[i].data.fd))	// Accept new connection + add client
+			if (IsServerSocket(events[i].data.fd) && clients.size() < MAX_CLIENTS)	// Accept new connection + add client
 			{
 				AddClient(events[i]);
 				continue;
+			}
+			else
+			{
+				// we still need to accept and then close the socket to clean the kernel's pending connection queue
+				AddClient(events[i]);
+				RemoveClient(events[i].data.fd);
+				if (clients.size() >= MAX_CLIENTS)
+				{
+					std::cerr << "Too many clients connected. Rejected new connection." << std::endl;
+				}
 			}
 
 			if (events[i].events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP))	// If it's an error, remove Client
@@ -393,7 +428,8 @@ void Server::Start()
 			if (events[i].events & EPOLLIN)		// If socket received input
 			{
 				// --- Read Request ---
-				std::vector<char> data = ReadClient(events[i].data.fd, 512);
+				
+				std::vector<char> data = ReadClient(events[i].data.fd); // using first server's max body size as reference for reading
 				if (data.size() > 0)
 					std::cout << std::endl
 							  << BOLDYELLOW << "Read FD: " << events[i].data.fd << std::endl;

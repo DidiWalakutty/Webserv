@@ -482,3 +482,11 @@ LocationParse ConfigParser::parseLocationBlock(const std::vector<std::string>& f
 	
 	return location;
 }
+
+const ssize_t ConfigParser::getMaxBodySize(const ServerParse& server)
+{
+	if (server.maxBodySize > 0)
+		return server.maxBodySize;
+	else
+		return MAX_CONFIG_BODY_SIZE; // default max body size if not set in config
+}

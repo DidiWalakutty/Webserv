@@ -40,6 +40,7 @@ private:
 	std::vector<int> serverSockets; 	/**< @brief Listening sockets (one per ServerParse) */
 	std::vector<int> clients; 			/**< @brief Connected client sockets. */
 	const int _maxEvents = 64;
+	ssize_t maxRequestSize = 1;	/**< @brief Maximum allowed size for incoming HTTP requests. */
 
 	void CreateSockets(); /**< @brief Creates and configures the server's sockets. */
 	void CreateEpoll();	  /**< @brief Creates and configures the server's Epoll instance. */
@@ -75,24 +76,24 @@ private:
 	/**
 	 * @brief Reads data from a client.
 	 * @param FD The file descriptor of the client to read from.
-	 * @param size The maximum size in bytes to read.
 	 * @return A buffer containing the data read from the client.
 	 */
-	std::vector<char> ReadClient(const int &FD, const size_t size);
-
-public:
+	std::vector<char> ReadClient(const int &FD);
+	
+	public:
 	static bool running; /**< @brief Describes if the server should close or keep running. */
-
+	
 	/**
 	 * @brief Initiates and configures the server.
 	 * @param ServerParse The configuration for the server.
 	 */
 	/**< @brief Construct server engine with parsed configs */
 	Server(const std::vector<ServerParse>& serverConfigs);
-
+	
 	~Server();
-
+	
 	void Destroy(); /**< @brief Destroys and closes the server. All server and associated resources are cleaned up. */
+	void setMaxRequestSize(size_t size);
 
 	/**
 	 * @brief Starts the main server loop.

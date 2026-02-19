@@ -60,7 +60,7 @@ class ConfigParser {
 		// --- Accessors for best location and error pages ---
 		const LocationParse* getBestLocation(const ServerParse& server, const std::string& path) const;
 		const std::string* getErrorPage(const ServerParse& server, int errorCode) const;
-		
+		const ssize_t getMaxBodySize(const ServerParse& server);
 		// For debugging: print parsed config
 		void print_server(const ServerParse& server) const;
 };
