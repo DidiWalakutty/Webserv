@@ -1,6 +1,6 @@
 #include "HTTPCommon.hpp"
 
-const std::unordered_map<HTTPState, HTTPMesage> HTTPCommon::HTTPStatusMap = {
+const std::unordered_map<HTTPState, HTTPMessage> HTTPCommon::HTTPStatusMap = {
 	{HTTPState::Continue, {"100", "Continue", "The server has received the request headers, and the client should proceed to send the request body"}},
 	{HTTPState::SwitchingProtocols, {"101", "Switching Protocols", "The requester has asked the server to switch protocols"}},
 	{HTTPState::EarlyHints, {"103", "Early Hints", "Used with the Link header to allow the browser to start preloading resources while the server prepares a response"}},
@@ -116,7 +116,7 @@ std::string HTTPCommon::protocolVersionToString(HTTPProtocolVersion version)
 	}
 };
 
-const std::string cleanWhiteSpace(std::string str)
+std::string cleanWhiteSpace(std::string str)
 {
 	str.erase(0, str.find_first_not_of(" \t\r\n"));
 	str.erase(str.find_last_not_of(" \t\r\n") + 1);

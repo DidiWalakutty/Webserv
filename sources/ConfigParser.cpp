@@ -73,7 +73,6 @@ bool ConfigParser::parseConfigFile(const std::string& file)
 			if (validateServerParse(server) && !parsing_error)
 			{
 				_servers.push_back(server);
-				std::cerr << "--- Server nr: " << serverCount << " has been validated ---" << std::endl;
 			}
 			else
 			{

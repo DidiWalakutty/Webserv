@@ -76,7 +76,7 @@ enum HTTPState
  * @brief Struct to hold HTTP message details.
  *
  */
-struct HTTPMesage
+struct HTTPMessage
 {
 	std::string code;
 	std::string message;
@@ -123,7 +123,7 @@ enum class HTTPProtocolVersion
 class HTTPCommon
 {
 public:
-	static const std::unordered_map<HTTPState, HTTPMesage> HTTPStatusMap;
+	static const std::unordered_map<HTTPState, HTTPMessage> HTTPStatusMap;
 
 	static HTTPMethod stringToMethod(const std::string method);
 	static HTTPProtocolVersion stringToProtocolVersion(const std::string version);
@@ -137,4 +137,4 @@ public:
  * @param str
  * @return const std::string
  */
-const std::string cleanWhiteSpace(std::string str);
+std::string cleanWhiteSpace(std::string str);

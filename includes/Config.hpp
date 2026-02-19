@@ -1,15 +1,9 @@
 #pragma once
 
+#include "HTTPCommon.hpp"
 #include <string>
 #include <vector>
 #include <map>
-
-enum class HTTPMethod
-{
-	GET,
-	POST,
-	DELETE
-};
 
 /* Represents an HTTP redirect for a location */
 struct Redirect
@@ -23,7 +17,7 @@ struct Redirect
 struct LocationParse
 {
 	std::string path;   		/* URL path for this location "/", "/upload"*, "/images" */
-	std::string root;   		/* Filesystem/Root directory for this location to serve from "www/uploads"*/
+	std::string root;   		/* Filesystem/Root directory for this location to serve from "www/upload"*/
 	std::string index;  		/* Index file (default index.html). Default file to serve if URL is a directory */
 	std::vector<HTTPMethod> allowedMethods; 	/* Allowed HTTP methods */
 
@@ -56,4 +50,9 @@ struct ServerParse
 	const LocationParse* get_best_location(const std::string& urlPath) const; /* Returns best matching location for a URL path */
 	const std::string* get_error_page(int errorCode) const; 					/* Returns custom error page for a given HTTP error code. */
 	std::string build_filesystem_path(const std::string& urlPath) const;
+	std::string joinPaths(const std::string& root, const std::string& url) const;
+
+	// --- Check if file exists or if path is a directory ---
+	bool file_exists(const std::string& path) const;
+	bool is_directory(const std::string& path) const;
 };

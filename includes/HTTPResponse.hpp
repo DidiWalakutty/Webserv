@@ -1,5 +1,9 @@
 #include "HTTPCommon.hpp"
 #include "HTTPRequest.hpp"
+#include "Config.hpp"
+#include <algorithm>
+#include <ctime>
+#include <sstream>
 
 #pragma once
 
@@ -19,14 +23,10 @@ public:
 	std::string body;
 
 	HTTPResponse() = default;
+	HTTPResponse(const ServerParse &server);
 	HTTPResponse(const HTTPResponse &other) = default;
 	HTTPResponse &operator=(const HTTPResponse &other) = default;
 	~HTTPResponse() = default;
-
-	/**
-	 * @brief Prints the HTTP response details to the standard output.
-	 */
-	void printResponse() const;
 
 	/**
 	 * @brief Builds an HTTP response based on the status and request.
@@ -35,12 +35,20 @@ public:
 	 */
 	std::string buildResponse(HTTPRequest request);
 
+private:
+	// Handler functions
+	ServerParse serverParse;	// field in class
+	void handleGET(const HTTPRequest& request, const std::string& filePath);
+	void handleHEAD(const HTTPRequest& request, const std::string& filePath);
+	void handlePOST(const HTTPRequest& request, const std::string& uploadDir);	// for uploads and cgi
+	void handleDELETE(const HTTPRequest& request, const std::string& filePath);
+	void handleErrorPages(HTTPState state);
+
+	std::string generateUploadFilename(const std::string& prefix);
 	/**
-	 * @brief Parses the requested resource path to determine the file path.
-	 * @param request The HTTP request object.
-	 * @return The file path corresponding to the requested resource.
+	 * @brief Prints the HTTP response details to the standard output.
 	 */
-	std::string parsePath(HTTPRequest request);
+	void printResponse() const;
 
 	/**
 	 * @brief Determines the Content-Type based on the file extension.
@@ -62,7 +70,9 @@ public:
 	 * @param filePath The file path string.
 	 * @return The constructed HTTP response string.
 	 */
-	std::string parseResponseStr(const HTTPRequest request, HTTPMesage statusMessage, std::string filePath);
+	// std::string parseResponseStr(const HTTPRequest request, HTTPMessage statusMessage, std::string filePath);
+	// checking if update works better, because statusmessage isn't updated correctly
+	std::string parseResponseStr(const HTTPRequest request, const std::string filePath);
 
 	/**
 	 * @brief Clears the response body and resets related headers.

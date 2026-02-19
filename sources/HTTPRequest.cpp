@@ -3,26 +3,29 @@
 bool HTTPRequest::parseRequest(const std::string raw) 
 {
 	if (raw.empty())
-		throw HTTPRequestException("Empty request string");
+		throw HTTPRequestException("Empty (raw) request string");
 	
+	// istringstream: treats a string like input we can read from line by line + token by token.
 	std::istringstream stream(raw);
 	if (stream.fail())
 		throw HTTPRequestException("Failed to create stream from raw request");
 	
 	std::string requestLine;
-	std::getline(stream, requestLine);
+	std::getline(stream, requestLine);	// Reads until \n, stores it, moves forward.
 	if (requestLine.empty() || isCRLF(requestLine))
 		throw HTTPRequestException("Empty request line");
 
+	// --- Find Method ---
 	size_t methodEnd = requestLine.find(' ');
+	
 	if (methodEnd == std::string::npos)
-		// throw HTTPRequestException("Invalid request line: " + requestLine);
 		return false;
 	std::string strMethod = requestLine.substr(0, methodEnd);
 	if (!isValidMethod(strMethod) || isCRLF(strMethod))
 		throw HTTPRequestException("Unsupported method: " + strMethod);
 	method = HTTPCommon::stringToMethod(strMethod);
 
+	// --- Find Path ---
 	size_t pathEnd = requestLine.find(' ', methodEnd + 1);
 	if (pathEnd == std::string::npos)
 		throw HTTPRequestException("Invalid request line: " + requestLine);
@@ -30,22 +33,25 @@ bool HTTPRequest::parseRequest(const std::string raw)
 	if (!isValidResourcePath(resourcePath) || isCRLF(resourcePath))
 		throw HTTPRequestException("Invalid resource path: " + resourcePath);
 
+	// --- Find HTTP Protocol Version ---
 	std::string strVersion = requestLine.substr(pathEnd + 1);
 	if (!isValidProtocolVersion(strVersion) || isCRLF(strVersion))
 		throw HTTPRequestException("Unsupported protocol version: " + strVersion);
 	protocolVersion = HTTPCommon::stringToProtocolVersion(strVersion);
 
+	// --- Validate Headers ---
 	std::string line;
-	// Read header lines until an empty line (CRLF) that separates headers and body.
+	// Read and validate HTTP headers line-by-line until the empty line that separates the body.
 	while (std::getline(stream, line))
 	{
-		if (isCRLF(line))
+		if (isCRLF(line))	// detects header/body boundary
 			break;
 		size_t colon = line.find(':');
 		if (colon != std::string::npos)
 		{
 			std::string key = cleanWhiteSpace(line.substr(0, colon));
 			std::string value = cleanWhiteSpace(line.substr(colon + 1));
+			// Checks if key already exists in map of Headers
 			if (headers.find(key) != headers.end())
 				throw HTTPRequestException("Duplicate header: " + key);
 			headers[key] = value;
@@ -63,13 +69,16 @@ bool HTTPRequest::parseRequest(const std::string raw)
 		if (contentLength > MAX_BODY_SIZE)
 			throw HTTPRequestException("Content-Length exceeds maximum allowed size");
 	}
+	// --- !!! --- Patch or Delete needed??
 	else if (strMethod == "POST" || strMethod == "PUT" || strMethod == "PATCH")
 	{
 		throw HTTPRequestException("Missing required Content-Length header for method: " + strMethod);
 	}
+	// If request has no body, we end here.
 	if (stream.eof())
 		return true;
 	
+	// --- Validate body ---
 	std::cout << "Reading body..." << std::endl;
 	std::string bodyRaw;
 	if (headers.find("Content-Length") != headers.end())
@@ -104,6 +113,7 @@ bool HTTPRequest::parseRequest(const std::string raw)
 			throw HTTPRequestException("Body size exceeds maximum limit");
 	}
 	body = bodyRaw;
+	// --- !!! --- Read Body currently empty, always returns true
 	if (!isValidBody(body))
 		throw HTTPRequestException("Invalid body content: " + body);
 	return true;
@@ -126,6 +136,11 @@ bool HTTPRequest::isValidProtocolVersion(const std::string protocolVersion) cons
 
 bool HTTPRequest::isValidBody(const std::string body) const
 {
+	// Current placeholder, later needs to check:
+	// - content length
+	// - chunked encoding
+	// - max body size
+	// - allowed for method
 	return true;
 }
 

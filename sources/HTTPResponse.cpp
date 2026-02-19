@@ -1,5 +1,10 @@
 #include "HTTPResponse.hpp"
 
+HTTPResponse::HTTPResponse(const ServerParse& server)
+	: serverParse(server)
+{
+}
+
 void HTTPResponse::printResponse() const
 {
 	std::cout << "Protocol Version: " << protocolVersionToString(protocolVersion) << std::endl;
@@ -15,35 +20,21 @@ void HTTPResponse::printResponse() const
 				  << body << std::endl;
 }
 
-std::string HTTPResponse::parsePath(HTTPRequest request)
-{
-	std::string filePath = request.resourcePath;
-	if (filePath.front() == '/')
+	std::string HTTPResponse::parseContentType(const std::string filePath)
 	{
-		filePath = "." + filePath;
+		if (filePath.ends_with(".html"))
+			return "text/html";
+		else if (filePath.ends_with(".css"))
+			return "text/css";
+		else if (filePath.ends_with(".js"))
+			return "application/javascript";
+		else if (filePath.ends_with(".png"))
+			return "image/png";
+		else if (filePath.ends_with(".jpg") || filePath.ends_with(".jpeg"))
+			return "image/jpeg";
+		else
+			return "text/plain";
 	}
-	if (filePath == "./" || filePath.empty())
-	{
-		filePath = "./html/home.html";
-	}
-	return filePath;
-}
-
-std::string HTTPResponse::parseContentType(const std::string filePath)
-{
-	if (filePath.ends_with(".html"))
-		return "text/html";
-	else if (filePath.ends_with(".css"))
-		return "text/css";
-	else if (filePath.ends_with(".js"))
-		return "application/javascript";
-	else if (filePath.ends_with(".png"))
-		return "image/png";
-	else if (filePath.ends_with(".jpg") || filePath.ends_with(".jpeg"))
-		return "image/jpeg";
-	else
-		return "text/plain";
-}
 
 std::string HTTPResponse::setDate()
 {
@@ -54,83 +45,143 @@ std::string HTTPResponse::setDate()
 	return ss.str().end()[-1] == '\n' ? ss.str().substr(0, ss.str().length() - 1) : ss.str();
 }
 
+// Updated the buildresponse to create the correct path and checking if it exists.
+// We only need to serve the index.html file in case we use a GET / HEAD request.
 std::string HTTPResponse::buildResponse(HTTPRequest request)
 {
+	std::cerr << "In buildResponse(), with request: " << methodToString(request.method) << " " << request.resourcePath << std::endl;
+	
 	protocolVersion = request.protocolVersion;
-
-	HTTPMesage statusMessage = HTTPCommon::HTTPStatusMap.at(HTTPState::NotFound);
-
-	std::string filePath = parsePath(request);
-
-	std::cout << "Attempting to read file: " << filePath << std::endl;
-	std::ifstream file(filePath);
-
-	if (file.good())
+	headers.clear();
+	body.clear();
+	updateForHTTPState(HTTPState::Ok);
+	
+	// --- Get Location info for index ---
+	const LocationParse* location = serverParse.get_best_location(request.resourcePath);
+	
+	if (!location)
 	{
-		std::cout << "File found and opened successfully" << std::endl;
+		updateForHTTPState(HTTPState::NotFound);
+		return parseResponseStr(request, "");
+	}
+
+	// --- Build initial path ---
+	std::string filePath = serverParse.build_filesystem_path(request.resourcePath);
+	// std::cerr << "Initial file path is: " << filePath << std::endl; 
+	
+	if (filePath.empty())
+	{
+		updateForHTTPState(HTTPState::NotFound);
+		return parseResponseStr(request, "");
+	}
+
+	// --- Directory handling (method aware) ---
+	bool isDir = serverParse.is_directory(filePath);
+
+	if (isDir)	
+	{
+		// Only GET / HEAD use index
+		if (request.method == HTTPMethod::GET || request.method == HTTPMethod::HEAD)
+		{
+			if (!location->index.empty())
+			{
+				filePath = serverParse.joinPaths(filePath, location->index);
+				// std::cerr << "Index file found, filepath is: " << filePath << std::endl;
+			}
+			else
+			{
+				// No index -> forbidden
+				updateForHTTPState(HTTPState::Forbidden);
+				return parseResponseStr(request, filePath);
+			}
+		}
+		else
+		{
+			// For POST / PUT / DELETE, we keep the directory path and the handleX functions handle accordingly.
+			// Mae sure handleDELETE doesn't try to delete a directory, and handlePOST/PUT don't try to write to a directory.
+			// Remove this + this else statement when done testing.
+			std::cerr << "Directory requested with other HTTP method then GET/Head, so filepath is: " << filePath << std::endl;
+		}
+		// If any other method, we keep the original filePath we created with build_filesystem_path().
+	}
+
+	// --- Existence Check ---
+	if (!serverParse.file_exists(filePath))
+	{
+		updateForHTTPState(HTTPState::NotFound);
+		return parseResponseStr(request, filePath);
+	}
+
+	// --- Only read file for GET / HEAD ---
+	if (request.method == HTTPMethod::GET || request.method == HTTPMethod::HEAD)
+	{
+		std::ifstream file(filePath.c_str(), std::ios::binary);
+		if (!file.is_open())
+		{
+			updateForHTTPState(HTTPState::Forbidden);
+			return parseResponseStr(request, filePath);
+		}
+		
 		std::stringstream buffer;
 		buffer << file.rdbuf();
 		body = buffer.str();
 		file.close();
-		updateForHTTPState(HTTPState::Ok);
+		std::cout << "File found and opened successfully" << std::endl;
 	}
-	else
-	{
-		std::cout << "File not found, using status message" << std::endl;
-		updateForHTTPState(HTTPState::NotFound);
-	}
+	// For POST / PUT, body handling happens in their handleX functions.
 
-	std::string responseStr = parseResponseStr(request, statusMessage, filePath);
-
-	std::cout << BOLDBLUE << "Built Response String for request: " << methodToString(request.method) << std::endl;
-	std::cout << responseStr << RESET << std::endl;
-	return responseStr;
+	return parseResponseStr(request, filePath);
 }
 
-std::string HTTPResponse::parseResponseStr(const HTTPRequest request, HTTPMesage statusMessage, std::string filePath)
+// Perhaps need to check if a file was actually created/updated abd set to state created(201)?
+std::string HTTPResponse::parseResponseStr(const HTTPRequest request, const std::string filePath)
 {
 	switch (request.method)
 	{
-	case HTTPMethod::GET:
-		break;
-	case HTTPMethod::POST:
-		break;
-	case HTTPMethod::PUT:
-		break;
-	case HTTPMethod::DELETE:
-		updateForHTTPState(HTTPState::NoContent);
-		break;
-	case HTTPMethod::HEAD:
-		clearBody();
-		break;
-	case HTTPMethod::UNSUPPORTED:
-		updateForHTTPState(HTTPState::MethodNotAllowed);
-		break;
-	default:
-		updateForHTTPState(HTTPState::NotImplemented);
-		break;
+		case HTTPMethod::GET:
+			handleGET(request, filePath);
+			break;
+		case HTTPMethod::POST:
+			handlePOST(request, filePath); // pass upload dir as filepath
+			break;
+		case HTTPMethod::PUT:
+			break;
+		case HTTPMethod::DELETE:
+			handleDELETE(request, filePath);
+			updateForHTTPState(HTTPState::NoContent);
+			break;
+		case HTTPMethod::HEAD:
+			handleHEAD(request, filePath);
+			clearBody();
+			break;
+		case HTTPMethod::UNSUPPORTED:
+			handleErrorPages(HTTPState::MethodNotAllowed);
+			break;
+		default:
+			handleErrorPages(HTTPState::NotImplemented);
+			break;
 	}
 
+	// --- Common Headers ---
+	// shouldnt be updated if done in handle functions
 	headers["Content-Length"] = std::to_string(body.size());
-	headers["Server"] = "Webserv_Didi_Ferre_Goksu";
+	headers["Server"] = "Webserv_Didi_and_Goksu";
 	headers["Connection"] = "keep-alive";
 	headers["Date"] = setDate();
 
+	// --- Set content type if not already set ---
+	if (headers.find("Content-Type") == headers.end())
+		headers["Content-Type"] = parseContentType(filePath);
+
+	// --- Build HTTP Response String ---
 	std::string response =
 		protocolVersionToString(request.protocolVersion) + " " +
-		statusCode + " " + statusMessage.message + "\r\n";
+		statusCode + " " + reasonPhrase + "\r\n";
 
 	for (const auto &h : headers)
 		response += h.first + ": " + h.second + "\r\n";
 
 	response += "\r\n" + body;
-
-	std::cout << BOLDBLUE
-			  << "Built Response String for request: "
-			  << methodToString(request.method)
-			  << std::endl
-			  << response
-			  << RESET << std::endl;
 
 	return response;
 }
@@ -144,7 +195,7 @@ void HTTPResponse::clearBody()
 
 void HTTPResponse::updateForHTTPState(HTTPState state)
 {
-	HTTPMesage statusMessage = HTTPCommon::HTTPStatusMap.at(state);
+	HTTPMessage statusMessage = HTTPCommon::HTTPStatusMap.at(state);
 	statusCode = statusMessage.code;
 	reasonPhrase = statusMessage.message;
 
