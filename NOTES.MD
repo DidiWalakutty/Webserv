@@ -75,10 +75,7 @@ Summarized To Do List: -> hopefully a little clearer
 	- Also when: client closes connection, server reads empty 
 	- parseRequest(raw.empty()) throws
 5.	isValidBody() -> always returns true
-6.	Protect index.html from DELETE -> Didi's part
 7.	Create HTML pages for error pages -> Didi's part
-8.	Adjust HTML pages for upload and images -> Didi's part
-9.	Add no one can delete .html pages when in upload/ -> Didi's part
 10.	Add CGI extension -> Didi's part
 11.	Test if right server is chosen based on Host + Port, location block -> Didi's part
 12. Test longest prefix matching -> Didi's part
