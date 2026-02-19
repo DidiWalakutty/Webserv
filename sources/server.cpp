@@ -114,7 +114,7 @@ void Server::CreateSockets()
 									? INADDR_ANY		// if !host, INADDR_ANY listens on all network interfaces
 									: inet_addr(server.host.c_str());	// converts string to numeric format for the socket
 
-		if(bind(socketFD, (sockaddr*)&address, sizeof(address)) < 0)	// Associates the socket with a specific IP + port
+		if (bind(socketFD, (sockaddr*)&address, sizeof(address)) < 0)	// Associates the socket with a specific IP + port
 		{
 			throw(std::runtime_error("Failed to bind server socket."));
 		}
