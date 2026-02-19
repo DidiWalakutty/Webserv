@@ -20,43 +20,30 @@
 std::string generateImagesGallery(const std::string& imagesDir) 
 {
     std::string html;
-    html += "<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"UTF-8\">"
-            "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">"
-            "<title>Image Gallery</title><style>"
-            "body{font-family:sans-serif;padding:30px;background:#f0f2f5;}"
-            "h1{text-align:center;margin-bottom:30px;}"
-            ".gallery{display:flex;flex-wrap:wrap;gap:20px;justify-content:center;}"
-            ".gallery img{width:180px;height:180px;object-fit:cover;border-radius:12px;box-shadow:0 6px 12px rgba(0,0,0,0.08);transition:transform 0.2s;}"
-            ".gallery img:hover{transform:scale(1.05);}"
-            ".filename{text-align:center;font-size:14px;margin-top:6px;color:#555;}"
-            "</style></head><body><h1>Image Gallery</h1><div class=\"gallery\">";
-
     DIR *dir = opendir(imagesDir.c_str());
-    if (dir) {
-        struct dirent *entry;
-        while ((entry = readdir(dir)) != NULL) 
-		{
-            std::string name = entry->d_name;
-            if (name == "." || name == "..") 
-				continue;
-            // basic filter for images
-            if (name.find(".png") != std::string::npos || name.find(".jpg") != std::string::npos ||
-                name.find(".jpeg") != std::string::npos || name.find(".gif") != std::string::npos) 
-				{
-					html += "<div>";
-					html += "<a href=\"/images/" + name + "\">";
-					html += "<img src=\"/images/" + name + "\" alt=\"" + name + "\">";
-					html += "</a>";
-					html += "<div class=\"filename\">" + name + "</div>";
-					html += "</div>";
-		        }
-        }
-        closedir(dir);
-    }
+    if (!dir) return html;
 
-    html += "</div></body></html>";
+    struct dirent *entry;
+    while ((entry = readdir(dir)) != NULL) 
+    {
+        std::string name = entry->d_name;
+        if (name == "." || name == "..") continue;
+
+        if (name.find(".png") != std::string::npos || 
+            name.find(".jpg") != std::string::npos ||
+            name.find(".jpeg") != std::string::npos ||
+            name.find(".gif") != std::string::npos) 
+        {
+            html += "<div class=\"image-item\">";
+            html += "<img src=\"/images/" + name + "\" alt=\"" + name + "\">";
+            html += "<div class=\"filename\">" + name + "</div>";
+            html += "</div>";
+        }
+    }
+    closedir(dir);
     return html;
 }
+
 
 /**
  * @brief Generates a simple HTML autoindex page for uploaded files.
@@ -70,56 +57,33 @@ std::string generateImagesGallery(const std::string& imagesDir)
  */
 std::string generateUploadAutoindex(const std::string& uploadDir)
 {
-    std::string html;
-    html += "<!DOCTYPE html><html><head><meta charset='UTF-8'><title>File Upload</title>"
-            "<style>"
-            "body{font-family:'Segoe UI',sans-serif;background:linear-gradient(135deg,#f8f6ff,#e6f0ff);padding:40px;}"
-            ".container{max-width:700px;margin:auto;background:white;padding:30px;border-radius:16px;box-shadow:0 10px 25px rgba(0,0,0,0.08);}"
-            ".file-item{display:flex;justify-content:space-between;margin-bottom:8px;padding:8px;background:#f3f6ff;border-radius:6px;}"
-            ".delete-btn{background:#ff8f8f;border:none;padding:4px 8px;border-radius:4px;cursor:pointer;}"
-            ".delete-btn:hover{background:#ff6b6b;}"
-            "button{padding:10px 16px;border:none;border-radius:8px;background:#8fa8ff;color:white;cursor:pointer;font-weight:500;}"
-            "button:hover{background:#7a95f5;}"
-            "</style></head><body>";
+   	DIR* dir = opendir(uploadDir.c_str());
+	if (!dir)
+        return "";
 
-    html += "<div class='container'>";
-    html += "<h1>Upload a File</h1>";
-    html += "<form action='/upload' method='POST' enctype='multipart/form-data'>";
-    html += "<input type='file' name='file' required><br>";
-    html += "<button type='submit'>Upload</button></form>";
+    struct dirent* entry;
+    std::stringstream ss;
 
-    html += "<div class='file-list'><h2>Uploaded Files</h2>";
-
-    DIR* dir = opendir(uploadDir.c_str());
-    if (dir)
+    while ((entry = readdir(dir)) != NULL)
     {
-        struct dirent* entry;
-        while ((entry = readdir(dir)) != NULL)
-        {
-            std::string name = entry->d_name;
-			// Skips current + parent directories
-            if (name == "." || name == "..")
-				continue;
+        std::string name = entry->d_name;
 
-            html += "<div class='file-item'>";
-            html += "<a href='/upload/" + name + "' target='_blank'>" + name + "</a>";
-            
-			// Only add delete button for non-HTML files
-			if (name.size() < 5 || name.substr(name.size() - 5) != ".html")
-			{
-				html += "<button class='delete-btn' onclick=\"fetch('/upload/" + name + "',{method:'DELETE'}).then(()=>location.reload())\">Delete</button>";
-			}
-			
-            html += "</div>";
-        }
-        closedir(dir);
+        if (name == "." || name == "..")
+            continue;
+
+        if (name.find(".html") != std::string::npos)
+            continue;
+
+        ss << "<div class=\"file-item\">"
+           << "<span>" << name << "</span>"
+           << "<button class=\"delete-btn\" "
+           << "onclick=\"deleteFile('" << name << "')\">Delete</button>"
+           << "</div>";
     }
 
-    html += "</div></div></body></html>";
-    return html;
+    closedir(dir);
+    return ss.str();
 }
-
-
 
 /**
  * @brief Handles an HTTP GET request.
@@ -134,27 +98,98 @@ std::string generateUploadAutoindex(const std::string& uploadDir)
  */
 void HTTPResponse::handleGET(const HTTPRequest& request, const std::string& filePath)
 {
-	std::cout << "in HandleGET" << std::endl;
+	// std::cout << "Recourse path is " << request.resourcePath << std::endl;
 	std::cout << "Requested file path: " << filePath << std::endl;
 	
+	// --- Special case: redirect
+	const LocationParse* loc = serverParse.get_best_location(request.resourcePath);
+	std::cout << "Resource path is: " << request.resourcePath << std::endl;
+	std::cout << "Best location path is: " << loc->path << std::endl;
+
+	// when testing if website sees redirect.
+	// std::cout << "loc redirect statuscode: " << loc->redirect.statusCode << std::endl;
+	// std::cout << "loc redirect targeturl: " << loc->redirect.targetURL << std::endl;
+	if (loc && loc->redirect.statusCode != 0 && !loc->redirect.targetURL.empty())
+	{
+		std::cout << "Redirecting to: " << loc->redirect.targetURL << " with statuscode: " << loc->redirect.statusCode << std::endl;
+		body = "";
+		headers["Location"] = loc->redirect.targetURL;
+		headers["Content-Length"] = "0";
+
+		if (loc->redirect.statusCode == 301)
+			updateForHTTPState(HTTPState::MovedPermanently);
+		else if (loc->redirect.statusCode == 302)
+			updateForHTTPState(HTTPState::Found);
+		
+		// test
+		std::cout << "!!!Location header is now: "
+			<< headers["Location"] << std::endl;
+		
+		return;
+	}
+
 	// --- Special Case for /upload: generate autoindex if index file is requested --- 
 	if (filePath == "www/upload/upload_index.html" || filePath == "www/upload/upload_index.html/")
 	{
-		body = generateUploadAutoindex("www/upload");
+		std::ifstream file(filePath.c_str());
+		if (!file.is_open())
+		{
+			handleErrorPages(HTTPState::NotFound);
+			return;
+		}
+
+		std::stringstream buffer;
+		buffer << file.rdbuf();
+		std::string html = buffer.str();
+		file.close();
+
+		// Generate dynamic autoindex list
+		std::string fileList = generateUploadAutoindex("www/upload");
+
+		// Replace placeholder
+		size_t pos = html.find("<div id=\"files\"></div>");
+		if (pos != std::string::npos)
+		{
+			html.replace(pos, std::string("<div id=\"files\"></div>").length(), fileList);
+		}
+
+		body = html;
 		headers["Content-Type"] = "text/html";
 		headers["Content-Length"] = std::to_string(body.size());
 		updateForHTTPState(HTTPState::Ok);
 		return;
 	}
 
-	// --- Special Case: /images --- 
+	// --- Special case for /images: generates dynamic gallery based on contents of images directory ---
 	if (filePath == "www/html/images/images_index.html" || filePath == "www/html/images/images_index.html/")
 	{
-		std::string imagesDir = "www/html/images";
-		body = generateImagesGallery(imagesDir);
-		updateForHTTPState(HTTPState::Ok);
+		std::ifstream file(filePath);
+		if (!file.is_open()) 
+		{ 
+			handleErrorPages(HTTPState::NotFound); 
+			return; 
+		}
+
+		std::stringstream buffer;
+		buffer << file.rdbuf();
+		std::string html = buffer.str();
+		file.close();
+
+		// Inject gallery into placeholder
+		std::string gallery = generateImagesGallery("www/html/images");
+
+		size_t pos = html.find("<div class=\"gallery\" id=\"images\">");
+		if (pos != std::string::npos)
+		{
+			// Insert gallery right after opening <div>
+			html.replace(pos + std::string("<div class=\"gallery\" id=\"images\">").length(),
+						0, gallery);
+		}
+		
+		body = html;
 		headers["Content-Type"] = "text/html";
 		headers["Content-Length"] = std::to_string(body.size());
+		updateForHTTPState(HTTPState::Ok);
 		return;
 	}
 
@@ -222,8 +257,6 @@ std::string HTTPResponse::generateUploadFilename(const std::string& prefix)
  */
 void HTTPResponse::handlePOST(const HTTPRequest& request, const std::string& uploadDir)
 {
-	std::cout << "in HandlePOST" << std::endl;
-	
 	// --- Check if POST method is allowed for this location ---
 	const LocationParse* location = serverParse.get_best_location(request.resourcePath);
 	if (!location || std::find(location->allowedMethods.begin(), location->allowedMethods.end(), HTTPMethod::POST) == location->allowedMethods.end())
@@ -307,8 +340,6 @@ void HTTPResponse::handlePOST(const HTTPRequest& request, const std::string& upl
  */
 void HTTPResponse::handleDELETE(const HTTPRequest& request, const std::string& filePath)
 {
-	std::cout << "in handleDELETE" << std::endl;
-
 	// --- Check if DELETE method is allowed for this location ---
 	const LocationParse* location = serverParse.get_best_location(request.resourcePath);
 	if (std::find(location->allowedMethods.begin(), location->allowedMethods.end(), HTTPMethod::DELETE) == location->allowedMethods.end())
@@ -367,8 +398,6 @@ void HTTPResponse::handleDELETE(const HTTPRequest& request, const std::string& f
  */
 void HTTPResponse::handleHEAD(const HTTPRequest& request, const std::string& filePath)
 {
-	std::cout << "in handleHEAD" << std::endl;
-
 	// --- Check if file exists ---
 	if (!serverParse.file_exists(filePath))
 	{
@@ -394,7 +423,6 @@ void HTTPResponse::handleHEAD(const HTTPRequest& request, const std::string& fil
 	headers["Content-Length"] = std::to_string(fileSize);
 	updateForHTTPState(HTTPState::Ok);
 }
-
 
 /**
  * @brief Serves error pages for HTTP responses.
