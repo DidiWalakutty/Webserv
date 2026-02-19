@@ -384,7 +384,7 @@ void HTTPResponse::handleDELETE(const HTTPRequest& request, const std::string& f
 	// --- Successfull deletion ---
 	body.clear();
 	headers["Content-Type"] = "text/plain";
-	headers["Content-Length"] = std::to_string(body.size());
+	headers["Content-Length"] = std::tring(body.size());
 	updateForHTTPState(HTTPState::NoContent);
 }
 
