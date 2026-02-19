@@ -1,114 +1,191 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>File Upload</title>
-    <style>
-        body {
-            font-family: 'Segoe UI', sans-serif;
-            background: linear-gradient(135deg, #f8f6ff, #e6f0ff);
-            padding: 40px;
-        }
-        .container {
-            max-width: 700px;
-            margin: auto;
-            background: white;
-            padding: 30px;
-            border-radius: 16px;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.08);
-        }
-        h1 { margin-bottom: 20px; }
-        input[type="file"] { margin-bottom: 15px; }
-        button {
-            padding: 10px 16px;
-            border: none;
-            border-radius: 8px;
-            background: #8fa8ff;
-            color: white;
-            cursor: pointer;
-            font-weight: 500;
-        }
-        button:hover { background: #7a95f5; }
-        .file-list { margin-top: 30px; }
-        .file-item {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 8px;
-            padding: 8px;
-            background: #f3f6ff;
-            border-radius: 6px;
-        }
-        .delete-btn {
-            background: #ff8f8f;
-            border: none;
-            padding: 4px 8px;
-            border-radius: 4px;
-            cursor: pointer;
-        }
-        .delete-btn:hover { background: #ff6b6b; }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Upload & Files</title>
+
+<style>
+	* {
+		margin: 0;
+		padding: 0;
+		box-sizing: border-box;
+		}
+
+	body {
+		font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+		min-height: 100vh;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		background: linear-gradient(150deg, #d993e2, #ffffff);
+	}
+
+	.card {
+		background: white;
+		width: 600px;
+		padding: 40px;
+		border-radius: 30px;
+		box-shadow: rgba(0, 0, 0, 0.1) 0px 20px 25px -5px,
+					rgba(0, 0, 0, 0.04) 0px 10px 10px -5px;
+		text-align: center;
+	}
+
+	h1 {
+		font-weight: 600;
+		margin-bottom: 20px;
+		font-size: 30px;
+		color: #333;
+	}
+
+	h2 {
+		margin-top: 35px;
+		margin-bottom: 15px;
+		color: #444;
+	}
+
+	form {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 20px;
+		width: 100%;
+	}
+
+	/* File input container */
+	input[type="file"] {
+		width: 70%;
+		padding: 14px;
+		border-radius: 16px;
+		border: 2px dashed #cfe8ff;
+		background: #f9fcff;
+		cursor: pointer;
+		text-align: center;
+	}
+
+	/* Choose file button */
+	input[type="file"]::file-selector-button {
+		background: linear-gradient(135deg, #66cbec, #a4e1f5);
+		border: none;
+		padding: 8px 16px;
+		border-radius: 10px;
+		cursor: pointer;
+		font-weight: 500;
+		color: white;
+		transition: 0.2s ease;
+	}
+
+	input[type="file"]::file-selector-button:hover {
+		opacity: 0.85;
+	}
+
+	/* Upload button */
+	.upload-btn {
+		width: 70%;
+		padding: 14px;
+		border: none;
+		border-radius: 14px;
+		background: linear-gradient(135deg, #66cbec, #a4e1f5);
+		color: white;
+		font-size: 15px;
+		font-weight: 600;
+		cursor: pointer;
+		transition: 0.2s ease;
+		box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
+	}
+
+	.upload-btn:hover {
+		transform: translateY(-2px);
+		box-shadow: 0 10px 24px rgba(0, 0, 0, 0.12);
+	}
+
+	.file-list {
+		margin-top: 10px;
+	}
+
+	.file-item {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		padding: 12px;
+		margin-bottom: 10px;
+		background: #f7f9ff;
+		border-radius: 14px;
+	}
+
+	.file-item span {
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	.delete-btn {
+		border: none;
+		border-radius: 10px;
+		padding: 6px 12px;
+		cursor: pointer;
+		background: linear-gradient(135deg, #ff9eb3, #ff6b8a);
+		color: white;
+		transition: 0.2s ease;
+	}
+
+	.delete-btn:hover {
+		transform: translateY(-2px);
+	}
+
+	.home-btn {
+		margin-top: 30px;
+		padding: 12px;
+		border: none;
+		border-radius: 14px;
+		background: linear-gradient(135deg, #e29ce7, #a4e1f5);
+		color: white;
+		font-weight: 600;
+		cursor: pointer;
+		width: 70%;
+		transition: 0.2s ease;
+	}
+
+	.home-btn:hover {
+		transform: translateY(-2px);
+		box-shadow: 0 10px 24px rgba(0, 0, 0, 0.12);
+	}
+
+</style>
 </head>
 
 <body>
-<div class="container">
-    <h1>Upload a File</h1>
 
-    <!-- Webform for uploading -->
+<div class="card">
+
+    <h1>⬆️ Upload a File ⬆️</h1>
+
     <form action="/upload" method="POST" enctype="multipart/form-data">
         <input type="file" name="file" required>
-        <br>
-        <button type="submit">Upload</button>
+        <button type="submit" class="upload-btn">Upload File</button>
     </form>
 
-    <!-- Autoindex listing -->
+	<!-- File List - server injects items here -->
     <div class="file-list">
-        <h2>Uploaded Files</h2>
-        <div id="files"></div>
+        <h2>Uploaded Files - autoindex 🗃️</h2>
+        <!-- Server will inject <div class="file-item">...</div> here -->
+		<div id="files"></div>
     </div>
+
+	<!-- Back Home -->
+    <a href="/">
+        <button class="home-btn">← Back Home</button>
+    </a>
+
 </div>
 
 <script>
-// Load files dynamically on page load
-async function loadFiles() {
-    const response = await fetch('/upload'); // server should return full HTML with file links
-    const parser = new DOMParser();
-    const htmlDoc = parser.parseFromString(await response.text(), 'text/html');
-
-    const links = htmlDoc.querySelectorAll('a');
-    const filesDiv = document.getElementById('files');
-    filesDiv.innerHTML = '';
-
-    links.forEach(link => {
-        const filename = link.getAttribute('href');
-        if (!filename || filename === '../') return;
-
-        const div = document.createElement('div');
-        div.className = 'file-item';
-
-        div.innerHTML = `
-            <span>${filename}</span>
-            <button class="delete-btn" onclick="deleteFile('${filename}')">Delete</button>
-        `;
-
-        filesDiv.appendChild(div);
-    });
+function deleteFile(filename) {
+    fetch('/upload/' + filename, { method: 'DELETE' })
+        .then(res => {
+            if (res.ok) location.reload(); // reload page to update autoindex
+            else alert('Delete failed');
+        });
 }
-
-// Delete file
-async function deleteFile(filename) {
-    const response = await fetch('/upload/' + filename, {
-        method: 'DELETE'
-    });
-
-    if (response.ok) {
-        loadFiles(); // refresh list
-    } else {
-        alert('Delete failed');
-    }
-}
-
-// Initial load
-loadFiles();
 </script>
 
 </body>
