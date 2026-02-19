@@ -19,8 +19,8 @@
 #define BOLDBLUE "\033[1;34m"
 #define RESET "\033[0m"
 
-#define MAX_HEADER_SIZE 8192
-#define MAX_BODY_SIZE 10485760 // 10 MB
+#define MAX_HEADER_SIZE 8192	// 8 KB 
+#define MAX_BODY_SIZE 10485760	// 10 MB
 
 /**
  * @enum HTTPState
