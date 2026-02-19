@@ -277,8 +277,8 @@ void Server::AddClient(const epoll_event &event)
 			throw(std::runtime_error("Failed to add client socket to epoll."));
 		}
 
-		std::cout << std::endl
-				  << "Added FD: " << event.data.fd << std::endl;
+		// std::cout << std::endl
+		// 		  << "Added FD: " << event.data.fd << std::endl;
 	}
 }
 
