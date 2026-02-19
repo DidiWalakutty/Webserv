@@ -83,6 +83,9 @@ Summarized To Do List: -> hopefully a little clearer
 11.	Test if right server is chosen based on Host + Port, location block -> Didi's part
 12. Test longest prefix matching -> Didi's part
 13. Check allowed methods -> Didi's part
+14.	What's stress-testing exactly?
+15. Max number of client (sockets)?
+16. If != isServerSocket, we still need to addClient + close immediately
 
 
 Summary:
@@ -150,5 +153,5 @@ Testing:
 	Which happens after the response is already built + file is written/uploaded.
 	The server loop tries to parse again after the client already closed the connection.
 	That produces an empty read, which then throws the error, but nothing has actually failed.
-
+2.	Test website for /upload and /redirect. Won't be able to until parser + reading full request is    updated.
 
