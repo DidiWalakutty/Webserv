@@ -11,6 +11,8 @@
 #include <signal.h>
 #include <string>
 #include <cstring>
+#include <cctype>
+#include <cerrno>
 
 const int MAX_CLIENTS = 10;
 const size_t READ_BUFFER_SIZE = 65536;  // 64KB per read
@@ -328,38 +330,83 @@ void Server::RemoveClient(const int &clientFD)
 std::vector<char> Server::ReadClient(const int &FD)
 {
 	std::vector<char> tempBuffer(READ_BUFFER_SIZE);
-	ssize_t totalBytesRead = 0;
 	std::vector<char> result;
+	ssize_t totalBytesRead = 0;
 
-	ssize_t bytesRead = read(FD, tempBuffer.data(), READ_BUFFER_SIZE);
+	// Keep reading until we get EAGAIN or reach size limit
+	while (totalBytesRead < maxRequestSize)
+	{
+		ssize_t bytesRead = read(FD, tempBuffer.data(), READ_BUFFER_SIZE);
+		
+		if (bytesRead < 0)
+		{
+			if (errno == EAGAIN || errno == EWOULDBLOCK)
+			{
+				// No more data available (non-blocking socket)
+				break;
+			}
+			else
+			{
+				// Actual error
+				throw(std::runtime_error("Failed to read client."));
+			}
+		}
+		else if (bytesRead == 0)
+		{
+			// EOF - client closed connection
+			if (totalBytesRead == 0)
+			{
+				RemoveClient(FD);
+			}
+			break;
+		}
+		else  // bytesRead > 0
+		{
+			totalBytesRead += bytesRead;
+			result.insert(result.end(), tempBuffer.data(), tempBuffer.data() + bytesRead);
+			
+			// Check if we have a complete HTTP request (headers + body)
+			std::string data_str(result.begin(), result.end());
+			size_t headersEnd = data_str.find("\r\n\r\n");
+			if (headersEnd != std::string::npos)
+			{
+				// Found headers end, check Content-Length
+				size_t contentLengthPos = data_str.find("Content-Length:");
+				if (contentLengthPos != std::string::npos)
+				{
+					contentLengthPos += 15;  // strlen("Content-Length:")
+					// Skip whitespace
+					while (contentLengthPos < data_str.size() && 
+					       (data_str[contentLengthPos] == ' ' || data_str[contentLengthPos] == '\t'))
+					{
+						contentLengthPos++;
+					}
+					// Extract the number
+					size_t endPos = contentLengthPos;
+					while (endPos < data_str.size() && std::isdigit(data_str[endPos]))
+					{
+						endPos++;
+					}
+					ssize_t contentLength = std::stoll(data_str.substr(contentLengthPos, endPos - contentLengthPos));
+					size_t bodyStart = headersEnd + 4;
+					size_t bodySize = data_str.size() - bodyStart;
+					
+					// If we have all the body data, we can return
+					if (bodySize >= static_cast<size_t>(contentLength))
+					{
+						return result;
+					}
+				}
+				else
+				{
+					// No Content-Length, just headers is enough for GET/HEAD requests
+					return result;
+				}
+			}
+		}
+	}
 
-	if (bytesRead < 0 && errno != EAGAIN)	// error
-	{
-		throw(std::runtime_error("Failed to read client."));
-	}
-	else if (bytesRead == 0 && totalBytesRead == 0)	// client closed connection
-	{
-		RemoveClient(FD);
-	}
-	else if (bytesRead >= 0)	// data read
-	{
-		totalBytesRead += bytesRead;
-		result.insert(result.end(), tempBuffer.data(), tempBuffer.data() + bytesRead);
-		tempBuffer.clear();
-	}
-	while (bytesRead > 0 && totalBytesRead < maxRequestSize)	// read until no more data or max request size reached
-	{
-		totalBytesRead += bytesRead;
-		result.insert(result.end(), tempBuffer.data(), tempBuffer.data() + bytesRead);
-		tempBuffer.clear();
-		bytesRead = read(FD, tempBuffer.data(), READ_BUFFER_SIZE);
-	}
-	if (bytesRead < 0 && errno != EAGAIN)	// error
-	{
-		throw(std::runtime_error("Failed to read client."));
-	}
-
-	return (result);
+	return result;
 }
 
 /**
@@ -409,9 +456,9 @@ void Server::Start()
 			}
 			else
 			{
-				// we still need to accept and then close the socket to clean the kernel's pending connection queue
-				AddClient(events[i]);
-				RemoveClient(events[i].data.fd);
+				// // we still need to accept and then close the socket to clean the kernel's pending connection queue
+				// AddClient(events[i]);
+				// RemoveClient(events[i].data.fd);
 				if (clients.size() >= MAX_CLIENTS)
 				{
 					std::cerr << "Too many clients connected. Rejected new connection." << std::endl;
@@ -430,6 +477,12 @@ void Server::Start()
 				// --- Read Request ---
 				
 				std::vector<char> data = ReadClient(events[i].data.fd); // using first server's max body size as reference for reading
+				if (data.size() == 0)
+				{
+					// Empty data, client closed connection or already removed
+					continue;
+				}
+				
 				if (data.size() > 0)
 					std::cout << std::endl
 							  << BOLDYELLOW << "Read FD: " << events[i].data.fd << std::endl;
@@ -451,8 +504,6 @@ void Server::Start()
 					RemoveClient(events[i].data.fd);
 					continue;
 				}
-				if (data.size() == 0)
-					RemoveClient(events[i].data.fd);
 
 				// --- Select appropriate server based on Host header ---
 				// the value of the Host header from the request, or empty if the client didn’t send it.
