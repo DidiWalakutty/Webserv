@@ -322,91 +322,105 @@ void Server::RemoveClient(const int &clientFD)
 	}
 
 	clients[index] = -1;
+	clientBuffers.erase(clientFD);  // Clean up incomplete request buffer
 
 	std::cout << std::endl
 			  << "Removed FD: " << clientFD << std::endl;
 }
 
-// Resize at end resizes buffer to actual received data
+// Accumulates request data from a client until a complete request is available.
+// Returns empty vector if incomplete, full request vector if complete.
 std::vector<char> Server::ReadClient(const int &FD)
 {
 	std::vector<char> tempBuffer(READ_BUFFER_SIZE);
 	std::vector<char> result;
-	ssize_t totalBytesRead = 0;
-
-	// Keep reading until we get EAGAIN or reach size limit
-	while (totalBytesRead < maxRequestSize)
+	
+	// Read new data from socket
+	ssize_t bytesRead = read(FD, tempBuffer.data(), READ_BUFFER_SIZE);
+	
+	if (bytesRead < 0)
 	{
-		ssize_t bytesRead = read(FD, tempBuffer.data(), READ_BUFFER_SIZE);
-		
-		if (bytesRead < 0)
+		if (errno == EAGAIN || errno == EWOULDBLOCK)
 		{
-			if (errno == EAGAIN || errno == EWOULDBLOCK)
+			// No new data available right now - check if we have incomplete request buffered
+			if (clientBuffers.find(FD) != clientBuffers.end())
 			{
-				// No more data available (non-blocking socket)
-				break;
+				// Return empty - keep waiting for more data
+				return result;
 			}
-			else
-			{
-				// Actual error
-				throw(std::runtime_error("Failed to read client."));
-			}
+			return result;
 		}
-		else if (bytesRead == 0)
+		else
 		{
-			// EOF - client closed connection
-			if (totalBytesRead == 0)
-			{
-				RemoveClient(FD);
-			}
-			break;
-		}
-		else  // bytesRead > 0
-		{
-			totalBytesRead += bytesRead;
-			result.insert(result.end(), tempBuffer.data(), tempBuffer.data() + bytesRead);
-			
-			// Check if we have a complete HTTP request (headers + body)
-			std::string data_str(result.begin(), result.end());
-			size_t headersEnd = data_str.find("\r\n\r\n");
-			if (headersEnd != std::string::npos)
-			{
-				// Found headers end, check Content-Length
-				size_t contentLengthPos = data_str.find("Content-Length:");
-				if (contentLengthPos != std::string::npos)
-				{
-					contentLengthPos += 15;  // strlen("Content-Length:")
-					// Skip whitespace
-					while (contentLengthPos < data_str.size() && 
-					       (data_str[contentLengthPos] == ' ' || data_str[contentLengthPos] == '\t'))
-					{
-						contentLengthPos++;
-					}
-					// Extract the number
-					size_t endPos = contentLengthPos;
-					while (endPos < data_str.size() && std::isdigit(data_str[endPos]))
-					{
-						endPos++;
-					}
-					ssize_t contentLength = std::stoll(data_str.substr(contentLengthPos, endPos - contentLengthPos));
-					size_t bodyStart = headersEnd + 4;
-					size_t bodySize = data_str.size() - bodyStart;
-					
-					// If we have all the body data, we can return
-					if (bodySize >= static_cast<size_t>(contentLength))
-					{
-						return result;
-					}
-				}
-				else
-				{
-					// No Content-Length, just headers is enough for GET/HEAD requests
-					return result;
-				}
-			}
+			throw(std::runtime_error("Failed to read client."));
 		}
 	}
+	else if (bytesRead == 0)
+	{
+		// EOF - client closed connection
+		clientBuffers.erase(FD);
+		RemoveClient(FD);
+		return result;
+	}
+	
+	// this client was not previously buffered, so we create a new entry for it.
+	if (clientBuffers.find(FD) == clientBuffers.end())
+	{
+		clientBuffers[FD] = std::string();
+	}
 
+	// add new data to client's buffer
+	clientBuffers[FD].append(tempBuffer.data(), bytesRead);
+	
+	// Check if we have a complete HTTP request (headers + full body)
+	std::string& data_str = clientBuffers[FD];
+	size_t headersEnd = data_str.find("\r\n\r\n");
+	
+	if (headersEnd != std::string::npos)
+	{
+		// Found headers end, check Content-Length
+		size_t contentLengthPos = data_str.find("Content-Length:");
+		if (contentLengthPos != std::string::npos)
+		{
+			contentLengthPos += 15;  // strlen("Content-Length:")
+			// Skip whitespace
+			while (contentLengthPos < data_str.size() && 
+			       (data_str[contentLengthPos] == ' ' || data_str[contentLengthPos] == '\t'))
+			{
+				contentLengthPos++;
+			}
+			// Extract the number
+			size_t endPos = contentLengthPos;
+			while (endPos < data_str.size() && std::isdigit(data_str[endPos]))
+			{
+				endPos++;
+			}
+			ssize_t contentLength = std::stoll(data_str.substr(contentLengthPos, endPos - contentLengthPos));
+			// 4 bytes for the "\r\n\r\n" after headers
+			size_t bodyStart = headersEnd + 4;
+			size_t bodySize = data_str.size() - bodyStart;
+			
+			// Check if we have all the body data
+			if (bodySize >= static_cast<size_t>(contentLength))
+			{
+				// Complete request! Convert to vector and clear buffer
+				result = std::vector<char>(data_str.begin(), data_str.end());
+				clientBuffers.erase(FD);
+				return result;
+			}
+			// Incomplete - keep accumulating, return empty vector
+			return result;
+		}
+		else
+		{
+			// No Content-Length (GET/HEAD/etc), just headers is enough
+			result = std::vector<char>(data_str.begin(), data_str.end());
+			clientBuffers.erase(FD);
+			return result;
+		}
+	}
+	
+	// Headers not complete yet - keep waiting
 	return result;
 }
 
@@ -493,10 +507,11 @@ void Server::Start()
 				
 				if (data.size() > 0)
 					std::cout << std::endl
-							  << BOLDYELLOW << "Read FD: " << events[i].data.fd << std::endl;
+							  << BOLDYELLOW << "Read FD: " << events[i].data.fd 
+							  << " (data size: " << data.size() << " bytes)" << std::endl;
 
 				// --- Parse Request ---
-				HTTPRequest request;
+				HTTPRequest request(this);
 				try
 				{
 					if (!request.parseRequest(rawRequest))

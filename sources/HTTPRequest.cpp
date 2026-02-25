@@ -1,4 +1,7 @@
 #include "HTTPRequest.hpp"
+#include "server.hpp"
+
+HTTPRequest::HTTPRequest(Server* server) : server(server) {}
 
 bool HTTPRequest::parseRequest(const std::string raw) 
 {
@@ -53,6 +56,8 @@ bool HTTPRequest::parseRequest(const std::string raw)
 		{
 			std::string key = cleanWhiteSpace(line.substr(0, colon));
 			std::string value = cleanWhiteSpace(line.substr(colon + 1));
+			// Convert key to uppercase for case-insensitive comparison (HTTP headers are case-insensitive)
+			std::transform(key.begin(), key.end(), key.begin(), ::toupper);
 			// Checks if key already exists in map of Headers
 			if (headers.find(key) != headers.end())
 				throw HTTPRequestException("Duplicate header: " + key);
@@ -65,13 +70,14 @@ bool HTTPRequest::parseRequest(const std::string raw)
 			continue;
 		}
 	}
-	if (headers.find("Host") == headers.end())
+	if (headers.find("HOST") == headers.end())
 		throw HTTPRequestException("Missing required Host header");
-	if (headers.find("Content-Length") != headers.end())
+	
+	if (headers.find("CONTENT-LENGTH") != headers.end())
 	{
-		if (headers["Content-Length"].empty() || !std::all_of(headers["Content-Length"].begin(), headers["Content-Length"].end(), ::isdigit))
-			throw HTTPRequestException("Invalid Content-Length header value: " + headers["Content-Length"]);
-		size_t contentLength = std::stoul(headers["Content-Length"]);
+		if (headers["CONTENT-LENGTH"].empty() || !std::all_of(headers["CONTENT-LENGTH"].begin(), headers["CONTENT-LENGTH"].end(), ::isdigit))
+			throw HTTPRequestException("Invalid Content-Length header value: " + headers["CONTENT-LENGTH"]);
+		size_t contentLength = std::stoul(headers["CONTENT-LENGTH"]);
 		if (contentLength > MAX_BODY_SIZE)
 			throw HTTPRequestException("Content-Length exceeds maximum allowed size");
 	}
@@ -87,9 +93,9 @@ bool HTTPRequest::parseRequest(const std::string raw)
 	// --- Validate body ---
 	std::cout << "Reading body..." << std::endl;
 	std::string bodyRaw;
-	if (headers.find("Content-Length") != headers.end())
+	if (headers.find("CONTENT-LENGTH") != headers.end())
 	{
-		size_t contentLength = std::stoul(headers["Content-Length"]);
+		size_t contentLength = std::stoul(headers["CONTENT-LENGTH"]);
 		std::cout << "Content-Length: " << contentLength << std::endl;
 		if (contentLength > MAX_BODY_SIZE)
 			throw HTTPRequestException("Content-Length exceeds maximum allowed size");
@@ -105,13 +111,13 @@ bool HTTPRequest::parseRequest(const std::string raw)
 				bodyRaw.resize(static_cast<size_t>(readCount));
 				if (readCount > 0)
 				{
-					std::cerr << "Warning: Content-Length larger than available data. Provided: " << headers["Content-Length"]
+					std::cerr << "Warning: Content-Length larger than available data. Provided: " << headers["CONTENT-LENGTH"]
 							  << ", Actual: " << readCount << " — accepting shorter body." << std::endl;
 				}
 			}
 			else
 			{
-				throw HTTPRequestException("Content-Length does not match actual body size. Provided: " + headers["Content-Length"] + ", Actual: " + std::to_string(readCount));
+				throw HTTPRequestException("Content-Length does not match actual body size. Provided: " + headers["CONTENT-LENGTH"] + ", Actual: " + std::to_string(readCount));
 			}
 		}
 	}
@@ -130,9 +136,12 @@ bool HTTPRequest::parseRequest(const std::string raw)
 	return true;
 }
 
-bool HTTPRequest::isValidMethod(const std::string method) const
+bool HTTPRequest::isValidMethod(const std::string strMethod) const
 {
-	return HTTPCommon::stringToMethod(method) != HTTPMethod::UNSUPPORTED;
+	// Check if this is a valid HTTP method syntax (not whether it's allowed by server config)
+	// Method validation against server/location config happens during request handling
+	HTTPMethod method = HTTPCommon::stringToMethod(strMethod);
+	return method != HTTPMethod::UNSUPPORTED;
 }
 
 bool HTTPRequest::isValidResourcePath(const std::string resourcePath) const

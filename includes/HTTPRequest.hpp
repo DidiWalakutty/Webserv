@@ -2,6 +2,8 @@
 
 #pragma once
 
+class Server;
+
 /**
  * @class HTTPRequest
  * @brief Represents an HTTP request and provides parsing and validation methods.
@@ -13,6 +15,7 @@ public:
 	HTTPMethod method;
 	std::string resourcePath;
 	HTTPProtocolVersion protocolVersion;
+	Server* server;
 
 	// from headers
 	std::map<std::string, std::string> headers;
@@ -20,7 +23,7 @@ public:
 	// from body
 	std::string body;
 
-	HTTPRequest() = default;
+	HTTPRequest(Server* server);
 	HTTPRequest(const HTTPRequest &other) = default;
 	HTTPRequest &operator=(const HTTPRequest &other) = default;
 	~HTTPRequest() = default;

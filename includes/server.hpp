@@ -1,6 +1,7 @@
 #include <sys/socket.h>
 #include <sys/epoll.h>
 #include <vector>
+#include <map>
 #include "HTTPResponse.hpp"
 #include "HTTPCommon.hpp"
 #include "HTTPRequest.hpp"
@@ -39,14 +40,21 @@ private:
 	int epollFD = -1;					/**< @brief Epoll instance of the file descriptor */
 	std::vector<int> serverSockets; 	/**< @brief Listening sockets (one per ServerParse) */
 	std::vector<int> clients; 			/**< @brief Connected client sockets. */
-	const int _maxEvents = 64;
+	std::map<int, std::string> clientBuffers; /**< @brief Incomplete request buffers for each client FD. */
+	const int _maxEvents = 64; 	/**< @brief Maximum number of events to process per epoll_wait call. */
 	ssize_t maxRequestSize = 1;	/**< @brief Maximum allowed size for incoming HTTP requests. */
+	std::vector<HTTPMethod> allowedMethods; /**< @brief Default allowed HTTP methods for the server */
 
+	public:
+	std::vector<HTTPMethod> getAllowedMethods() const { return allowedMethods; } /**< @brief Getter for allowed HTTP methods. */
+
+	private:
 	void CreateSockets(); /**< @brief Creates and configures the server's sockets. */
 	void CreateEpoll();	  /**< @brief Creates and configures the server's Epoll instance. */
 
 	void DestroySockets(); /**< @brief Destroys and closes the server's sockets. */
 	void DestroyEpoll();   /**< @brief Destroys and closes the server's Epoll instance. */
+
 
 	/**
 	 * @brief Configures the file descriptor to be non blocking.
