@@ -244,6 +244,14 @@ std::string HTTPResponse::generateUploadFilename(const std::string& prefix)
 	return ss.str();
 }
 
+bool extractMultipartFile(const HTTPRequest& request, std::string& outFilename, std::string& outFileData)
+{
+	// 1. Parse it into parts based on the boundary
+	// 2. Find the file part (the <input type="file" name="..."> part) 
+	// 3. Extract the filename from the Content-Disposition header
+	// 4. Copy the actual file contents into fileData
+}
+
 /**
  * @brief Handles an HTTP POST request for file uploads.
  *
@@ -273,35 +281,75 @@ void HTTPResponse::handlePOST(const HTTPRequest& request, const std::string& upl
 		return ;
 	}
 
-	// --- Detect file extension ---
-	std::string ext = ".txt"; // default extension
-
+	// --- Determine if upload is multipart/form-data (webform) ---
+	bool isMultipart = false;
 	if (request.headers.count("Content-Type"))
 	{
 		std::string ct = request.headers.at("Content-Type");
-		if (ct == "image/jpeg" || ct == "image/jpg")
-			ext = ".jpg";
-		else if (ct == "image/png")
-			ext = ".png";
-		else if (ct == "image/gif")
-			ext = ".gif";
-		else if (ct == "text/plain")
-			ext = ".txt";
+		if (ct.find("multipart/form-data") != std::string::npos)
+			isMultipart = true;
 	}
-	else if (request.body.size() >= 4)	// try magic bytes
+
+	// --- Extract filename + extension ---
+	std::string fileName = "";
+	std::string fileData = request.body;
+
+	// --- If multipart/form-data/webform, extract the actual filename and content ---
+	if (isMultipart)
 	{
-		unsigned char* data = reinterpret_cast<unsigned char*>(const_cast<char*>(request.body.data()));
-		if (data[0] == 0xFF && data[1] == 0xD8 && data[2] == 0xFF)
-			ext = ".jpg";
-        else if (data[0] == 0x89 && data[1] == 0x50 && data[2] == 0x4E && data[3] == 0x47)
-			ext = ".png";
-        else if (data[0] == 0x47 && data[1] == 0x49 && data[2] == 0x46)   
-			ext = ".gif";
+		if (!extractMultipartFile(request, fileName, fileData))
+		{
+			handleErrorPages(HTTPState::BadRequest);
+			return ;
+		}
 	}
 	
-	// --- Unique filename for the upload: timestamp + extension ---
-	std::string fileName = generateUploadFilename("upload_") + ext;
+	// --- Handle filename ---
+	if (fileName.empty())
+	{
+		fileName = generateUploadFilename("upload_");
+	}
+	else
+	{
+		// sanitize filename to prevent directory traversal or invalid chars
+		size_t lastSlash = fileName.find_last_of("/\\");
+		if (lastSlash != std::string::npos)
+			fileName = fileName.substr(lastSlash + 1); // removes any path components
+	}
+
+	// --- Determine file extension if RAW/terminal upload (not multipart), by checking Content-Type header or magic bytes ---
+	if (!isMultipart)
+	{
+		std::string ext = "";
+		if (request.headers.count("Content-Type"))
+		{
+			std::string ct = request.headers.at("Content-Type");
+			if (ct == "image/jpeg" || ct == "image/jpg")
+				ext = ".jpg";
+			else if (ct == "image/png")
+				ext = ".png";
+			else if (ct == "image/gif")
+				ext = ".gif";
+			else if (ct == "text/plain")
+				ext = ".txt";
+		}
+		else if (request.body.size() >= 4)	// try magic bytes
+		{
+			unsigned char* data = reinterpret_cast<unsigned char*>(const_cast<char*>(request.body.data()));
+			if (data[0] == 0xFF && data[1] == 0xD8 && data[2] == 0xFF)
+				ext = ".jpg";
+			else if (data[0] == 0x89 && data[1] == 0x50 && data[2] == 0x4E && data[3] == 0x47)
+				ext = ".png";
+			else if (data[0] == 0x47 && data[1] == 0x49 && data[2] == 0x46)   
+				ext = ".gif";
+		}
+		fileName += ext;
+	}
+
+	// --- File path to save the upload to ---
 	std::string filePath = uploadDir + fileName;
+	std::cout << "Saving uploaded file to: " << filePath << std::endl;
+	std::cout << "FileName is: " << fileName << std::endl;
 
 	// --- Save file ---
 	std::ofstream outFile(filePath, std::ios::binary);
@@ -311,7 +359,8 @@ void HTTPResponse::handlePOST(const HTTPRequest& request, const std::string& upl
 		handleErrorPages(HTTPState::InternalServerError);
 		return ;
 	}
-	outFile << request.body;
+	
+	outFile.write(fileData.c_str(), fileData.size());
 	if (!outFile.good())
 	{
 		std::cout << "couldn't write to file" << std::endl;
