@@ -5,20 +5,14 @@ bool HTTPRequest::parseRequest(const std::string raw)
 	if (raw.empty())
 		throw HTTPRequestException("Empty (raw) request string");
 	
+	// --- Find Method ---
 	// Validate that request starts with a valid HTTP method (prevent binary garbage parsing)
-	const std::string validMethods[] = {"GET", "POST", "PUT", "DELETE", "HEAD", "PATCH", "OPTIONS", "TRACE", "CONNECT"};
-	bool startsWithValidMethod = false;
-	for (const auto& method : validMethods)
-	{
-		if (raw.substr(0, method.length()) == method && 
-		    raw.length() > method.length() && 
-		    raw[method.length()] == ' ')
-		{
-			startsWithValidMethod = true;
-			break;
-		}
-	}
-	if (!startsWithValidMethod)
+	size_t methodEnd = raw.find(' ');
+	if (methodEnd == std::string::npos)
+		throw HTTPRequestException("Invalid request format: does not start with valid HTTP method");
+	
+	std::string methodStr = raw.substr(0, methodEnd);
+	if (!isValidMethod(methodStr))
 		throw HTTPRequestException("Invalid request format: does not start with valid HTTP method");
 	
 	// istringstream: treats a string like input we can read from line by line + token by token.
@@ -31,15 +25,7 @@ bool HTTPRequest::parseRequest(const std::string raw)
 	if (requestLine.empty() || isCRLF(requestLine))
 		throw HTTPRequestException("Empty request line");
 
-	// --- Find Method ---
-	size_t methodEnd = requestLine.find(' ');
-	
-	if (methodEnd == std::string::npos)
-		return false;
-	std::string strMethod = requestLine.substr(0, methodEnd);
-	if (!isValidMethod(strMethod) || isCRLF(strMethod))
-		throw HTTPRequestException("Unsupported method: " + strMethod);
-	method = HTTPCommon::stringToMethod(strMethod);
+	method = HTTPCommon::stringToMethod(methodStr);
 
 	// --- Find Path ---
 	size_t pathEnd = requestLine.find(' ', methodEnd + 1);
@@ -90,9 +76,9 @@ bool HTTPRequest::parseRequest(const std::string raw)
 			throw HTTPRequestException("Content-Length exceeds maximum allowed size");
 	}
 	// --- !!! --- Patch or Delete needed??
-	else if (strMethod == "POST" || strMethod == "PUT" || strMethod == "PATCH")
+	else if (methodStr == "POST" || methodStr == "PUT" || methodStr == "PATCH")
 	{
-		throw HTTPRequestException("Missing required Content-Length header for method: " + strMethod);
+		throw HTTPRequestException("Missing required Content-Length header for method: " + methodStr);
 	}
 	// If request has no body, we end here.
 	if (stream.eof())

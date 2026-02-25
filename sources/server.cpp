@@ -265,6 +265,7 @@ void Server::AddClient(const epoll_event &event)
 		{
 			if (errno == EAGAIN || errno == EWOULDBLOCK)
 			{
+				// The socket is marked nonblocking and no connections are present to be accepted.
 				break;
 			}
 
