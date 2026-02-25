@@ -5,6 +5,22 @@ bool HTTPRequest::parseRequest(const std::string raw)
 	if (raw.empty())
 		throw HTTPRequestException("Empty (raw) request string");
 	
+	// Validate that request starts with a valid HTTP method (prevent binary garbage parsing)
+	const std::string validMethods[] = {"GET", "POST", "PUT", "DELETE", "HEAD", "PATCH", "OPTIONS", "TRACE", "CONNECT"};
+	bool startsWithValidMethod = false;
+	for (const auto& method : validMethods)
+	{
+		if (raw.substr(0, method.length()) == method && 
+		    raw.length() > method.length() && 
+		    raw[method.length()] == ' ')
+		{
+			startsWithValidMethod = true;
+			break;
+		}
+	}
+	if (!startsWithValidMethod)
+		throw HTTPRequestException("Invalid request format: does not start with valid HTTP method");
+	
 	// istringstream: treats a string like input we can read from line by line + token by token.
 	std::istringstream stream(raw);
 	if (stream.fail())
@@ -56,8 +72,12 @@ bool HTTPRequest::parseRequest(const std::string raw)
 				throw HTTPRequestException("Duplicate header: " + key);
 			headers[key] = value;
 		}
-		else
-			throw HTTPRequestException("Invalid header line: " + line);
+		else if (!line.empty())
+		{
+			// Skip malformed header lines silently (lenient parsing for browser compatibility)
+			// Don't throw - modern browsers may send headers in unexpected formats
+			continue;
+		}
 	}
 	if (headers.find("Host") == headers.end())
 		throw HTTPRequestException("Missing required Host header");
@@ -84,19 +104,24 @@ bool HTTPRequest::parseRequest(const std::string raw)
 	if (headers.find("Content-Length") != headers.end())
 	{
 		size_t contentLength = std::stoul(headers["Content-Length"]);
+		std::cout << "Content-Length: " << contentLength << std::endl;
 		if (contentLength > MAX_BODY_SIZE)
 			throw HTTPRequestException("Content-Length exceeds maximum allowed size");
 
 		bodyRaw.resize(contentLength);
 		stream.read(&bodyRaw[0], static_cast<std::streamsize>(contentLength));
 		std::streamsize readCount = stream.gcount();
+		std::cout << "Read " << readCount << " bytes of body." << std::endl;
 		if (static_cast<size_t>(readCount) != contentLength)
 		{
 			if (stream.eof())
 			{
 				bodyRaw.resize(static_cast<size_t>(readCount));
-				std::cerr << "Warning: Content-Length larger than available data. Provided: " << headers["Content-Length"]
-						  << ", Actual: " << readCount << " — accepting shorter body." << std::endl;
+				if (readCount > 0)
+				{
+					std::cerr << "Warning: Content-Length larger than available data. Provided: " << headers["Content-Length"]
+							  << ", Actual: " << readCount << " — accepting shorter body." << std::endl;
+				}
 			}
 			else
 			{

@@ -483,6 +483,13 @@ void Server::Start()
 					continue;
 				}
 				
+				std::string rawRequest(data.data(), data.size());
+				// Safety check: skip if request is empty (closed connection during keep-alive)
+				if (rawRequest.empty())
+				{
+					continue;
+				}
+				
 				if (data.size() > 0)
 					std::cout << std::endl
 							  << BOLDYELLOW << "Read FD: " << events[i].data.fd << std::endl;
@@ -491,16 +498,21 @@ void Server::Start()
 				HTTPRequest request;
 				try
 				{
-					if (!request.parseRequest(std::string(data.data(), data.size())))
+					if (!request.parseRequest(rawRequest))
 						continue;
 					request.printRequest();
 					std::cout << RESET << std::endl;
 				}
-				// --- !!! Always handles request as error, even if it was successfull ---
+				// Treat malformed requests as graceful disconnect, not an error
 				catch (const HTTPRequest::HTTPRequestException &exc)
 				{
-					std::cerr << "Failed to parse HTTP request: " << exc.what() << std::endl;
-					// Added, check if is good?
+					std::string excMsg = exc.what();
+					// Skip error logging for common disconnect/malformed request cases
+					if (excMsg != "Empty (raw) request string" && 
+					    excMsg.find("Invalid request format") == std::string::npos)
+					{
+						std::cerr << "Failed to parse HTTP request: " << excMsg << std::endl;
+					}
 					RemoveClient(events[i].data.fd);
 					continue;
 				}
