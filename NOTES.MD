@@ -9,7 +9,7 @@ Updates:
 2.	CreateSockets():
 	Now uses the parsed .conf information via ServerParse.
 	Each server block has one port and host.
-	Now support multipe servers via _servers vector.
+	Now support multipe servers vigita _servers vector.
 	Able to print to see which IP is bound to which socket.
 3.	AddClient():
 	Able to print and see which client FD was accepted from which IP + Port
