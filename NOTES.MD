@@ -70,6 +70,7 @@ Summarized To Do List: -> hopefully a little clearer
 	- Needs to extract: filename, file content
 	- Save file content only
 	This is separate from request reading.
+	multipart_test file content works well with: telnet localhost 8080
 4.	Empty request logged after succes
 	- Gives false error after successful upload
 	- Also when: client closes connection, server reads empty 

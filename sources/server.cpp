@@ -352,6 +352,7 @@ std::vector<char> Server::ReadClient(const int &FD)
 		}
 		else
 		{
+			// Are we sure we want to throw here? This will close the server on any read error, even transient ones. Maybe we should just remove the client instead?
 			throw(std::runtime_error("Failed to read client."));
 		}
 	}

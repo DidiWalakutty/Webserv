@@ -99,6 +99,7 @@ enum class HTTPMethod
 	PUT,		/** <@brief  Updates existing data on the server. */
 	DELETE,		/** <@brief  Removes specified data from the server. */
 	HEAD,		/** <@brief  Retrieves only headers of a resource, without the actual content. */
+	PATCH,		/** <@brief  Partially updates existing data on the server. */
 	UNSUPPORTED /** <@brief  For methods that are not recognized or supported. */
 };
 
@@ -138,3 +139,12 @@ public:
  * @return const std::string
  */
 std::string cleanWhiteSpace(std::string str);
+
+/**
+ * @brief Checks if a string starts with a given substring.
+ *
+ * @param longStr The string to check.
+ * @param beginningStr The substring to look for at the start of longStr.
+ * @return true if longStr starts with beginningStr, false otherwise.
+ */
+bool startsWith(const std::string longStr, const std::string beginningStr);

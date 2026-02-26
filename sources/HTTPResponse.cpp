@@ -157,14 +157,14 @@ std::string HTTPResponse::parseResponseStr(const HTTPRequest request, const std:
 
 	// --- Common Headers ---
 	// shouldnt be updated if done in handle functions
-	headers["Content-Length"] = std::to_string(body.size());
-	headers["Server"] = "Webserv_Didi_and_Goksu";
-	headers["Connection"] = "keep-alive";
-	headers["Date"] = setDate();
+	headers["CONTENT-LENGTH"] = std::to_string(body.size());
+	headers["SERVER"] = "Webserv_Didi_and_Goksu";
+	headers["CONNECTION"] = "keep-alive";
+	headers["DATE"] = setDate();
 
 	// --- Set content type if not already set ---
-	if (headers.find("Content-Type") == headers.end())
-		headers["Content-Type"] = parseContentType(filePath);
+	if (headers.find("CONTENT-TYPE") == headers.end())
+		headers["CONTENT-TYPE"] = parseContentType(filePath);
 
 	// --- Build HTTP Response String ---
 	std::string response =
@@ -182,8 +182,8 @@ std::string HTTPResponse::parseResponseStr(const HTTPRequest request, const std:
 void HTTPResponse::clearBody()
 {
 	body.clear();
-	headers["Content-Length"] = "0";
-	headers["Content-Type"] = "";
+	headers["CONTENT-LENGTH"] = "0";
+	headers["CONTENT-TYPE"] = "";
 }
 
 void HTTPResponse::updateForHTTPState(HTTPState state)
@@ -203,6 +203,6 @@ void HTTPResponse::updateForHTTPState(HTTPState state)
 	else
 	{
 		body = statusCode + ": " + statusMessage.description;
-		headers["Content-Length"] = std::to_string(body.length());
+		headers["CONTENT-LENGTH"] = std::to_string(body.length());
 	}
 }

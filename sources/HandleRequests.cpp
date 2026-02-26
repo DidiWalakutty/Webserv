@@ -113,8 +113,8 @@ void HTTPResponse::handleGET(const HTTPRequest& request, const std::string& file
 	{
 		std::cout << "Redirecting to: " << loc->redirect.targetURL << " with statuscode: " << loc->redirect.statusCode << std::endl;
 		body = "";
-		headers["Location"] = loc->redirect.targetURL;
-		headers["Content-Length"] = "0";
+		headers["LOCATION"] = loc->redirect.targetURL;
+		headers["CONTENT-LENGTH"] = "0";
 
 		if (loc->redirect.statusCode == 301)
 			updateForHTTPState(HTTPState::MovedPermanently);
@@ -123,7 +123,7 @@ void HTTPResponse::handleGET(const HTTPRequest& request, const std::string& file
 		
 		// test
 		std::cout << "!!!Location header is now: "
-			<< headers["Location"] << std::endl;
+			<< headers["LOCATION"] << std::endl;
 		
 		return;
 	}
@@ -154,8 +154,8 @@ void HTTPResponse::handleGET(const HTTPRequest& request, const std::string& file
 		}
 
 		body = html;
-		headers["Content-Type"] = "text/html";
-		headers["Content-Length"] = std::to_string(body.size());
+		headers["CONTENT-TYPE"] = "text/html";
+		headers["CONTENT-LENGTH"] = std::to_string(body.size());
 		updateForHTTPState(HTTPState::Ok);
 		return;
 	}
@@ -187,8 +187,8 @@ void HTTPResponse::handleGET(const HTTPRequest& request, const std::string& file
 		}
 		
 		body = html;
-		headers["Content-Type"] = "text/html";
-		headers["Content-Length"] = std::to_string(body.size());
+		headers["CONTENT-TYPE"] = "text/html";
+		headers["CONTENT-LENGTH"] = std::to_string(body.size());
 		updateForHTTPState(HTTPState::Ok);
 		return;
 	}
@@ -206,8 +206,8 @@ void HTTPResponse::handleGET(const HTTPRequest& request, const std::string& file
 	body = buffer.str();
 	file.close();
 
-	headers["Content-Type"] = parseContentType(filePath);
-	headers["Content-Length"] = std::to_string(body.size());
+	headers["CONTENT-TYPE"] = parseContentType(filePath);
+	headers["CONTENT-LENGTH"] = std::to_string(body.size());
 	updateForHTTPState(HTTPState::Ok);
 }
 
@@ -276,9 +276,9 @@ void HTTPResponse::handlePOST(const HTTPRequest& request, const std::string& upl
 	// --- Detect file extension ---
 	std::string ext = ".txt"; // default extension
 
-	if (request.headers.count("Content-Type"))
+	if (request.headers.count("CONTENT-TYPE"))
 	{
-		std::string ct = request.headers.at("Content-Type");
+		std::string ct = request.headers.at("CONTENT-TYPE");
 		if (ct == "image/jpeg" || ct == "image/jpg")
 			ext = ".jpg";
 		else if (ct == "image/png")
@@ -324,7 +324,7 @@ void HTTPResponse::handlePOST(const HTTPRequest& request, const std::string& upl
 	outFile.close();
 
 	// --- Respond 201 and redirect back to GET /upload to show updated autoindex with new file ---
-	headers["Location"] = "/upload/"; 
+	headers["LOCATION"] = "/upload/"; 
 	updateForHTTPState(HTTPState::Created);
 }
 
@@ -383,8 +383,8 @@ void HTTPResponse::handleDELETE(const HTTPRequest& request, const std::string& f
 
 	// --- Successfull deletion ---
 	body.clear();
-	headers["Content-Type"] = "text/plain";
-	headers["Content-Length"] = std::to_string(body.size());
+	headers["CONTENT-TYPE"] = "text/plain";
+	headers["CONTENT-LENGTH"] = std::to_string(body.size());
 	updateForHTTPState(HTTPState::NoContent);
 }
 
@@ -419,8 +419,8 @@ void HTTPResponse::handleHEAD(const HTTPRequest& request, const std::string& fil
 	file.close();
 
 	body.clear(); // No body for HEAD response
-	headers["Content-Type"] = parseContentType(filePath);
-	headers["Content-Length"] = std::to_string(fileSize);
+	headers["CONTENT-TYPE"] = parseContentType(filePath);
+	headers["CONTENT-LENGTH"] = std::to_string(fileSize);
 	updateForHTTPState(HTTPState::Ok);
 }
 
@@ -454,13 +454,13 @@ void HTTPResponse::handleErrorPages(HTTPState state)
 		file.close();
 
 		// Set the content-type for HTML error pages
-		headers["Content-Type"] = "text/html";
-		headers["Content-Length"] = std::to_string(body.size());
+		headers["CONTENT-TYPE"] = "text/html";
+		headers["CONTENT-LENGTH"] = std::to_string(body.size());
 	}
 	else	// --- If the error page is missing, serve a simple plain-text message ---
 	{
 		body = statusCode + ": " + reasonPhrase;
-		headers["Content-Type"] = "text/plain";
-		headers["Content-Length"] = std::to_string(body.size());
+		headers["CONTENT-TYPE"] = "text/plain";
+		headers["CONTENT-LENGTH"] = std::to_string(body.size());
 	}
 }
