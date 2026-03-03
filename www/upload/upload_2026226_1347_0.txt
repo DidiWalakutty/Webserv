@@ -1,0 +1,6 @@
+--------------------------2520d90b066ac5c7
+Content-Disposition: form-data; name="file"; filename="test.txt"
+Content-Type: text/plain
+
+Hello from Webserv
+--------------------------2520d90b066ac5c7--
