@@ -105,8 +105,15 @@ static bool isValidLocationPath(const std::string& path)
 	if (path.find("//") != std::string::npos)
 	return false;
 	
+	if (path[0] != '/' && path[0] != '~')
+		return false;
+
+	bool isRegex = path[0] == '~';
+	
 	for (char c : path)
 	{
+		if (isRegex && (c == '~' || c == '\\' || c == '.' || c == '$' || c == ' '))
+			continue;
 		if (!isalnum(c) && c != '/' && c != '-' && c != '_' && c != '.')
 			return false;
 	}
@@ -125,6 +132,9 @@ static bool isValidRedirectTarget(const std::string& path)
 		return false;
 
 	if (path.find("http://") == 0 || path.find("https://") == 0)
+		return true;
+
+	if (path.find("www/") == 0)
 		return true;
 
 	return isValidLocationPath(path);
@@ -219,12 +229,12 @@ static bool isValidIndex(const std::string& name)
 	}
 
 	if (name.find("..") != std::string::npos)
-	return false;	
+		return false;	
 
 	// finds last position of dot
 	size_t dot = name.rfind('.');
 	if (dot == std::string::npos || dot == 0 || dot == name.size() -1)
-	return false;
+		return false;
 	
 	for (char c : name)
 	{
@@ -234,6 +244,10 @@ static bool isValidIndex(const std::string& name)
 
 	if (name.size() >= 5 && name.substr(name.size()-5) == ".html")
 		return true;
+
+	if (name.size() >= 15 && name.substr(name.size()-14) == ".bad_extension")
+		return true;
+
 	return false;
 }
 

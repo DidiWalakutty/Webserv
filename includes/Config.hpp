@@ -24,6 +24,8 @@ struct LocationParse
 	bool autoIndex = false; 	/* Enable or disable directory listing */
 	bool is_cgi = false;   		/* True if this location executes CGI scripts */
 	bool uploadEnabled = false; /* True if file uploads are allowed in this location */
+	std::string cgi_executable; /* CGI executable name to call for CGI requests */
+	size_t maxBodySize = 0;		/* Max allowed body size in bytes for this location */
 	
 	Redirect redirect;							/* Optional redirect for this location (status code + target URL)*/
 
