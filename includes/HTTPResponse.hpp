@@ -4,8 +4,31 @@
 #include <algorithm>
 #include <ctime>
 #include <sstream>
+#include <set>
 
 #pragma once
+
+// Unordered map for fast lookup of allowed extensions and their corresponding content-type
+static const std::unordered_map<std::string, std::string> allowedExtensions = {
+	{".txt", "text/plain"},
+	{".html", "text/html"},
+	{".htm", "text/html"},
+	{".css", "text/css"},
+	{".js", "application/javascript"},
+	{".json", "application/json"},
+	{".png", "image/png"},
+	{".jpg", "image/jpeg"},
+	{".jpeg", "image/jpeg"},
+	{".gif", "image/gif"},
+	{".pdf", "application/pdf"},
+	{".zip", "application/zip"},
+	{".svg", "image/svg+xml"}
+};
+
+// Set for quick lookup of forbidden extensions (potentially dangerous files)
+static const std::set<std::string> forbiddenExtensions = {
+	".exe", ".php", ".sh", ".bat", ".cmd"
+};
 
 /**
  * @class HTTPResponse
@@ -36,6 +59,7 @@ public:
 	std::string buildResponse(HTTPRequest request);
 
 private:
+
 	// Handler functions
 	ServerParse serverParse;	// field in class
 	void handleGET(const HTTPRequest& request, const std::string& filePath);
@@ -44,7 +68,13 @@ private:
 	void handleDELETE(const HTTPRequest& request, const std::string& filePath);
 	void handleErrorPages(HTTPState state);
 
+	// Helper functions
+	std::string generateImagesGallery(const std::string& imagesDir);
+	std::string generateUploadAutoindex(const std::string& uploadDir);
 	std::string generateUploadFilename(const std::string& prefix);
+	bool extractMultipartFile(const HTTPRequest& request, std::string& fileName, std::string& fileData, std::string& ext);
+	std::string findExtension(const HTTPRequest& request, const std::string& fileData);
+
 	/**
 	 * @brief Prints the HTTP response details to the standard output.
 	 */
