@@ -1,89 +1,4 @@
 #include "HTTPResponse.hpp"
-#include "dirent.h"
-
-/**
- * @brief Generates a dynamic HTML gallery page for all image files in a directory.
- *
- * @param imagesDir The path to the directory containing image files.
- * @return std::string The full HTML page as a string.
- *
- * @details
- * - Scans the given directory for files with .png, .jpg, .jpeg, or .gif extensions.
- * - Ignores "." and ".." entries.
- * - For each image, adds a thumbnail wrapped in a clickable <a> link to the full image.
- * - Includes basic CSS styling for layout, thumbnails, hover effect, and filenames.
- * - Returns the complete HTML page as a string, ready to be sent as the HTTP response body.
- * 
- * @note This function automatically reflects any new images added to the directory without 
- *       needing to update the HTML manually.
- */
-std::string generateImagesGallery(const std::string& imagesDir) 
-{
-    std::string html;
-    DIR *dir = opendir(imagesDir.c_str());
-    if (!dir) return html;
-
-    struct dirent *entry;
-    while ((entry = readdir(dir)) != NULL) 
-    {
-        std::string name = entry->d_name;
-        if (name == "." || name == "..") continue;
-
-        if (name.find(".png") != std::string::npos || 
-            name.find(".jpg") != std::string::npos ||
-            name.find(".jpeg") != std::string::npos ||
-            name.find(".gif") != std::string::npos) 
-        {
-            html += "<div class=\"image-item\">";
-            html += "<img src=\"/images/" + name + "\" alt=\"" + name + "\">";
-            html += "<div class=\"filename\">" + name + "</div>";
-            html += "</div>";
-        }
-    }
-    closedir(dir);
-    return html;
-}
-
-
-/**
- * @brief Generates a simple HTML autoindex page for uploaded files.
- *
- * @details
- * - Opens the specified upload directory.
- * - Iterates over all entries except "." and "..".
- * - Generates an HTML page containing clickable links (<a>) for each file.
- * - Used to provide directory listing for GET /upload.
- * - Does not perform permission or method checks.
- */
-std::string generateUploadAutoindex(const std::string& uploadDir)
-{
-   	DIR* dir = opendir(uploadDir.c_str());
-	if (!dir)
-        return "";
-
-    struct dirent* entry;
-    std::stringstream ss;
-
-    while ((entry = readdir(dir)) != NULL)
-    {
-        std::string name = entry->d_name;
-
-        if (name == "." || name == "..")
-            continue;
-
-        if (name.find(".html") != std::string::npos)
-            continue;
-
-        ss << "<div class=\"file-item\">"
-           << "<span>" << name << "</span>"
-           << "<button class=\"delete-btn\" "
-           << "onclick=\"deleteFile('" << name << "')\">Delete</button>"
-           << "</div>";
-    }
-
-    closedir(dir);
-    return ss.str();
-}
 
 /**
  * @brief Handles an HTTP GET request.
@@ -212,60 +127,26 @@ void HTTPResponse::handleGET(const HTTPRequest& request, const std::string& file
 }
 
 /**
- * @brief Generates a unique filename for uploaded files.
+ * @brief Handles HTTP POST request for file uploads.
  *
  * @details
- * - Uses the current local date and time as part of the filename.
- * - Format: prefix + YYYYMMDD_HHMMSS_counter
- * - Adds a static incrementing counter to avoid collisions
- *   when multiple uploads happen within the same second.
- * - Returns only the filename (no directory or extension).
- */
-std::string HTTPResponse::generateUploadFilename(const std::string& prefix)
-{
-	// --- Get current time ---
-	std::time_t now = std::time(nullptr);
-	std::tm* localTime = std::localtime(&now);
-
-	// --- Format time as YYYY/MM/DD_HH/MM/SS ---
-	std::stringstream ss;
-	ss << prefix
-	   << localTime->tm_year + 1900
-	   << (localTime->tm_mon + 1)
-	   << localTime->tm_mday
-	   << "_"
-	   << localTime->tm_hour
-	   << localTime->tm_min;
-
-	// --- Add static counter for uniqueness ---
-	static int counter = 0;
-	ss << "_" << counter++;
-
-	return ss.str();
-}
-
-bool extractMultipartFile(const HTTPRequest& request, std::string& outFilename, std::string& outFileData)
-{
-	// 1. Parse it into parts based on the boundary
-	// 2. Find the file part (the <input type="file" name="..."> part) 
-	// 3. Extract the filename from the Content-Disposition header
-	// 4. Copy the actual file contents into fileData
-}
-
-/**
- * @brief Handles an HTTP POST request for file uploads.
- *
- * @details
- * - Validates that POST is allowed for the matched location.
- * - Verifies request body presence and maximum body size.
- * - Determines file extension using Content-Type header or magic bytes.
- * - Generates a unique filename and writes the raw body to disk.
- * - Returns 201 Created on success.
- * - Redirects back to /upload to show updated autoindex with new file.
+ * - Validates POST is allowed for requested location.
+ * - Verifies upload directory, body presence and max body size.
+ * - Detects if upload is multipart/form-data (webform) or RAW/terminal.
+ * - Normalizes file extension to lowercase to check against forbidden and allowed lists.
+ * - Generates filename if not provided and sanatizes it to prevent directory traversal.
+ * - Multipart upload:
+ *   	- Extract filename, content and extension (filename may be missing)
+ * - RAW upload:
+ * 		- Filename is not provided (metadata isn't sent in RAW uploads)
+ * 		- Detect extension via Content-Type header or magic bytes.
+ * - Rejects forbidden extensions and defaults unknown/missing extensions to `.bin` (unexecutable generic binary extension for unknown files).
+ * - Saves the uploaded file to the specified directory.
+ * - Returns 201 Created and redirects to `/upload/` to update autoindex.
  */
 void HTTPResponse::handlePOST(const HTTPRequest& request, const std::string& uploadDir)
 {
-	// --- Check if POST method is allowed for this location ---
+	// --- Check if POST method is allowed for location ---
 	const LocationParse* location = serverParse.get_best_location(request.resourcePath);
 	if (!location || std::find(location->allowedMethods.begin(), location->allowedMethods.end(), HTTPMethod::POST) == location->allowedMethods.end())
 	{
@@ -274,7 +155,7 @@ void HTTPResponse::handlePOST(const HTTPRequest& request, const std::string& upl
 		return;
 	}
 	
-	// --- Check if request is valid/possible for upload ---
+	// --- Validate upload directory, body and size ---
 	if (uploadDir.empty() || request.body.empty() || request.body.size() > serverParse.maxBodySize)
 	{
 		handleErrorPages(request.body.empty() ? HTTPState::BadRequest : HTTPState::RequestTooLarge);
@@ -283,75 +164,85 @@ void HTTPResponse::handlePOST(const HTTPRequest& request, const std::string& upl
 
 	// --- Determine if upload is multipart/form-data (webform) ---
 	bool isMultipart = false;
-	if (request.headers.count("Content-Type"))
+	if (request.headers.count("CONTENT-TYPE"))
 	{
-		std::string ct = request.headers.at("Content-Type");
+		std::string ct = request.headers.at("CONTENT-TYPE");
 		if (ct.find("multipart/form-data") != std::string::npos)
 			isMultipart = true;
 	}
 
-	// --- Extract filename + extension ---
+	// --- Extract filename + file content + extension ---
 	std::string fileName = "";
 	std::string fileData = request.body;
+	std::string ext = "";
 
-	// --- If multipart/form-data/webform, extract the actual filename and content ---
+	// --- If multipart/form-data/webform: extract filename, content and extension ---
 	if (isMultipart)
 	{
-		if (!extractMultipartFile(request, fileName, fileData))
-		{
+		if (!extractMultipartFile(request, fileName, fileData, ext))
+		{	headers["Location"] = "/upload/"; 
+
 			handleErrorPages(HTTPState::BadRequest);
 			return ;
 		}
+		// normalize extension to lowercase for checks
+    	std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+		
+
+		if (forbiddenExtensions.count(ext))
+		{
+			std::cout << "Upload rejected due to forbidden extension: " << ext << std::endl;
+			handleErrorPages(HTTPState::Forbidden);
+			return;
+		}
+		
+		if (!allowedExtensions.count(ext))
+		ext = ".bin";
+		
+		// test, remove later
+		std::cout << "Extracted - multipart - filename: " << fileName << std::endl;
+		std::cout << "Extracted - multipart - extension: " << ext << std::endl;
 	}
 	
-	// --- Handle filename ---
+	// --- Generate filename if not present ---
 	if (fileName.empty())
 	{
 		fileName = generateUploadFilename("upload_");
 	}
 	else
 	{
-		// sanitize filename to prevent directory traversal or invalid chars
+		// --- Sanitize: remove directory traversal ---
 		size_t lastSlash = fileName.find_last_of("/\\");
 		if (lastSlash != std::string::npos)
-			fileName = fileName.substr(lastSlash + 1); // removes any path components
+			fileName = fileName.substr(lastSlash + 1); // removes any path components: "subdir/../file.txt" -> "file.txt"
 	}
 
-	// --- Determine file extension if RAW/terminal upload (not multipart), by checking Content-Type header or magic bytes ---
+	// --- If RAW upload ---
 	if (!isMultipart)
 	{
-		std::string ext = "";
-		if (request.headers.count("Content-Type"))
+		ext = findExtension(request, fileData);
+    	std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+
+		if (forbiddenExtensions.count(ext))
 		{
-			std::string ct = request.headers.at("Content-Type");
-			if (ct == "image/jpeg" || ct == "image/jpg")
-				ext = ".jpg";
-			else if (ct == "image/png")
-				ext = ".png";
-			else if (ct == "image/gif")
-				ext = ".gif";
-			else if (ct == "text/plain")
-				ext = ".txt";
+			std::cout << "Upload rejected due to forbidden extension: " << ext << std::endl;
+			handleErrorPages(HTTPState::Forbidden);
+			return ;
 		}
-		else if (request.body.size() >= 4)	// try magic bytes
-		{
-			unsigned char* data = reinterpret_cast<unsigned char*>(const_cast<char*>(request.body.data()));
-			if (data[0] == 0xFF && data[1] == 0xD8 && data[2] == 0xFF)
-				ext = ".jpg";
-			else if (data[0] == 0x89 && data[1] == 0x50 && data[2] == 0x4E && data[3] == 0x47)
-				ext = ".png";
-			else if (data[0] == 0x47 && data[1] == 0x49 && data[2] == 0x46)   
-				ext = ".gif";
-		}
-		fileName += ext;
+
+		if (!allowedExtensions.count(ext) || ext.empty())
+			ext = ".bin"; // generi
 	}
+
+	// --- Add extension to filename ---
+	fileName += ext; // add extension to filename
 
 	// --- File path to save the upload to ---
 	std::string filePath = uploadDir + fileName;
 	std::cout << "Saving uploaded file to: " << filePath << std::endl;
 	std::cout << "FileName is: " << fileName << std::endl;
 
-	// --- Save file ---
+	// --- Save/write file ---
 	std::ofstream outFile(filePath, std::ios::binary);
 	if (!outFile.is_open())
 	{
@@ -369,10 +260,9 @@ void HTTPResponse::handlePOST(const HTTPRequest& request, const std::string& upl
 		return ;
 	}
 
-	// --- Successfull creation
 	outFile.close();
-
-	// --- Respond 201 and redirect back to GET /upload to show updated autoindex with new file ---
+	
+	// --- Successfull: 201 created an dredirect to show updated autoindex ---
 	headers["Location"] = "/upload/"; 
 	updateForHTTPState(HTTPState::Created);
 }
@@ -431,6 +321,7 @@ void HTTPResponse::handleDELETE(const HTTPRequest& request, const std::string& f
 	}
 
 	// --- Successfull deletion ---
+	std::cout << "File deleted successfully: " << filePath << std::endl;
 	body.clear();
 	headers["Content-Type"] = "text/plain";
 	headers["Content-Length"] = std::to_string(body.size());
