@@ -85,10 +85,22 @@ bool HTTPRequest::parseRequest(const std::string raw)
 			throw HTTPRequestException("Content-Length header must be greater than 0 for method: " + methodStr);
 	}
 	// --- !!! --- Patch or Delete needed?? DEL does not need body.
-	else if (methodStr == "POST" || methodStr == "PUT" || methodStr == "PATCH")
+	else if (methodStr == "PUT" || methodStr == "PATCH")
 		throw HTTPRequestException("Missing required Content-Length header for method: " + methodStr);
-	if (headers.find("TRANSFER-ENCODING") != headers.end() && (headers["TRANSFER-ENCODING"] == "chunked" || headers["TRANSFER-ENCODING"] == "gzip"))
-		throw HTTPRequestException("Transfer encoding is not supported");
+	if (headers.find("TRANSFER-ENCODING") != headers.end())
+	{
+		if (headers["TRANSFER-ENCODING"] == "chunked")
+		{
+		}
+		else if (headers["TRANSFER-ENCODING"] == "gzip")
+		{
+			throw HTTPRequestException("Gzip transfer encoding is not supported");
+		}
+		else
+		{
+			throw HTTPRequestException("Unsupported Transfer-Encoding: " + headers["TRANSFER-ENCODING"]);	
+		}
+	}
 	// If request has no body, we end here.
 	if (stream.eof())
 		return true;
@@ -129,7 +141,6 @@ bool HTTPRequest::parseRequest(const std::string raw)
 			throw HTTPRequestException("Body size exceeds maximum limit");
 	}
 	body = bodyRaw;
-	// --- !!! --- Read Body currently empty, always returns true
 	if (!isValidBody(body))
 		throw HTTPRequestException("Invalid body content: " + body);
 	return true;
@@ -251,7 +262,7 @@ bool HTTPRequest::isValidBody(const std::string body) const
 				// does not include Content-Disposition in the part headers, we will allow but log a warning
 
 				// must have Content-Disposition
-				if (headers.find("CONTENT-DISPOSITION:") == std::string::npos)
+				if (headers.find("Content-Disposition:") == std::string::npos)
 				{
 					std::cerr << "Warning: multipart/form-data part does not contain required Content-Disposition header." << std::endl;
 					// return false;

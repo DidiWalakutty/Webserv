@@ -319,6 +319,8 @@ LocationParse ConfigParser::parseLocationBlock(const std::vector<std::string>& f
 	location.autoIndex = false;
 	location.uploadEnabled = false;
 	location.is_cgi = false;
+	location.maxBodySize = 0;
+	location.cgi_executable = "";
 
 	location.path = line.substr(pathStart, bracePos - pathStart);
 	trimWhitespace(location.path);
@@ -462,6 +464,26 @@ LocationParse ConfigParser::parseLocationBlock(const std::vector<std::string>& f
 					std::cerr << "Is_cgi was defaulted to " << (location.is_cgi ? "true" : "false") << std::endl;
 				}
 	
+			}
+			else if (key == "cgi_executable")
+			{
+				location.cgi_executable = value;
+			}
+			else if (key == "max_body_size")
+			{
+				try {
+					location.maxBodySize = std::stoul(value);
+				}
+				catch (const std::invalid_argument&) {
+					std::cerr << "Error: Invalid max_body_size at line " << currentline + 1 << std::endl;
+					location_error = true;
+					location.maxBodySize = 0;
+				}
+				catch (const std::out_of_range&) {
+					std::cerr << "Error: Invalid max_body_size - too big - at line " << currentline + 1 << std::endl;
+					location_error = true;
+					location.maxBodySize = 0;
+				}
 			}
 			else
 			{
