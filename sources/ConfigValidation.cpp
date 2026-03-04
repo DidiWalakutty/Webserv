@@ -104,16 +104,9 @@ static bool isValidLocationPath(const std::string& path)
 	
 	if (path.find("//") != std::string::npos)
 	return false;
-	
-	if (path[0] != '/' && path[0] != '~')
-		return false;
-
-	bool isRegex = path[0] == '~';
-	
+		
 	for (char c : path)
 	{
-		if (isRegex && (c == '~' || c == '\\' || c == '.' || c == '$' || c == ' '))
-			continue;
 		if (!isalnum(c) && c != '/' && c != '-' && c != '_' && c != '.')
 			return false;
 	}
@@ -134,6 +127,7 @@ static bool isValidRedirectTarget(const std::string& path)
 	if (path.find("http://") == 0 || path.find("https://") == 0)
 		return true;
 
+	// we will check here later
 	if (path.find("www/") == 0)
 		return true;
 
@@ -245,6 +239,7 @@ static bool isValidIndex(const std::string& name)
 	if (name.size() >= 5 && name.substr(name.size()-5) == ".html")
 		return true;
 
+	// we will check here later
 	if (name.size() >= 15 && name.substr(name.size()-14) == ".bad_extension")
 		return true;
 
