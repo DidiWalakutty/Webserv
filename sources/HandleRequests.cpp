@@ -440,10 +440,23 @@ void HTTPResponse::handleErrorPages(HTTPState state)
 	std::cout << "in HandleErrorPages with state: " << state << std::endl;
 	updateForHTTPState(state);
 	std::cout << "Error page is given: " << state << std::endl;
+	HTTPMessage statusMessage = HTTPCommon::HTTPStatusMap.at(state);
 	
 	// Path to error HTLM pages
-	std::string errorPath = "www/errors/" + statusCode + ".html";
+	std::string errorPath = "www/html/errors/" + statusCode + ".html";
 	std::ifstream file(errorPath, std::ios::binary);
+
+	auto replaceAll = [](std::string& inout, const std::string& from, const std::string& to)
+	{
+		if (from.empty())
+			return;
+		size_t pos = 0;
+		while ((pos = inout.find(from, pos)) != std::string::npos)
+		{
+			inout.replace(pos, from.size(), to);
+			pos += to.size();
+		}
+	};
 
 	// --- If the error page exists, server it ---
 	if (file.is_open())
@@ -452,6 +465,11 @@ void HTTPResponse::handleErrorPages(HTTPState state)
 		buffer << file.rdbuf();
 		body = buffer.str();
 		file.close();
+
+		// Fill optional template placeholders (only if they exist in the HTML)
+		replaceAll(body, "{{STATUS_CODE}}", statusMessage.code);
+		replaceAll(body, "{{REASON_PHRASE}}", statusMessage.message);
+		replaceAll(body, "{{DESCRIPTION}}", statusMessage.description);
 
 		// Set the content-type for HTML error pages
 		headers["CONTENT-TYPE"] = "text/html";
