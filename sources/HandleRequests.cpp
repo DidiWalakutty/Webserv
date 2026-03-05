@@ -197,7 +197,7 @@ void HTTPResponse::handlePOST(const HTTPRequest& request, const std::string& upl
 		}
 		
 		if (!allowedExtensions.count(ext))
-		ext = ".bin";
+			ext = ".bin";
 		
 		// test, remove later
 		std::cout << "Extracted - multipart - filename: " << fileName << std::endl;
@@ -231,11 +231,11 @@ void HTTPResponse::handlePOST(const HTTPRequest& request, const std::string& upl
 		}
 
 		if (!allowedExtensions.count(ext) || ext.empty())
-			ext = ".bin"; // generi
+			ext = ".bin";
 	}
 
 	// --- Add extension to filename ---
-	fileName += ext; // add extension to filename
+	fileName += ext;
 
 	// --- File path to save the upload to ---
 	std::string filePath = uploadDir + fileName;
@@ -262,7 +262,7 @@ void HTTPResponse::handlePOST(const HTTPRequest& request, const std::string& upl
 
 	outFile.close();
 
-	// --- Respond 201 and redirect back to GET /upload to show updated autoindex with new file ---
+	// --- Successfull! Respond 201 and redirect back to GET /upload to show updated autoindex with new file ---
 	headers["LOCATION"] = "/upload/"; 
 	updateForHTTPState(HTTPState::Created);
 }
