@@ -70,11 +70,39 @@ std::string ServerParse::joinPaths(const std::string& root, const std::string& u
 	return (root + url);
 }
 
+/**
+ *  @brief Decodes percent-encoded characters in a URL path.
+ * 
+ * @details Browsers encode special chars using percent encoding (space = %20).
+ * 			When we request or delete a file that contains special chars, the
+ * 			server receives the encoded form. This function decodes it to the OG chars
+ * Example: "/upload/My%20File.txt" -> "/upload/My File.txt"
+ */
+std::string urlDecode(const std::string& str)
+{
+	std::string result;
+	for (size_t i = 0; i < str.length(); i++)
+	{
+		if (str[i] == '%' && i + 2 < str.length())
+		{
+			std::string hex = str.substr(i + 1, 2);
+			char decodedChar = static_cast<char>(std::stoi(hex, nullptr, 16));
+			result += decodedChar;
+			i += 2; // Skip the next two hex characters
+		}
+		else if (str[i] == '+')
+			result += ' ';
+		else
+			result += str[i];
+	}
+	return result;
+}
+
 // request url: /images/logo.png, location path: /images.
 // We want the full path: www/html/images/logo.png	
 std::string ServerParse::build_filesystem_path(const std::string& reqPath) const
 {
-	std::string urlPath = reqPath;
+	std::string urlPath = urlDecode(reqPath);
 
 	// Ensure path starts with '/'
 	if (urlPath.empty())
@@ -100,12 +128,12 @@ std::string ServerParse::build_filesystem_path(const std::string& reqPath) const
 	}
 
 	// Reject directory traversal attempts
-	if (urlPath.find("..") != std::string::npos)
+	if (urlPath.find("/../") != std::string::npos || urlPath.rfind("/..", urlPath.size() - 1) != std::string::npos)
 	{
 		std::cerr << "Error: directory traversal attempt detected" << std::endl;
 		return ("");
 	}
-
+	
 	// Find best matching location
 	const LocationParse* location = get_best_location(urlPath);
 	
