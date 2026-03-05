@@ -141,8 +141,8 @@ bool HTTPRequest::parseRequest(const std::string raw)
 			throw HTTPRequestException("Body size exceeds maximum limit");
 	}
 	body = bodyRaw;
-	if (!isValidBody(body))
-		throw HTTPRequestException("Invalid body content: " + body);
+	// if (!isValidBody(body))
+	// 	throw HTTPRequestException("Invalid body content: " + body);
 	return true;
 }
 
