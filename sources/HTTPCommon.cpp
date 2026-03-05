@@ -56,6 +56,8 @@ HTTPMethod HTTPCommon::stringToMethod(const std::string method)
 		return HTTPMethod::DELETE;
 	else if (method == "HEAD")
 		return HTTPMethod::HEAD;
+	else if (method == "PATCH")
+		return HTTPMethod::PATCH;
 	else
 		return HTTPMethod::UNSUPPORTED;
 };
@@ -74,6 +76,8 @@ std::string HTTPCommon::methodToString(HTTPMethod method)
 		return "DELETE";
 	case HTTPMethod::HEAD:
 		return "HEAD";
+	case HTTPMethod::PATCH:
+		return "PATCH";
 	default:
 		return "UNSUPPORTED";
 	}
@@ -121,4 +125,10 @@ std::string cleanWhiteSpace(std::string str)
 	str.erase(0, str.find_first_not_of(" \t\r\n"));
 	str.erase(str.find_last_not_of(" \t\r\n") + 1);
 	return str;
+}
+
+bool startsWith(const std::string longStr, const std::string beginningStr)
+{
+	return longStr.size() >= beginningStr.size() &&
+		   longStr.compare(0, beginningStr.size(), beginningStr) == 0;
 }

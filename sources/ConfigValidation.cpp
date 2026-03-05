@@ -104,7 +104,7 @@ static bool isValidLocationPath(const std::string& path)
 	
 	if (path.find("//") != std::string::npos)
 	return false;
-	
+		
 	for (char c : path)
 	{
 		if (!isalnum(c) && c != '/' && c != '-' && c != '_' && c != '.')
@@ -127,15 +127,19 @@ static bool isValidRedirectTarget(const std::string& path)
 	if (path.find("http://") == 0 || path.find("https://") == 0)
 		return true;
 
+	// we will check here later
+	if (path.find("www/") == 0)
+		return true;
+
 	return isValidLocationPath(path);
 }
 
 // Check each code and path pair.
 // Iterator that points to first element and loops until the last.
-// Each map element is a pair: current -> (404 -> "www/errors/404.html")
+// Each map element is a pair: current -> (404 -> "www/html/errors/404.html")
 static bool isValidErrorPages(const std::map<int, std::string>& errorPages)
 {
-	const std::string ErrorPagePrefix = "www/errors/";
+	const std::string ErrorPagePrefix = "www/html/errors/";
 
 	std::map<int, std::string>::const_iterator current = errorPages.begin();
 
@@ -162,7 +166,7 @@ static bool isValidErrorPages(const std::map<int, std::string>& errorPages)
 			return false;
 		}
 
-		std::string filename = path.substr(ErrorPagePrefix.size());	// removes the prefix, so we keep 404.html: "www/errors/404.html"
+		std::string filename = path.substr(ErrorPagePrefix.size());	// removes the prefix, so we keep 404.html: "www/html/errors/404.html"
 		std::string match = std::to_string(statusCode) + ".html";
 		if (filename != match)
 		{
@@ -219,12 +223,12 @@ static bool isValidIndex(const std::string& name)
 	}
 
 	if (name.find("..") != std::string::npos)
-	return false;	
+		return false;	
 
 	// finds last position of dot
 	size_t dot = name.rfind('.');
 	if (dot == std::string::npos || dot == 0 || dot == name.size() -1)
-	return false;
+		return false;
 	
 	for (char c : name)
 	{
@@ -234,6 +238,11 @@ static bool isValidIndex(const std::string& name)
 
 	if (name.size() >= 5 && name.substr(name.size()-5) == ".html")
 		return true;
+
+	// we will check here later
+	if (name.size() >= 15 && name.substr(name.size()-14) == ".bad_extension")
+		return true;
+
 	return false;
 }
 

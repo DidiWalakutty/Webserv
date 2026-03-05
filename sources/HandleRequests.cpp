@@ -28,8 +28,8 @@ void HTTPResponse::handleGET(const HTTPRequest& request, const std::string& file
 	{
 		std::cout << "Redirecting to: " << loc->redirect.targetURL << " with statuscode: " << loc->redirect.statusCode << std::endl;
 		body = "";
-		headers["Location"] = loc->redirect.targetURL;
-		headers["Content-Length"] = "0";
+		headers["LOCATION"] = loc->redirect.targetURL;
+		headers["CONTENT-LENGTH"] = "0";
 
 		if (loc->redirect.statusCode == 301)
 			updateForHTTPState(HTTPState::MovedPermanently);
@@ -38,7 +38,7 @@ void HTTPResponse::handleGET(const HTTPRequest& request, const std::string& file
 		
 		// test
 		std::cout << "!!!Location header is now: "
-			<< headers["Location"] << std::endl;
+			<< headers["LOCATION"] << std::endl;
 		
 		return;
 	}
@@ -69,8 +69,8 @@ void HTTPResponse::handleGET(const HTTPRequest& request, const std::string& file
 		}
 
 		body = html;
-		headers["Content-Type"] = "text/html";
-		headers["Content-Length"] = std::to_string(body.size());
+		headers["CONTENT-TYPE"] = "text/html";
+		headers["CONTENT-LENGTH"] = std::to_string(body.size());
 		updateForHTTPState(HTTPState::Ok);
 		return;
 	}
@@ -102,8 +102,8 @@ void HTTPResponse::handleGET(const HTTPRequest& request, const std::string& file
 		}
 		
 		body = html;
-		headers["Content-Type"] = "text/html";
-		headers["Content-Length"] = std::to_string(body.size());
+		headers["CONTENT-TYPE"] = "text/html";
+		headers["CONTENT-LENGTH"] = std::to_string(body.size());
 		updateForHTTPState(HTTPState::Ok);
 		return;
 	}
@@ -121,8 +121,8 @@ void HTTPResponse::handleGET(const HTTPRequest& request, const std::string& file
 	body = buffer.str();
 	file.close();
 
-	headers["Content-Type"] = parseContentType(filePath);
-	headers["Content-Length"] = std::to_string(body.size());
+	headers["CONTENT-TYPE"] = parseContentType(filePath);
+	headers["CONTENT-LENGTH"] = std::to_string(body.size());
 	updateForHTTPState(HTTPState::Ok);
 }
 
@@ -261,9 +261,9 @@ void HTTPResponse::handlePOST(const HTTPRequest& request, const std::string& upl
 	}
 
 	outFile.close();
-	
-	// --- Successfull: 201 created an dredirect to show updated autoindex ---
-	headers["Location"] = "/upload/"; 
+
+	// --- Respond 201 and redirect back to GET /upload to show updated autoindex with new file ---
+	headers["LOCATION"] = "/upload/"; 
 	updateForHTTPState(HTTPState::Created);
 }
 
@@ -323,8 +323,8 @@ void HTTPResponse::handleDELETE(const HTTPRequest& request, const std::string& f
 	// --- Successfull deletion ---
 	std::cout << "File deleted successfully: " << filePath << std::endl;
 	body.clear();
-	headers["Content-Type"] = "text/plain";
-	headers["Content-Length"] = std::to_string(body.size());
+	headers["CONTENT-TYPE"] = "text/plain";
+	headers["CONTENT-LENGTH"] = std::to_string(body.size());
 	updateForHTTPState(HTTPState::NoContent);
 }
 
@@ -359,8 +359,8 @@ void HTTPResponse::handleHEAD(const HTTPRequest& request, const std::string& fil
 	file.close();
 
 	body.clear(); // No body for HEAD response
-	headers["Content-Type"] = parseContentType(filePath);
-	headers["Content-Length"] = std::to_string(fileSize);
+	headers["CONTENT-TYPE"] = parseContentType(filePath);
+	headers["CONTENT-LENGTH"] = std::to_string(fileSize);
 	updateForHTTPState(HTTPState::Ok);
 }
 
@@ -380,10 +380,23 @@ void HTTPResponse::handleErrorPages(HTTPState state)
 	std::cout << "in HandleErrorPages with state: " << state << std::endl;
 	updateForHTTPState(state);
 	std::cout << "Error page is given: " << state << std::endl;
+	HTTPMessage statusMessage = HTTPCommon::HTTPStatusMap.at(state);
 	
 	// Path to error HTLM pages
-	std::string errorPath = "www/errors/" + statusCode + ".html";
+	std::string errorPath = "www/html/errors/" + statusCode + ".html";
 	std::ifstream file(errorPath, std::ios::binary);
+
+	auto replaceAll = [](std::string& inout, const std::string& from, const std::string& to)
+	{
+		if (from.empty())
+			return;
+		size_t pos = 0;
+		while ((pos = inout.find(from, pos)) != std::string::npos)
+		{
+			inout.replace(pos, from.size(), to);
+			pos += to.size();
+		}
+	};
 
 	// --- If the error page exists, server it ---
 	if (file.is_open())
@@ -393,14 +406,19 @@ void HTTPResponse::handleErrorPages(HTTPState state)
 		body = buffer.str();
 		file.close();
 
+		// Fill optional template placeholders (only if they exist in the HTML)
+		replaceAll(body, "{{STATUS_CODE}}", statusMessage.code);
+		replaceAll(body, "{{REASON_PHRASE}}", statusMessage.message);
+		replaceAll(body, "{{DESCRIPTION}}", statusMessage.description);
+
 		// Set the content-type for HTML error pages
-		headers["Content-Type"] = "text/html";
-		headers["Content-Length"] = std::to_string(body.size());
+		headers["CONTENT-TYPE"] = "text/html";
+		headers["CONTENT-LENGTH"] = std::to_string(body.size());
 	}
 	else	// --- If the error page is missing, serve a simple plain-text message ---
 	{
 		body = statusCode + ": " + reasonPhrase;
-		headers["Content-Type"] = "text/plain";
-		headers["Content-Length"] = std::to_string(body.size());
+		headers["CONTENT-TYPE"] = "text/plain";
+		headers["CONTENT-LENGTH"] = std::to_string(body.size());
 	}
 }

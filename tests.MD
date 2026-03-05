@@ -85,7 +85,7 @@ curl -i http://localhost:4040/index.html
 
 curl -i -X PUT http://localhost:8080/
 
-- Expected: Proper error page from www/errors/*.html
+- Expected: Proper error page from www/html/errors/*.html
 
 
 ____________

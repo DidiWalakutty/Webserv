@@ -1,33 +1,34 @@
 #include "HTTPRequest.hpp"
 #include "server.hpp"
 
-HTTPRequest::HTTPRequest(Server* server) : server(server) {}
+HTTPRequest::HTTPRequest(Server *server) : server(server) {}
 
-bool HTTPRequest::parseRequest(const std::string raw) 
+bool HTTPRequest::parseRequest(const std::string raw)
 {
 	if (raw.empty())
 		throw HTTPRequestException("Empty (raw) request string");
-	
+
 	// --- Find Method ---
 	// Validate that request starts with a valid HTTP method (prevent binary garbage parsing)
 	size_t methodEnd = raw.find(' ');
 	if (methodEnd == std::string::npos)
 		throw HTTPRequestException("Invalid request format: does not start with valid HTTP method");
-	
+
 	std::string methodStr = raw.substr(0, methodEnd);
 	if (!isValidMethod(methodStr))
 		throw HTTPRequestException("Invalid request format: does not start with valid HTTP method");
-	
+
 	// istringstream: treats a string like input we can read from line by line + token by token.
 	std::istringstream stream(raw);
 	if (stream.fail())
 		throw HTTPRequestException("Failed to create stream from raw request");
-	
+
 	std::string requestLine;
-	std::getline(stream, requestLine);	// Reads until \n, stores it, moves forward.
+	std::getline(stream, requestLine); // Reads until \n, stores it, moves forward.
 	if (requestLine.empty() || isCRLF(requestLine))
 		throw HTTPRequestException("Empty request line");
 
+	// We determined method is valid, so we can safely convert it to enum for easier handling later.
 	method = HTTPCommon::stringToMethod(methodStr);
 
 	// --- Find Path ---
@@ -49,7 +50,7 @@ bool HTTPRequest::parseRequest(const std::string raw)
 	// Read and validate HTTP headers line-by-line until the empty line that separates the body.
 	while (std::getline(stream, line))
 	{
-		if (isCRLF(line))	// detects header/body boundary
+		if (isCRLF(line)) // detects header/body boundary
 			break;
 		size_t colon = line.find(':');
 		if (colon != std::string::npos)
@@ -72,7 +73,7 @@ bool HTTPRequest::parseRequest(const std::string raw)
 	}
 	if (headers.find("HOST") == headers.end())
 		throw HTTPRequestException("Missing required Host header");
-	
+
 	if (headers.find("CONTENT-LENGTH") != headers.end())
 	{
 		if (headers["CONTENT-LENGTH"].empty() || !std::all_of(headers["CONTENT-LENGTH"].begin(), headers["CONTENT-LENGTH"].end(), ::isdigit))
@@ -80,26 +81,36 @@ bool HTTPRequest::parseRequest(const std::string raw)
 		size_t contentLength = std::stoul(headers["CONTENT-LENGTH"]);
 		if (contentLength > MAX_BODY_SIZE)
 			throw HTTPRequestException("Content-Length exceeds maximum allowed size");
+		if (contentLength == 0 && (method == HTTPMethod::POST || method == HTTPMethod::PUT || method == HTTPMethod::PATCH))
+			throw HTTPRequestException("Content-Length header must be greater than 0 for method: " + methodStr);
 	}
-	// --- !!! --- Patch or Delete needed??
-	else if (methodStr == "POST" || methodStr == "PUT" || methodStr == "PATCH")
-	{
+	// --- !!! --- Patch or Delete needed?? DEL does not need body.
+	else if (methodStr == "PUT" || methodStr == "PATCH")
 		throw HTTPRequestException("Missing required Content-Length header for method: " + methodStr);
+	if (headers.find("TRANSFER-ENCODING") != headers.end())
+	{
+		if (headers["TRANSFER-ENCODING"] == "chunked")
+		{
+		}
+		else if (headers["TRANSFER-ENCODING"] == "gzip")
+		{
+			throw HTTPRequestException("Gzip transfer encoding is not supported");
+		}
+		else
+		{
+			throw HTTPRequestException("Unsupported Transfer-Encoding: " + headers["TRANSFER-ENCODING"]);	
+		}
 	}
 	// If request has no body, we end here.
 	if (stream.eof())
 		return true;
-	
+
 	// --- Validate body ---
 	std::cout << "Reading body..." << std::endl;
 	std::string bodyRaw;
 	if (headers.find("CONTENT-LENGTH") != headers.end())
 	{
 		size_t contentLength = std::stoul(headers["CONTENT-LENGTH"]);
-		std::cout << "Content-Length: " << contentLength << std::endl;
-		if (contentLength > MAX_BODY_SIZE)
-			throw HTTPRequestException("Content-Length exceeds maximum allowed size");
-
 		bodyRaw.resize(contentLength);
 		stream.read(&bodyRaw[0], static_cast<std::streamsize>(contentLength));
 		std::streamsize readCount = stream.gcount();
@@ -130,7 +141,6 @@ bool HTTPRequest::parseRequest(const std::string raw)
 			throw HTTPRequestException("Body size exceeds maximum limit");
 	}
 	body = bodyRaw;
-	// --- !!! --- Read Body currently empty, always returns true
 	if (!isValidBody(body))
 		throw HTTPRequestException("Invalid body content: " + body);
 	return true;
@@ -157,23 +167,129 @@ bool HTTPRequest::isValidProtocolVersion(const std::string protocolVersion) cons
 bool HTTPRequest::isValidBody(const std::string body) const
 {
 	// Current placeholder, later needs to check:
-	// - content length
-	// - chunked encoding
-	// - max body size
-	// - allowed for method
+	// - content length -> checked before
+	// - chunked encoding -> not supported, checked before
+	// - content type -> if text-based, should be printable
+	// - max body size -> checked before
+	// - allowed for method -> checked before
+
+	if (method == HTTPMethod::GET || method == HTTPMethod::HEAD || method == HTTPMethod::DELETE)
+		std::cout << "The body is provided for method " << methodToString(method) << ", which typically does not have a body. This is allowed but unusual." << std::endl;
+	if (headers.find("CONTENT-TYPE") == headers.end())
+		std::cout << "No content-type header provided for body. It will be treated as binary." << std::endl;
+	else
+	{
+		auto contentType = headers.at("CONTENT-TYPE");
+		std::cout << "Content-Type of body is: " << contentType << std::endl;
+		std::transform(contentType.begin(), contentType.end(), contentType.begin(), ::tolower);
+		if (contentType.find("text") != std::string::npos || contentType.find("json") != std::string::npos || contentType.find("xml") != std::string::npos)
+		{
+			if (!std::all_of(body.begin(), body.end(), [](char c) { return std::isprint(static_cast<unsigned char>(c)) || std::isspace(static_cast<unsigned char>(c)); }))
+			{
+				std::cerr << "Warning: Body contains non-printable characters but Content-Type suggests text. This may indicate a mismatch." << std::endl;
+				return false;
+			}
+		}
+		else if (startsWith(contentType, "multipart/form-data"))
+		{
+			size_t pos = contentType.find("boundary=");
+    		if (pos == std::string::npos)
+			{
+				std::cerr << "Warning: multipart/form-data content type specified but no boundary found." << std::endl;
+				return false;
+			}
+        	std::string boundary = contentType.substr(pos + 9);
+
+			// remove quotes if present
+			if (!boundary.empty() && boundary[0] == '"')
+			{
+				size_t end = boundary.find('"', 1);
+				if (end != std::string::npos)
+					boundary = boundary.substr(1, end - 1);
+			}
+			if (boundary.empty())
+			{
+				std::cerr << "Warning: multipart/form-data content type specified but boundary is empty." << std::endl;
+				return false;
+			}
+
+			std::string delim = "--" + boundary;
+			std::string endDelim = delim + "--";
+
+			// must contain at least one boundary
+			if (body.find(delim) == std::string::npos)
+			{
+				std::cerr << "Warning: multipart/form-data body does not contain the required boundary." << std::endl;
+				return false;
+			}
+
+			// must contain final boundary
+			if (body.find(endDelim) == std::string::npos)
+			{
+				std::cerr << "Warning: multipart/form-data body does not contain the required final boundary." << std::endl;
+				return false;
+			}
+
+			// basic structure: each part must have header/body separator
+			pos = 0;
+			while ((pos = body.find(delim, pos)) != std::string::npos)
+			{
+				size_t partStart = pos + delim.size();
+
+				// final boundary → stop
+				if (body.compare(partStart, 2, "--") == 0)
+					break;
+
+				// expect CRLF after boundary
+				if (body.compare(partStart, 2, "\r\n") != 0)
+				{
+					std::cerr << "Warning: multipart/form-data part does not have expected CRLF after boundary." << std::endl;
+					return false;
+				}
+
+				partStart += 2;
+
+				size_t headerEnd = body.find("\r\n\r\n", partStart);
+				if (headerEnd == std::string::npos)
+				{
+					std::cerr << "Warning: multipart/form-data part does not contain header/body separator." << std::endl;
+					return false;
+				}
+
+				std::string headers = body.substr(partStart, headerEnd - partStart);
+
+				// curl -X POST -F "file=@./test.txt" http://localhost:8080/upload
+				// does not include Content-Disposition in the part headers, we will allow but log a warning
+
+				// must have Content-Disposition
+				if (headers.find("Content-Disposition:") == std::string::npos)
+				{
+					std::cerr << "Warning: multipart/form-data part does not contain required Content-Disposition header." << std::endl;
+					// return false;
+				}
+
+				pos = headerEnd + 4;
+			}
+		}
+		else
+		{
+			std::cout << "Unrecognized Content-Type. No specific body validation applied." << std::endl;
+		}
+	}
 	return true;
 }
 
-// In the interest of robustness, servers SHOULD ignore any empty line(s) 
-// received where a Request-Line is expected. In other words, if the server is 
-// reading the protocol stream at the beginning of a message and receives a CRLF first, 
+// In the interest of robustness, servers SHOULD ignore any empty line(s)
+// received where a Request-Line is expected. In other words, if the server is
+// reading the protocol stream at the beginning of a message and receives a CRLF first,
 // it should ignore the CRLF.
 bool HTTPRequest::isCRLF(const std::string line) const
 {
 	return line == "\r" || line == "" || line == "\n" || line == "\r\n" || line == "\n\r" || line == "\t";
 }
 
-void HTTPRequest::printRequest() const {
+void HTTPRequest::printRequest() const
+{
 	std::cout << "Method: " << methodToString(method) << std::endl;
 	std::cout << "Resource Path: " << resourcePath << std::endl;
 	// std::cout << "Protocol Version: " << protocolVersionToString(protocolVersion) << std::endl;
