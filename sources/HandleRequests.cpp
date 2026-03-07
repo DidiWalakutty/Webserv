@@ -264,7 +264,7 @@ void HTTPResponse::handlePOST(const HTTPRequest& request, const std::string& upl
 	
 	// --- Successfull: 201 created an dredirect to show updated autoindex ---
 	headers["LOCATION"] = "/upload/"; 
-	updateForHTTPState(HTTPState::Created);
+	handleErrorPages(HTTPState::Created);
 }
 
 /**

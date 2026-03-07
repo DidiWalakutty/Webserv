@@ -141,8 +141,8 @@ bool HTTPRequest::parseRequest(const std::string raw)
 			throw HTTPRequestException("Body size exceeds maximum limit");
 	}
 	body = bodyRaw;
-	// if (!isValidBody(body))
-	// 	throw HTTPRequestException("Invalid body content: " + body);
+	if (!isValidBody(body))
+		throw HTTPRequestException("Invalid body content: " + body);
 	return true;
 }
 
@@ -166,37 +166,34 @@ bool HTTPRequest::isValidProtocolVersion(const std::string protocolVersion) cons
 
 bool HTTPRequest::isValidBody(const std::string body) const
 {
-	// Current placeholder, later needs to check:
-	// - content length -> checked before
-	// - chunked encoding -> not supported, checked before
-	// - content type -> if text-based, should be printable
-	// - max body size -> checked before
-	// - allowed for method -> checked before
-
 	if (method == HTTPMethod::GET || method == HTTPMethod::HEAD || method == HTTPMethod::DELETE)
 		std::cout << "The body is provided for method " << methodToString(method) << ", which typically does not have a body. This is allowed but unusual." << std::endl;
 	if (headers.find("CONTENT-TYPE") == headers.end())
-		std::cout << "No content-type header provided for body. It will be treated as binary." << std::endl;
+		std::cout << "No content-type header provided for body." << std::endl;
 	else
 	{
 		auto contentType = headers.at("CONTENT-TYPE");
 		std::cout << "Content-Type of body is: " << contentType << std::endl;
-		std::transform(contentType.begin(), contentType.end(), contentType.begin(), ::tolower);
-		if (contentType.find("text") != std::string::npos || contentType.find("json") != std::string::npos || contentType.find("xml") != std::string::npos)
+		std::string contentTypeLower = contentType;
+		std::transform(contentTypeLower.begin(), contentTypeLower.end(), contentTypeLower.begin(), ::tolower);
+		if (contentTypeLower.find("text") != std::string::npos || contentTypeLower.find("json") != std::string::npos || contentTypeLower.find("xml") != std::string::npos)
 		{
 			if (!std::all_of(body.begin(), body.end(), [](char c) { return std::isprint(static_cast<unsigned char>(c)) || std::isspace(static_cast<unsigned char>(c)); }))
 			{
-				std::cerr << "Warning: Body contains non-printable characters but Content-Type suggests text. This may indicate a mismatch." << std::endl;
+				std::cerr << "Warning: Body contains non-printable characters but Content-Type suggests text/json/html. This may indicate a mismatch." << std::endl;
 				return false;
 			}
 		}
-		else if (startsWith(contentType, "multipart/form-data"))
+		else if (startsWith(contentTypeLower, "multipart/form-data"))
 		{
+			// Extract boundary from original (case-preserved) content type, since boundary values are case-sensitive
 			size_t pos = contentType.find("boundary=");
+			if (pos == std::string::npos)
+				pos = contentTypeLower.find("boundary=");
     		if (pos == std::string::npos)
 			{
-				std::cerr << "Warning: multipart/form-data content type specified but no boundary found." << std::endl;
-				return false;
+				std::cerr << "Info: multipart/form-data content type specified but no boundary found." << std::endl;
+				return true; // browsers and curl always include the boundary automatically
 			}
         	std::string boundary = contentType.substr(pos + 9);
 
@@ -265,7 +262,7 @@ bool HTTPRequest::isValidBody(const std::string body) const
 				if (headers.find("Content-Disposition:") == std::string::npos)
 				{
 					std::cerr << "Warning: multipart/form-data part does not contain required Content-Disposition header." << std::endl;
-					// return false;
+					return false;
 				}
 
 				pos = headerEnd + 4;

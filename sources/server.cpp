@@ -530,6 +530,32 @@ void Server::Start()
 					{
 						std::cerr << "Failed to parse HTTP request: " << excMsg << std::endl;
 					}
+					// Send 400 Bad Request with error.html if available
+					std::string body;
+					std::string contentType = "text/plain";
+					std::ifstream errorFile("www/html/error.html", std::ios::binary);
+					if (errorFile.is_open())
+					{
+						std::ostringstream buf;
+						buf << errorFile.rdbuf();
+						body = buf.str();
+						contentType = "text/html";
+						auto replaceAll = [](std::string& s, const std::string& from, const std::string& to) {
+							size_t pos = 0;
+							while ((pos = s.find(from, pos)) != std::string::npos) { s.replace(pos, from.size(), to); pos += to.size(); }
+						};
+						replaceAll(body, "{{STATUS_CODE}}", "400");
+						replaceAll(body, "{{REASON_PHRASE}}", "Bad Request");
+						replaceAll(body, "{{DESCRIPTION}}", "The server could not understand the request due to invalid syntax.");
+					}
+					else
+						body = "400: Bad Request";
+					std::string response =
+						"HTTP/1.1 400 Bad Request\r\nContent-Type: " + contentType +
+						"\r\nContent-Length: " + std::to_string(body.size()) +
+						"\r\nConnection: close\r\n\r\n" + body;
+					ssize_t bw = write(events[i].data.fd, response.c_str(), response.size());
+					(void)bw;
 					RemoveClient(events[i].data.fd);
 					continue;
 				}

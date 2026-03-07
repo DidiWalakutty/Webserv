@@ -180,7 +180,7 @@
 
 <script>
 function deleteFile(filename) {
-    fetch('/upload/' + filename, { method: 'DELETE' })
+    fetch('/upload/' + encodeURIComponent(filename), { method: 'DELETE' })
         .then(res => {
             if (res.ok) location.reload(); // reload page to update autoindex
             else alert('Delete failed');

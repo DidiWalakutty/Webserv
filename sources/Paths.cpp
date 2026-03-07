@@ -119,7 +119,8 @@ std::string ServerParse::build_filesystem_path(const std::string& reqPath) const
 	// Reject forbidden characters
 	for (size_t i = 0; i < urlPath.size(); ++i)
 	{
-		char c = urlPath[i];
+		// casting is needed to properly check for non-printable characters and avoid signed char issues
+		unsigned char c = static_cast<unsigned char>(urlPath[i]);
 		if (c == '\\' || c == '*' || c == '?' || c == '<' || c == '>' || c == '|' || c == ':' || c < 32)
 		{
 			std::cerr << "Error: forbidden character in path: " << c << std::endl;

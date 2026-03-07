@@ -1,6 +1,0 @@
---------------------------ba2e310f54de4dd1
-Content-Disposition: form-data; name="file"; filename="test.txt"
-Content-Type: text/plain
-
-Hello from Webserv
---------------------------ba2e310f54de4dd1--
