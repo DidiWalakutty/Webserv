@@ -48,6 +48,14 @@ const LocationParse* ServerParse::get_best_location(const std::string& urlPath) 
 	return bestMatch;
 }
 
+const std::string* ServerParse::get_error_page(int errorCode) const
+{
+	std::map<int, std::string>::const_iterator it = errorPages.find(errorCode);
+	if (it != errorPages.end())
+		return &(it->second);
+	return nullptr;
+}
+
 // Joins two parts together that normalizes the slash between them
 std::string ServerParse::joinPaths(const std::string& root, const std::string& url) const
 {

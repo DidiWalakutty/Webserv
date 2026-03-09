@@ -382,9 +382,21 @@ void HTTPResponse::handleErrorPages(HTTPState state)
 	std::cout << "Error page is given: " << state << std::endl;
 	HTTPMessage statusMessage = HTTPCommon::HTTPStatusMap.at(state);
 	
-	// Path to error HTLM pages
-	std::string errorPath = "www/html/errors/" + statusCode + ".html";
-	std::ifstream file(errorPath, std::ios::binary);
+	// Path to error HTML pages
+	const std::string* customErrorPath = serverParse.get_error_page(state);
+	std::string resolvedErrorPath;
+	if (customErrorPath != nullptr)
+	{
+		resolvedErrorPath = *customErrorPath;
+		std::cout << "Custom error page found for status code: " << statusMessage.code << std::endl;
+		std::cout << "Custom error page path is: " << resolvedErrorPath << std::endl;
+	}
+	else
+	{
+		resolvedErrorPath = "www/html/errors/" + statusCode + ".html";
+		std::cout << "No custom error page found for status code: " << statusMessage.code << ". Will attempt to serve default error page." << std::endl;
+	}
+	std::ifstream file(resolvedErrorPath, std::ios::binary);
 
 	auto replaceAll = [](std::string& inout, const std::string& from, const std::string& to)
 	{
