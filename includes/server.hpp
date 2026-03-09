@@ -40,6 +40,7 @@ private:
 	int epollFD = -1;					/**< @brief Epoll instance of the file descriptor */
 	std::vector<int> serverSockets; 	/**< @brief Listening sockets (one per ServerParse) */
 	std::vector<int> clients; 			/**< @brief Connected client sockets. */
+	std::map<int, size_t> clientToServer;    /**< @brief Tracks which server each client is connected to */
 	std::map<int, std::string> clientBuffers; /**< @brief Incomplete request buffers for each client FD. */
 	const int _maxEvents = 64; 	/**< @brief Maximum number of events to process per epoll_wait call. */
 	ssize_t maxRequestSize = 1;	/**< @brief Maximum allowed size for incoming HTTP requests. */
