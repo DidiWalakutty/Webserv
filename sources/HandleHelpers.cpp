@@ -75,7 +75,7 @@ std::string HTTPResponse::generateUploadAutoindex(const std::string& uploadDir)
             continue;
 
         ss << "<div class=\"file-item\">"
-           << "<span>" << name << "</span>"
+           << "<a href=\"/upload/" << name << "\" target=\"_blank\">" << name << "</a>"
            << "<button class=\"delete-btn\" "
            << "onclick=\"deleteFile('" << name << "')\">Delete</button>"
            << "</div>";
