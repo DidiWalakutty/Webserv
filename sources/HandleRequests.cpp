@@ -383,7 +383,7 @@ void HTTPResponse::handleErrorPages(HTTPState state)
 	HTTPMessage statusMessage = HTTPCommon::HTTPStatusMap.at(state);
 	
 	// Path to error HTLM pages
-	std::string errorPath = "www/html/error.html";
+	std::string errorPath = "www/html/errors/" + statusCode + ".html";
 	std::ifstream file(errorPath, std::ios::binary);
 
 	auto replaceAll = [](std::string& inout, const std::string& from, const std::string& to)
