@@ -280,6 +280,16 @@ void Server::AddClient(const epoll_event &event)
 		clients.push_back(clientFD);
 		SetNonBlocking(clientFD);
 
+		// Remember which server accepted this client
+		for (size_t i = 0; i < serverSockets.size(); i++)
+		{
+			if (serverSockets[i] == event.data.fd)
+			{
+				clientToServer[clientFD] = i;
+				break;
+			}
+		}
+
 		epoll_event event{};
 		event.events = EPOLLIN;
 		event.data.fd = clientFD;
@@ -323,6 +333,7 @@ void Server::RemoveClient(const int &clientFD)
 
 	clients[index] = -1;
 	clientBuffers.erase(clientFD);  // Clean up incomplete request buffer
+	clientToServer.erase(clientFD); // Remove stored mapping of client to server
 
 	std::cout << std::endl
 			  << "Removed FD: " << clientFD << std::endl;
@@ -560,26 +571,22 @@ void Server::Start()
 					continue;
 				}
 
-				// --- Select appropriate server based on Host header ---
-				// the value of the Host header from the request, or empty if the client didn’t send it.
-				const std::string hostHeader = request.headers.count("HOST") ? request.headers.at("HOST") : "";
+				// --- Select appropriate server based on which listening socket accepted the client ---
 				const ServerParse* serverPtr = nullptr;
-
-				for (size_t s = 0; s < _servers.size(); s++)
+				
+				// Looks up the client FD and which server is registrered with it.
+				std::map<int, size_t>::iterator it = clientToServer.find(events[i].data.fd);
+				// If we found the FD in the map, get corresponding server config.
+				if (it != clientToServer.end())
 				{
-					if (_servers[s].serverName == hostHeader)
-					{
-						serverPtr = &_servers[s];
-						break;
-					}
+					// ->second is the index of the server.
+					serverPtr = &_servers[it->second];
 				}
 
-				if (!serverPtr && !_servers.empty())
-					serverPtr = &_servers[0];	// fallback
-				
+				// If no server found, failed to find server of client FD.
 				if (!serverPtr)
 				{
-					std::cerr << "Failed to find server configuration for request. Removing client FD: " << events[i].data.fd << std::endl;
+					std::cerr << "Failed to find server for client FD: " << events[i].data.fd << std::endl;
 					RemoveClient(events[i].data.fd);
 					continue;
 				}
