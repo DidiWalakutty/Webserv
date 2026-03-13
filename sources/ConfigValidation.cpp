@@ -326,6 +326,26 @@ static bool validateMethodsAndBools(const LocationParse& loc)
 			std::cerr << "Error: CGI location cannot have uploadEnabled or autoIndex set to true." << std::endl;
 			return false;
 		}
+		if (loc.cgi_executable.empty() || loc.cgi_extension.empty())
+		{
+			std::cerr << "Error: CGI location must have cgi_executable and cgi_extension defined if is_cgi is true." << std::endl;
+			return false;
+		}
+		if (loc.cgi_extension != ".py")
+		{
+			std::cerr << "Error: Only '.py' CGI extension is currently supported." << std::endl;
+			return false;
+		}
+	}
+
+	// != -> XOR, meaning both should be defined or both should be empty/
+	if (!loc.cgi_extension.empty() != !loc.cgi_executable.empty())
+	{
+		if (!loc.is_cgi)
+		{
+			std::cerr << "Error: CGI extension + executable should only be defined if is_cgi is true." << std::endl;
+			return false;
+		}	
 	}
 
 	if (loc.uploadEnabled)
