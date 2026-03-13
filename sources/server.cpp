@@ -14,7 +14,7 @@
 #include <cctype>
 #include <cerrno>
 
-const int MAX_CLIENTS = 10;
+const int MAX_CLIENTS = 1024;
 const size_t READ_BUFFER_SIZE = 65536;  // 64KB per read
 
 void Interrupt(int sig)
@@ -331,7 +331,7 @@ void Server::RemoveClient(const int &clientFD)
 		std::cerr << "Failed to close client FD: " << clientFD << "." << std::endl;
 	}
 
-	clients[index] = -1;
+	clients.erase(clients.begin() + index);
 	clientBuffers.erase(clientFD);  // Clean up incomplete request buffer
 	clientToServer.erase(clientFD); // Remove stored mapping of client to server
 
@@ -363,8 +363,11 @@ std::vector<char> Server::ReadClient(const int &FD)
 		}
 		else
 		{
-			// Are we sure we want to throw here? This will close the server on any read error, even transient ones. Maybe we should just remove the client instead?
-			throw(std::runtime_error("Failed to read client."));
+			// Read error - remove this client instead of crashing the server
+			std::cerr << "Read error on FD " << FD << ": " << strerror(errno) << std::endl;
+			clientBuffers.erase(FD);
+			RemoveClient(FD);
+			return result;
 		}
 	}
 	else if (bytesRead == 0)
@@ -476,30 +479,28 @@ void Server::Start()
 		
 		for (int i = 0; i < count; i++)	// handles each socket that changed state.
 		{
-			if (IsServerSocket(events[i].data.fd) && clients.size() < MAX_CLIENTS)	// Accept new connection + add client
+			if (IsServerSocket(events[i].data.fd))	// Accept new connection + add client
 			{
-				AddClient(events[i]);
-				continue;
-			}
-			else
-			{
-				// // we still need to accept and then close the socket to clean the kernel's pending connection queue
-				// AddClient(events[i]);
-				// RemoveClient(events[i].data.fd);
-				if (clients.size() >= MAX_CLIENTS)
+				if (clients.size() < MAX_CLIENTS)
 				{
+					AddClient(events[i]);
+				}
+				else
+				{
+					// Accept and immediately close to drain the kernel's pending connection queue,
+					// otherwise the server socket keeps firing EPOLLIN endlessly.
+					int tempFD = accept(events[i].data.fd, NULL, NULL);
+					if (tempFD >= 0)
+						close(tempFD);
 					std::cerr << "Too many clients connected. Rejected new connection." << std::endl;
 				}
 			}
-
-			if (events[i].events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP))	// If it's an error, remove Client
+			else if (events[i].events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP))	// If it's an error, remove Client
 			{
 				std::cout << "Remove client" << std::endl;
 				RemoveClient(events[i].data.fd);
-				continue;
 			}
-
-			if (events[i].events & EPOLLIN)		// If socket received input
+			else if (events[i].events & EPOLLIN)		// If socket received input
 			{
 				// --- Read Request ---
 				
@@ -560,7 +561,9 @@ void Server::Start()
 						replaceAll(body, "{{DESCRIPTION}}", "The server could not understand the request due to invalid syntax.");
 					}
 					else
+					{
 						body = "400: Bad Request";
+					}
 					std::string response =
 						"HTTP/1.1 400 Bad Request\r\nContent-Type: " + contentType +
 						"\r\nContent-Length: " + std::to_string(body.size()) +
@@ -597,16 +600,20 @@ void Server::Start()
 				std::string responseStr = response.buildResponse(request);
 				// send back HTTP Response to client
 				ssize_t writeSize = write(events[i].data.fd, responseStr.c_str(), responseStr.size());
-				// std::cout << std::endl
-				// 		  << BOLDGREEN << "Wrote FD: " << events[i].data.fd << std::endl;
-				// response.printResponse();
-				// std::cout << RESET << std::endl;
 				if (writeSize < 0)
 				{
 					std::cerr << "Failed to write response to client." << std::endl;
 					RemoveClient(events[i].data.fd);
 				}
-				continue;
+				else // Close connection if client requested it or if HTTP/1.0 (close-by-default)
+				{
+					auto connIt = request.headers.find("CONNECTION");
+					bool clientWantsClose = (connIt != request.headers.end() &&
+					                         connIt->second.find("close") != std::string::npos);
+					bool http10 = (request.protocolVersion == HTTPProtocolVersion::HTTP_1_0);
+					if (clientWantsClose || http10)
+						RemoveClient(events[i].data.fd);
+				}
 			}
 		}
 	}
