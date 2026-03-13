@@ -469,6 +469,10 @@ LocationParse ConfigParser::parseLocationBlock(const std::vector<std::string>& f
 			{
 				location.cgi_executable = value;
 			}
+			else if (key == "cgi_extension")
+			{
+				location.cgi_extension = value;
+			}
 			else if (key == "max_body_size")
 			{
 				try {
