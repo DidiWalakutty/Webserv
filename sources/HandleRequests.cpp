@@ -43,6 +43,22 @@ void HTTPResponse::handleGET(const HTTPRequest& request, const std::string& file
 		return;
 	}
 
+	// --- CGI detection ---
+	if (loc && loc->is_cgi)
+	{
+		size_t dot = filePath.find_last_of('.');
+		if (dot != std::string::npos)
+		{
+			std::string ext = filePath.substr(filePath.find_last_of('.'));
+			if (ext == loc->cgi_extension)
+			{
+				std::cout << "Handling CGI request for: " << filePath << std::endl;
+				handleCGI(request, filePath, *loc);
+				return;
+			}
+		}
+	}
+
 	// --- Special Case for /upload: generate autoindex if index file is requested --- 
 	if (filePath == "www/upload/upload_index.html" || filePath == "www/upload/upload_index.html/")
 	{
@@ -144,7 +160,7 @@ void HTTPResponse::handleGET(const HTTPRequest& request, const std::string& file
  * - Saves the uploaded file to the specified directory.
  * - Returns 201 Created and redirects to `/upload/` to update autoindex.
  */
-void HTTPResponse::handlePOST(const HTTPRequest& request, const std::string& uploadDir)
+void HTTPResponse::handlePOST(const HTTPRequest& request, const std::string& filePath)
 {
 	// --- Check if POST method is allowed for location ---
 	const LocationParse* location = serverParse.get_best_location(request.resourcePath);
@@ -155,8 +171,24 @@ void HTTPResponse::handlePOST(const HTTPRequest& request, const std::string& upl
 		return;
 	}
 	
+	// --- CGI detection ---
+	if (location && location->is_cgi)
+	{
+		size_t dot = filePath.find_last_of('.');
+		if (dot != std::string::npos)
+		{
+			std::string ext = filePath.substr(filePath.find_last_of('.'));
+			if (ext == location->cgi_extension)
+			{
+				std::cout << "Handling CGI request for: " << filePath << std::endl;
+				handleCGI(request, filePath, *location);
+				return;
+			}
+		}
+	}
+
 	// --- Validate upload directory, body and size ---
-	if (uploadDir.empty() || request.body.empty() || request.body.size() > serverParse.maxBodySize)
+	if (filePath.empty() || request.body.empty() || request.body.size() > serverParse.maxBodySize)
 	{
 		handleErrorPages(request.body.empty() ? HTTPState::BadRequest : HTTPState::RequestTooLarge);
 		return ;
@@ -238,12 +270,12 @@ void HTTPResponse::handlePOST(const HTTPRequest& request, const std::string& upl
 	fileName += ext; // add extension to filename
 
 	// --- File path to save the upload to ---
-	std::string filePath = uploadDir + fileName;
-	std::cout << "Saving uploaded file to: " << filePath << std::endl;
+	std::string fullPath = filePath + fileName;
+	std::cout << "Saving uploaded file to: " << fullPath << std::endl;
 	std::cout << "FileName is: " << fileName << std::endl;
 
 	// --- Save/write file ---
-	std::ofstream outFile(filePath, std::ios::binary);
+	std::ofstream outFile(fullPath, std::ios::binary);
 	if (!outFile.is_open())
 	{
 		std::cout << "Couldn't create post" << std::endl;
