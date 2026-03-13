@@ -27,7 +27,7 @@ static const std::unordered_map<std::string, std::string> allowedExtensions = {
 
 // Set for quick lookup of forbidden extensions (potentially dangerous files)
 static const std::set<std::string> forbiddenExtensions = {
-	".exe", ".php", ".sh", ".bat", ".cmd"
+	".exe", ".php", ".sh", ".bat", ".cmd", ".py"
 };
 
 /**
@@ -64,9 +64,10 @@ private:
 	ServerParse serverParse;	// field in class
 	void handleGET(const HTTPRequest& request, const std::string& filePath);
 	void handleHEAD(const HTTPRequest& request, const std::string& filePath);
-	void handlePOST(const HTTPRequest& request, const std::string& uploadDir);	// for uploads and cgi
+	void handlePOST(const HTTPRequest& request, const std::string& filePath);
 	void handleDELETE(const HTTPRequest& request, const std::string& filePath);
 	void handleErrorPages(HTTPState state);
+	void handleCGI(const HTTPRequest& request, const std::string& filePath, const LocationParse& location);
 
 	// Helper functions
 	std::string generateImagesGallery(const std::string& imagesDir);
