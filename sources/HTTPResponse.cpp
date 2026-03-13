@@ -135,7 +135,7 @@ std::string HTTPResponse::parseResponseStr(const HTTPRequest request, const std:
 			handleGET(request, filePath);
 			break;
 		case HTTPMethod::POST:
-			handlePOST(request, filePath); // pass upload dir as filepath
+			handlePOST(request, filePath);
 			break;
 		case HTTPMethod::PUT:
 			break;
