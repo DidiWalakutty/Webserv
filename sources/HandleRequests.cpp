@@ -420,13 +420,13 @@ void HTTPResponse::handleErrorPages(HTTPState state)
 	if (customErrorPath != nullptr)
 	{
 		resolvedErrorPath = *customErrorPath;
-		std::cout << "Custom error page found for status code: " << statusMessage.code << std::endl;
-		std::cout << "Custom error page path is: " << resolvedErrorPath << std::endl;
+		std::cout << "Custom error page was provided in config file for status code: " << statusMessage.code << std::endl;
+		std::cout << "Custom page path is: " << resolvedErrorPath << std::endl;
 	}
 	else
 	{
 		resolvedErrorPath = "www/html/errors/" + statusCode + ".html";
-		std::cout << "No custom error page found for status code: " << statusMessage.code << ". Will attempt to serve default error page." << std::endl;
+		std::cout << "Status code: " << statusMessage.code << " is not listed in config file error pages." << std::endl;
 	}
 	std::ifstream file(resolvedErrorPath, std::ios::binary);
 
