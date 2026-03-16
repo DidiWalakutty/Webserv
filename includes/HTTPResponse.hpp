@@ -67,7 +67,7 @@ private:
 	void handlePOST(const HTTPRequest& request, const std::string& filePath);
 	void handleDELETE(const HTTPRequest& request, const std::string& filePath);
 	void handleErrorPages(HTTPState state);
-	void handleCGI(const HTTPRequest& request, const std::string& filePath, const LocationParse& location);
+	void RunCGI(const HTTPRequest& request, const std::string& filePath, const LocationParse& location);
 
 	// Helper functions
 	std::string generateImagesGallery(const std::string& imagesDir);

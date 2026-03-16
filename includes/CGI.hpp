@@ -17,4 +17,5 @@ struct CGI
 	std::string inputData; 				// POST body for CGI input (if applicable)
 
 	bool cgiComplete = false; 			// Flag to indicate if CGI process is complete
+	int cgiExitStatus = -1;				// Exit status of CGI process (for error handling)
 };

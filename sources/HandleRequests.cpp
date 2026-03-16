@@ -49,11 +49,11 @@ void HTTPResponse::handleGET(const HTTPRequest& request, const std::string& file
 		size_t dot = filePath.find_last_of('.');
 		if (dot != std::string::npos)
 		{
-			std::string ext = filePath.substr(filePath.find_last_of('.'));
+			std::string ext = filePath.substr(dot);
 			if (ext == loc->cgi_extension)
 			{
 				std::cout << "Handling CGI request for: " << filePath << std::endl;
-				handleCGI(request, filePath, *loc);
+				RunCGI(request, filePath, *loc);
 				return;
 			}
 		}
@@ -177,11 +177,11 @@ void HTTPResponse::handlePOST(const HTTPRequest& request, const std::string& fil
 		size_t dot = filePath.find_last_of('.');
 		if (dot != std::string::npos)
 		{
-			std::string ext = filePath.substr(filePath.find_last_of('.'));
+			std::string ext = filePath.substr(dot);
 			if (ext == location->cgi_extension)
 			{
 				std::cout << "Handling CGI request for: " << filePath << std::endl;
-				handleCGI(request, filePath, *location);
+				RunCGI(request, filePath, *location);
 				return;
 			}
 		}

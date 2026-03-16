@@ -1,17 +1,39 @@
 #include "HTTPResponse.hpp"
 #include "CGI.hpp"
 
-void HTTPResponse::handleCGI(const HTTPRequest& request, const std::string& filePath, const LocationParse& location)
+void HTTPResponse::RunCGI(const HTTPRequest& request, const std::string& filePath, const LocationParse& location)
 {
-	// 1. Create pipes to communicate with the CGI process
-	// 2. Fork a child process (to run the CGI script)
-	// 3. set env variables
+	// 0. prepare CGI struct with needed info (script path, executable, env variables)
+
+	// 1. Create 2 pipes to communicate with the CGI process
+			// pipeToChild -> send POST body
+			// pipeFromChild -> read CGI output (headers + body)
+		
+	// 2. Fork  a child process (to run the CGI script).
+			// In the child process == CGI script, we will execute the CGI script.
+			// In the parent process == server, we will send input (if POST) and read output from the CGI.
+
+	// 3. Child process setup: 
+			// if pid == 0 -> in child process: redirect stdin/stdout to pipes
+			// close unused pipes
+			// change directory to the CGI script's directory (b/o relative paths)
+
+	// 4. Set environment variables (must be inside the child before execve)
+			// Store them in tempENV as "KEY=VALUE" strings
+			// Then convert to char* array for execve (env vector in CGI struct)
+
+
 	// 4. Execute the CGI script in the child process
-	// 5. Send the request body to the CGI (POST only)
-	// 6. Read CGI output (headers + body)
-	// 7. return output as HTTP response
-	// 8. when GET request, we can also pass query parameters in the env variables (QUERY_STRING)
-	// 9. Handle errors (script not found, exec failure, timeout) + return appropriate HTTP error pages
-	// 10. Security: ensure the CGI script is within the server root and has appropriate permissions (not world-writable, etc.)
-	// We already checked if extension is .py, and if it's is_cgi.
+			// If it fails, exit(1) + handle error in parent process
+
+	// 5. Parent Process:
+			// Close unused pipe ends
+			// If POST, write request body to pipeToChild + close (signals EOF to CGI)
+			// Read CGI output from pipeFromChild until EOF (returns 0) (CGI process ends and closes)
+			// Wait for child to finish (waitpid) and check exit status for errors. Prevents zombie processes
+
+	// 6. Parse CGI output: seperate headers and body (split by \r\n\r\n)
+			// Set CGI output headers in HTTP response headers
+			// Set CGI output body as HTTP response body
+
 }

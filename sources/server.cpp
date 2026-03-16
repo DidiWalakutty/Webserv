@@ -477,9 +477,13 @@ void Server::Start()
 			break;
 		}
 		
-		for (int i = 0; i < count; i++)	// handles each socket that changed state.
+		// --- Loop through all triggered events ---
+		for (int i = 0; i < count; i++)
 		{
-			if (IsServerSocket(events[i].data.fd))	// Accept new connection + add client
+			int fd = events[i].data.fd;
+
+			// --- New Client Connection ---
+			if (IsServerSocket(fd))	// Accept new connection + add client
 			{
 				if (clients.size() < MAX_CLIENTS)
 				{
@@ -495,15 +499,26 @@ void Server::Start()
 					std::cerr << "Too many clients connected. Rejected new connection." << std::endl;
 				}
 			}
+			// --- Socket Error or Hang Up ---
 			else if (events[i].events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP))	// If it's an error, remove Client
 			{
 				std::cout << "Remove client" << std::endl;
 				RemoveClient(events[i].data.fd);
 			}
-			else if (events[i].events & EPOLLIN)		// If socket received input
+			// --- CGI Output from Child Process ---
+			else if (cgiProcesses.count(fd) && (events[i].events & EPOLLIN))
+			{
+				// Handle CGI output from child process
+				// 1. Read CGI output
+				// 2. Append to cgiProcess->cgiOutput
+				// 3. If EOF, parse output and send to client
+				// 4. Clean up
+
+			}
+			// --- Regular Client Request ---
+			else if (events[i].events & EPOLLIN)
 			{
 				// --- Read Request ---
-				
 				std::vector<char> data = ReadClient(events[i].data.fd); // using first server's max body size as reference for reading
 				if (data.size() == 0)
 				{
