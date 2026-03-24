@@ -551,36 +551,51 @@ void Server::Start()
 				catch (const HTTPRequest::HTTPRequestException &exc)
 				{
 					std::string excMsg = exc.what();
+					bool isPayloadTooLarge =
+						excMsg == "Content-Length exceeds maximum allowed size" ||
+						excMsg == "Body size exceeds maximum limit";
+					HTTPState errorState = isPayloadTooLarge ? HTTPState::RequestTooLarge : HTTPState::BadRequest;
+					HTTPMessage statusMessage = HTTPCommon::HTTPStatusMap.at(errorState);
+					int statusCodeInt = static_cast<int>(errorState);
+
+					const ServerParse* parserErrorServer = nullptr;
+					std::map<int, size_t>::iterator mapIt = clientToServer.find(events[i].data.fd);
+					if (mapIt != clientToServer.end())
+						parserErrorServer = &_servers[mapIt->second];
+
 					// Skip error logging for common disconnect/malformed request cases
 					if (excMsg != "Empty (raw) request string" && 
 					    excMsg.find("Invalid request format") == std::string::npos)
 					{
 						std::cerr << "Failed to parse HTTP request: " << excMsg << std::endl;
 					}
-					// Send 400 Bad Request with error.html if available
+
+					// Send parser error response with configured error page path if available.
 					std::string body;
 					std::string contentType = "text/plain";
-					std::ifstream errorFile("www/html/error.html", std::ios::binary);
+					std::string errorPagePath = HTTPCommon::defaultErrorPagePath(statusMessage);
+					if (parserErrorServer)
+					{
+						const std::string* customErrorPath = parserErrorServer->get_error_page(statusCodeInt);
+						if (customErrorPath)
+							errorPagePath = *customErrorPath;
+					}
+
+					std::ifstream errorFile(errorPagePath.c_str(), std::ios::binary);
 					if (errorFile.is_open())
 					{
 						std::ostringstream buf;
 						buf << errorFile.rdbuf();
 						body = buf.str();
 						contentType = "text/html";
-						auto replaceAll = [](std::string& s, const std::string& from, const std::string& to) {
-							size_t pos = 0;
-							while ((pos = s.find(from, pos)) != std::string::npos) { s.replace(pos, from.size(), to); pos += to.size(); }
-						};
-						replaceAll(body, "{{STATUS_CODE}}", "400");
-						replaceAll(body, "{{REASON_PHRASE}}", "Bad Request");
-						replaceAll(body, "{{DESCRIPTION}}", "The server could not understand the request due to invalid syntax.");
+						HTTPCommon::fillErrorPageTemplate(body, statusMessage);
 					}
 					else
 					{
-						body = "400: Bad Request";
+						body = statusMessage.code + ": " + statusMessage.message;
 					}
 					std::string response =
-						"HTTP/1.1 400 Bad Request\r\nContent-Type: " + contentType +
+						"HTTP/1.1 " + statusMessage.code + " " + statusMessage.message + "\r\nContent-Type: " + contentType +
 						"\r\nContent-Length: " + std::to_string(body.size()) +
 						"\r\nConnection: close\r\n\r\n" + body;
 					ssize_t bw = write(events[i].data.fd, response.c_str(), response.size());

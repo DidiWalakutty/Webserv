@@ -132,3 +132,27 @@ bool startsWith(const std::string longStr, const std::string beginningStr)
 	return longStr.size() >= beginningStr.size() &&
 		   longStr.compare(0, beginningStr.size(), beginningStr) == 0;
 }
+
+std::string HTTPCommon::defaultErrorPagePath(const HTTPMessage &statusMessage)
+{
+	return "www/html/errors/" + statusMessage.code + ".html";
+}
+
+void HTTPCommon::fillErrorPageTemplate(std::string &body, const HTTPMessage &statusMessage)
+{
+	auto replaceAll = [](std::string &inout, const std::string &from, const std::string &to)
+	{
+		if (from.empty())
+			return;
+		size_t pos = 0;
+		while ((pos = inout.find(from, pos)) != std::string::npos)
+		{
+			inout.replace(pos, from.size(), to);
+			pos += to.size();
+		}
+	};
+
+	replaceAll(body, "{{STATUS_CODE}}", statusMessage.code);
+	replaceAll(body, "{{REASON_PHRASE}}", statusMessage.message);
+	replaceAll(body, "{{DESCRIPTION}}", statusMessage.description);
+}

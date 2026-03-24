@@ -77,6 +77,12 @@ private:
 	std::string findExtension(const HTTPRequest& request, const std::string& fileData);
 
 	/**
+	 * @brief Validates that the buffer is recieved totally.
+	 * @return True if the size mathces the expected size, false otherwise.
+	 */
+	bool validateSize(const std::string buffer, const std::string filePath);
+	
+	/**
 	 * @brief Prints the HTTP response details to the standard output.
 	 */
 	void printResponse() const;

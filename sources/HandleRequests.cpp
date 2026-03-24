@@ -71,6 +71,8 @@ void HTTPResponse::handleGET(const HTTPRequest& request, const std::string& file
 
 		std::stringstream buffer;
 		buffer << file.rdbuf();
+		if (!validateSize(buffer.str(), filePath))	
+			return;
 		std::string html = buffer.str();
 		file.close();
 
@@ -103,6 +105,8 @@ void HTTPResponse::handleGET(const HTTPRequest& request, const std::string& file
 
 		std::stringstream buffer;
 		buffer << file.rdbuf();
+		if (!validateSize(buffer.str(), filePath))	
+			return;
 		std::string html = buffer.str();
 		file.close();
 
@@ -134,6 +138,8 @@ void HTTPResponse::handleGET(const HTTPRequest& request, const std::string& file
 
 	std::stringstream buffer;
 	buffer << file.rdbuf();
+	if (!validateSize(buffer.str(), filePath))	
+		return;
 	body = buffer.str();
 	file.close();
 
@@ -425,35 +431,23 @@ void HTTPResponse::handleErrorPages(HTTPState state)
 	}
 	else
 	{
-		resolvedErrorPath = "www/html/errors/" + statusCode + ".html";
+		resolvedErrorPath = HTTPCommon::defaultErrorPagePath(statusMessage);
 		std::cout << "Status code: " << statusMessage.code << " is not listed in config file error pages." << std::endl;
 	}
 	std::ifstream file(resolvedErrorPath, std::ios::binary);
-
-	auto replaceAll = [](std::string& inout, const std::string& from, const std::string& to)
-	{
-		if (from.empty())
-			return;
-		size_t pos = 0;
-		while ((pos = inout.find(from, pos)) != std::string::npos)
-		{
-			inout.replace(pos, from.size(), to);
-			pos += to.size();
-		}
-	};
 
 	// --- If the error page exists, server it ---
 	if (file.is_open())
 	{
 		std::stringstream buffer;
 		buffer << file.rdbuf();
+		if (!validateSize(buffer.str(), resolvedErrorPath))	
+			return;
 		body = buffer.str();
 		file.close();
 
 		// Fill optional template placeholders (only if they exist in the HTML)
-		replaceAll(body, "{{STATUS_CODE}}", statusMessage.code);
-		replaceAll(body, "{{REASON_PHRASE}}", statusMessage.message);
-		replaceAll(body, "{{DESCRIPTION}}", statusMessage.description);
+		HTTPCommon::fillErrorPageTemplate(body, statusMessage);
 
 		// Set the content-type for HTML error pages
 		headers["CONTENT-TYPE"] = "text/html";
@@ -461,8 +455,29 @@ void HTTPResponse::handleErrorPages(HTTPState state)
 	}
 	else	// --- If the error page is missing, serve a simple plain-text message ---
 	{
-		body = statusCode + ": " + reasonPhrase;
+		body = statusMessage.code + ": " + statusMessage.message;
 		headers["CONTENT-TYPE"] = "text/plain";
 		headers["CONTENT-LENGTH"] = std::to_string(body.size());
 	}
+}
+
+bool HTTPResponse::validateSize(const std::string buffer, const std::string filePath)
+{
+	std::ifstream file(filePath.c_str(), std::ios::binary | std::ios::ate);
+	if (!file.is_open())
+	{
+		std::cerr << "Could not reopen file to validate size: " << filePath << std::endl;
+		handleErrorPages(HTTPState::InternalServerError);
+		return false;
+	}
+
+	std::ifstream::pos_type expected = file.tellg();
+	file.close();
+	if (expected < 0 || buffer.size() != static_cast<size_t>(expected))
+	{
+		std::cerr << "Buffer size mismatch: buffer is " << buffer.size() << " bytes, expected was " << expected << " bytes" << std::endl;
+		handleErrorPages(HTTPState::InternalServerError);
+		return false;
+	}
+	return true;
 }

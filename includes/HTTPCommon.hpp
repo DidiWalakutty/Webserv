@@ -130,6 +130,10 @@ public:
 	static HTTPProtocolVersion stringToProtocolVersion(const std::string version);
 	static std::string methodToString(HTTPMethod method);
 	static std::string protocolVersionToString(HTTPProtocolVersion version);
+
+	// Error-page helpers used by both normal response flow and parser-error flow.
+	static std::string defaultErrorPagePath(const HTTPMessage &statusMessage);
+	static void fillErrorPageTemplate(std::string &body, const HTTPMessage &statusMessage);
 };
 
 /**
