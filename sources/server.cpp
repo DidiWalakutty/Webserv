@@ -615,6 +615,8 @@ void Server::Start()
 				std::string responseStr = response.buildResponse(request);
 				// send back HTTP Response to client
 				ssize_t writeSize = write(events[i].data.fd, responseStr.c_str(), responseStr.size());
+				std::cout << "Response total size: " << responseStr.size() << std::endl;
+				std::cout << "Bytes written: " << writeSize << std::endl;
 				if (writeSize < 0)
 				{
 					std::cerr << "Failed to write response to client." << std::endl;
