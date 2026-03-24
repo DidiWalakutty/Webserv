@@ -44,20 +44,20 @@ void HTTPResponse::handleGET(const HTTPRequest& request, const std::string& file
 	}
 
 	// --- CGI detection ---
-	if (loc && loc->is_cgi)
-	{
-		size_t dot = filePath.find_last_of('.');
-		if (dot != std::string::npos)
-		{
-			std::string ext = filePath.substr(dot);
-			if (ext == loc->cgi_extension)
-			{
-				std::cout << "Handling CGI request for: " << filePath << std::endl;
-				RunCGI(request, filePath, *loc);
-				return;
-			}
-		}
-	}
+	// if (loc && loc->is_cgi)
+	// {
+	// 	size_t dot = filePath.find_last_of('.');
+	// 	if (dot != std::string::npos)
+	// 	{
+	// 		std::string ext = filePath.substr(dot);
+	// 		if (ext == loc->cgi_extension)
+	// 		{
+	// 			std::cout << "Handling CGI request for: " << filePath << std::endl;
+	// 			RunCGI(request, filePath, *loc);
+	// 			return;
+	// 		}
+	// 	}
+	// }
 
 	// --- Special Case for /upload: generate autoindex if index file is requested --- 
 	if (filePath == "www/upload/upload_index.html" || filePath == "www/upload/upload_index.html/")
@@ -171,21 +171,21 @@ void HTTPResponse::handlePOST(const HTTPRequest& request, const std::string& fil
 		return;
 	}
 	
-	// --- CGI detection ---
-	if (location && location->is_cgi)
-	{
-		size_t dot = filePath.find_last_of('.');
-		if (dot != std::string::npos)
-		{
-			std::string ext = filePath.substr(dot);
-			if (ext == location->cgi_extension)
-			{
-				std::cout << "Handling CGI request for: " << filePath << std::endl;
-				RunCGI(request, filePath, *location);
-				return;
-			}
-		}
-	}
+	// // --- CGI detection ---
+	// if (location && location->is_cgi)
+	// {
+	// 	size_t dot = filePath.find_last_of('.');
+	// 	if (dot != std::string::npos)
+	// 	{
+	// 		std::string ext = filePath.substr(dot);
+	// 		if (ext == location->cgi_extension)
+	// 		{
+	// 			std::cout << "Handling CGI request for: " << filePath << std::endl;
+	// 			RunCGI(request, filePath, *location);
+	// 			return;
+	// 		}
+	// 	}
+	// }
 
 	// --- Validate upload directory, body and size ---
 	if (filePath.empty() || request.body.empty() || request.body.size() > serverParse.maxBodySize)
