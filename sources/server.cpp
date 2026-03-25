@@ -506,15 +506,15 @@ void Server::Start()
 				RemoveClient(events[i].data.fd);
 			}
 			// --- CGI Output from Child Process ---
-			else if (cgiProcesses.count(fd) && (events[i].events & EPOLLIN))
-			{
-				// Handle CGI output from child process
-				// 1. Read CGI output
-				// 2. Append to cgiProcess->cgiOutput
-				// 3. If EOF, parse output and send to client
-				// 4. Clean up
+			// else if (cgiProcesses.count(fd) && (events[i].events & EPOLLIN))
+			// {
+			// 	// Handle CGI output from child process
+			// 	// 1. Read CGI output
+			// 	// 2. Append to cgiProcess->cgiOutput
+			// 	// 3. If EOF, parse output and send to client
+			// 	// 4. Clean up
 
-			}
+			// }
 			// --- Regular Client Request ---
 			else if (events[i].events & EPOLLIN)
 			{
