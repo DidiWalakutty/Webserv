@@ -3,6 +3,9 @@
 
 // void HTTPResponse::RunCGI(const HTTPRequest& request, const std::string& filePath, const LocationParse& location)
 // {
+
+//	// 		- for a simple blocking/synchronous CGI, your current parameters are enough
+// 	//		- for a real epoll-based CGI, you probably also need the client fd or another stored link to the client
 // 	// 0. prepare CGI struct with needed info (script path, executable, env variables)
 
 // 	// 1. Create 2 pipes to communicate with the CGI process
@@ -35,5 +38,7 @@
 // 	// 6. Parse CGI output: seperate headers and body (split by \r\n\r\n)
 // 			// Set CGI output headers in HTTP response headers
 // 			// Set CGI output body as HTTP response body
+
+//	// --- !!! May have to store http repsonse in client output buffer until fully written !!! ---
 
 // }
