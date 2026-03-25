@@ -1,5 +1,8 @@
 #pragma once
 
+#include <iostream>
+#include <vector>
+
 struct CGI
 {
 	std::string scriptPath;				// full path to CGI script
@@ -8,7 +11,6 @@ struct CGI
 
 	int pipeToChild[2];					// server -> CGI
 	int pipeFromChild[2];				// CGI -> server
-
 
 	std::vector<std::string> tempEnv;	// temporary storage or env variables ("KEY=VALUE")
 	std::vector<char*> env;				// final/converted env vector for execve
