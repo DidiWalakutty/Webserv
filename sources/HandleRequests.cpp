@@ -13,17 +13,18 @@
  */
 void HTTPResponse::handleGET(const HTTPRequest& request, const std::string& filePath)
 {
-	// std::cout << "Recourse path is " << request.resourcePath << std::endl;
 	std::cout << "Requested file path: " << filePath << std::endl;
 	
-	// --- Special case: redirect
+	// --- Find matching location for request ---
 	const LocationParse* loc = serverParse.get_best_location(request.resourcePath);
+
 	std::cout << "Resource path is: " << request.resourcePath << std::endl;
 	std::cout << "Best location path is: " << loc->path << std::endl;
 
 	// when testing if website sees redirect.
 	// std::cout << "loc redirect statuscode: " << loc->redirect.statusCode << std::endl;
 	// std::cout << "loc redirect targeturl: " << loc->redirect.targetURL << std::endl;
+	// --- Redirect takes priority ---
 	if (loc && loc->redirect.statusCode != 0 && !loc->redirect.targetURL.empty())
 	{
 		std::cout << "Redirecting to: " << loc->redirect.targetURL << " with statuscode: " << loc->redirect.statusCode << std::endl;
@@ -43,9 +44,15 @@ void HTTPResponse::handleGET(const HTTPRequest& request, const std::string& file
 		return;
 	}
 
-	// --- CGI detection ---
+	// // --- CGI detection ---
 	// if (loc && loc->is_cgi)
 	// {
+	// 	if (filePath.empty())
+	// 	{
+	// 		handleErrorPages(HTTPState::NotFound);
+	// 		return;
+	// 	}
+
 	// 	size_t dot = filePath.find_last_of('.');
 	// 	if (dot != std::string::npos)
 	// 	{
@@ -57,6 +64,9 @@ void HTTPResponse::handleGET(const HTTPRequest& request, const std::string& file
 	// 			return;
 	// 		}
 	// 	}
+	// 	// Location is CGI, but requested target doesn't match expected CGI extension
+	// 	handleErrorPages(HTTPState::NotFound);
+	// 	return;
 	// }
 
 	// --- Special Case for /upload: generate autoindex if index file is requested --- 
@@ -168,8 +178,10 @@ void HTTPResponse::handleGET(const HTTPRequest& request, const std::string& file
  */
 void HTTPResponse::handlePOST(const HTTPRequest& request, const std::string& filePath)
 {
-	// --- Check if POST method is allowed for location ---
+	// --- Find matching location for request ---
 	const LocationParse* location = serverParse.get_best_location(request.resourcePath);
+
+	// --- Check if POST is allowed for this location ---
 	if (!location || std::find(location->allowedMethods.begin(), location->allowedMethods.end(), HTTPMethod::POST) == location->allowedMethods.end())
 	{
 		perror("POST method not allowed for this location");
@@ -180,6 +192,12 @@ void HTTPResponse::handlePOST(const HTTPRequest& request, const std::string& fil
 	// // --- CGI detection ---
 	// if (location && location->is_cgi)
 	// {
+	// 	if (filePath.empty())
+	// 	{
+	// 		handleErrorPages(HTTPState::NotFound);
+	// 		return;
+	// 	}
+
 	// 	size_t dot = filePath.find_last_of('.');
 	// 	if (dot != std::string::npos)
 	// 	{
@@ -191,12 +209,27 @@ void HTTPResponse::handlePOST(const HTTPRequest& request, const std::string& fil
 	// 			return;
 	// 		}
 	// 	}
+	// 	// Location is CGI, but requested target doesn't match expected CGI extension
+	// 	handleErrorPages(HTTPState::NotFound);
+	// 	return;
 	// }
 
+	// --- Normal Upload Handling ---
+
 	// --- Validate upload directory, body and size ---
-	if (filePath.empty() || request.body.empty() || request.body.size() > serverParse.maxBodySize)
+	if (filePath.empty())
 	{
-		handleErrorPages(request.body.empty() ? HTTPState::BadRequest : HTTPState::RequestTooLarge);
+		handleErrorPages(HTTPState::NotFound);
+		return;
+	}
+	if (request.body.empty())
+	{
+		handleErrorPages(HTTPState::BadRequest);
+		return;
+	}
+	if (request.body.size() > serverParse.maxBodySize)
+	{
+		handleErrorPages(HTTPState::RequestTooLarge);
 		return ;
 	}
 
