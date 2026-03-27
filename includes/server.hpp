@@ -50,6 +50,9 @@ private:
 	std::vector<int> clients; 					/**< @brief Connected client sockets. */
 	std::map<int, size_t> clientToServer;		/**< @brief Tracks which server each client is connected to */
 	std::map<int, std::string> clientBuffers;	/**< @brief Incomplete request buffers for each client FD. */
+	std::map<int, std::string> pendingWrites;	/**< @brief Full response data waiting to be sent, keyed by client FD. */
+	std::map<int, size_t> writeOffsets;			/**< @brief Bytes already sent for each pending write, keyed by client FD. */
+	std::map<int, bool> closeAfterWrite;		/**< @brief Whether to close the connection after the pending write completes. */
 	const int _maxEvents = 64; 					/**< @brief Maximum number of events to process per epoll_wait call. */
 	ssize_t maxRequestSize = 1;					/**< @brief Maximum allowed size for incoming HTTP requests. */
 	std::vector<HTTPMethod> allowedMethods; 	/**< @brief Default allowed HTTP methods for the server */

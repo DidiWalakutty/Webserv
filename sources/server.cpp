@@ -334,6 +334,9 @@ void Server::RemoveClient(const int &clientFD)
 	clients.erase(clients.begin() + index);
 	clientBuffers.erase(clientFD);  // Clean up incomplete request buffer
 	clientToServer.erase(clientFD); // Remove stored mapping of client to server
+	pendingWrites.erase(clientFD);  // Clean up any unsent response data
+	writeOffsets.erase(clientFD);
+	closeAfterWrite.erase(clientFD);
 
 	std::cout << std::endl
 			  << "Removed FD: " << clientFD << std::endl;
@@ -515,6 +518,67 @@ void Server::Start()
 			// 	// 4. Clean up
 
 			// }
+			// --- Drain Pending Write ---
+			else if (events[i].events & EPOLLOUT)
+			{
+				int fd = events[i].data.fd;
+
+				if (!pendingWrites.count(fd))
+				{
+					// Nothing to send — switch back to reading
+					epoll_event modEv{};
+					modEv.events = EPOLLIN;
+					modEv.data.fd = fd;
+					epoll_ctl(epollFD, EPOLL_CTL_MOD, fd, &modEv);
+					continue;
+				}
+
+				const std::string& data = pendingWrites[fd];
+				size_t& offset = writeOffsets[fd];
+
+				while (offset < data.size())
+				{
+					ssize_t sent = write(fd, data.c_str() + offset, data.size() - offset);
+					if (sent < 0)
+					{
+						if (errno == EAGAIN || errno == EWOULDBLOCK)
+							break; // Kernel buffer full — EPOLLOUT will fire again
+						std::cerr << "Write error for client FD: " << fd << std::endl;
+						RemoveClient(fd);
+						goto next_event;
+					}
+					offset += static_cast<size_t>(sent);
+					std::cout << "Bytes written: " << sent << " | Total sent: " << offset
+					          << " / " << data.size() << std::endl;
+				}
+
+				if (offset >= data.size())
+				{
+					// All data sent — clean up and decide whether to keep alive
+					bool shouldClose = closeAfterWrite.count(fd) && closeAfterWrite[fd];
+					pendingWrites.erase(fd);
+					writeOffsets.erase(fd);
+					closeAfterWrite.erase(fd);
+
+					if (shouldClose)
+					{
+						RemoveClient(fd);
+					}
+					else
+					{
+						// Go back to waiting for next request
+						epoll_event modEv{};
+						modEv.events = EPOLLIN;
+						modEv.data.fd = fd;
+						if (epoll_ctl(epollFD, EPOLL_CTL_MOD, fd, &modEv) < 0)
+						{
+							std::cerr << "Failed to re-register EPOLLIN for client: " << fd << std::endl;
+							RemoveClient(fd);
+						}
+					}
+				}
+				next_event:;
+			}
 			// --- Regular Client Request ---
 			else if (events[i].events & EPOLLIN)
 			{
@@ -628,23 +692,26 @@ void Server::Start()
 				// --- Build and Send Response ---
 				HTTPResponse response(*serverPtr);
 				std::string responseStr = response.buildResponse(request);
-				// send back HTTP Response to client
-				ssize_t writeSize = write(events[i].data.fd, responseStr.c_str(), responseStr.size());
 				std::cout << "Response total size: " << responseStr.size() << std::endl;
-				std::cout << "Bytes written: " << writeSize << std::endl;
-				if (writeSize < 0)
+
+				// --- Determine if connection should close after sending ---
+				auto connIt = request.headers.find("CONNECTION");
+				bool clientWantsClose = (connIt != request.headers.end() &&
+				                         connIt->second.find("close") != std::string::npos);
+				bool http10 = (request.protocolVersion == HTTPProtocolVersion::HTTP_1_0);
+				closeAfterWrite[events[i].data.fd] = (clientWantsClose || http10);
+
+				// --- Buffer response and register EPOLLOUT to drain it ---
+				pendingWrites[events[i].data.fd] = responseStr;
+				writeOffsets[events[i].data.fd] = 0;
+
+				epoll_event writeEv{};
+				writeEv.events = EPOLLOUT;
+				writeEv.data.fd = events[i].data.fd;
+				if (epoll_ctl(epollFD, EPOLL_CTL_MOD, events[i].data.fd, &writeEv) < 0)
 				{
-					std::cerr << "Failed to write response to client." << std::endl;
+					std::cerr << "Failed to register EPOLLOUT for client: " << events[i].data.fd << std::endl;
 					RemoveClient(events[i].data.fd);
-				}
-				else // Close connection if client requested it or if HTTP/1.0 (close-by-default)
-				{
-					auto connIt = request.headers.find("CONNECTION");
-					bool clientWantsClose = (connIt != request.headers.end() &&
-					                         connIt->second.find("close") != std::string::npos);
-					bool http10 = (request.protocolVersion == HTTPProtocolVersion::HTTP_1_0);
-					if (clientWantsClose || http10)
-						RemoveClient(events[i].data.fd);
 				}
 			}
 		}

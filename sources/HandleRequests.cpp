@@ -138,6 +138,70 @@ void HTTPResponse::handleGET(const HTTPRequest& request, const std::string& file
 		return;
 	}
 
+	bool isMultipart = false;
+	if (request.headers.count("CONTENT-TYPE"))
+	{
+		std::string ct = request.headers.at("CONTENT-TYPE");
+		if (ct.find("multipart/form-data") != std::string::npos)
+			isMultipart = true;
+	}
+
+	if (isMultipart)
+	{
+		std::string fileName = "";
+		std::string fileData = "";
+		std::string ext = "";
+
+		if (!extractMultipartFile(request, fileName, fileData, ext))
+		{
+			handleErrorPages(HTTPState::BadRequest);
+			return;
+		}
+
+		// Build path to requested file
+		std::string requestedPath = filePath;
+		if (!fileName.empty())
+		{
+			// Strip trailing slash from filePath dir
+			std::string dir = filePath;
+			if (!dir.empty() && dir.back() == '/')
+				dir.pop_back();
+			requestedPath = dir + "/" + fileName + ext;
+		}
+
+		std::ifstream mfile(requestedPath, std::ios::binary);
+		if (!mfile.is_open())
+		{
+			handleErrorPages(HTTPState::NotFound);
+			return;
+		}
+
+		std::stringstream mbuffer;
+		mbuffer << mfile.rdbuf();
+		if (!validateSize(mbuffer.str(), requestedPath))
+			return;
+		std::string fileContent = mbuffer.str();
+		mfile.close();
+
+		// Build multipart/form-data response body
+		const std::string boundary = "b0undArY";
+		std::string mimeType = parseContentType(requestedPath);
+		std::string partName = fileName.empty() ? "file" : fileName;
+		std::string partFilename = fileName + ext;
+
+		body  = "--" + boundary + "\r\n";
+		body += "Content-Disposition: form-data; name=\"" + partName + "\"; filename=\"" + partFilename + "\"\r\n";
+		body += "Content-Type: " + mimeType + "\r\n";
+		body += "\r\n";
+		body += fileContent;
+		body += "\r\n--" + boundary + "--\r\n";
+
+		headers["CONTENT-TYPE"] = "multipart/form-data; boundary=" + boundary;
+		headers["CONTENT-LENGTH"] = std::to_string(body.size());
+		updateForHTTPState(HTTPState::Ok);
+		return;
+	}
+
 	// --- Normal file handling ---
 	std::ifstream file(filePath, std::ios::binary); // Treats the file as binary.
 	if (!file.is_open())
