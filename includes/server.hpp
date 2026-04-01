@@ -1,3 +1,5 @@
+#pragma once
+
 #include <sys/socket.h>
 #include <sys/epoll.h>
 #include <vector>
@@ -9,7 +11,18 @@
 #include "Config.hpp"
 #include "CGI.hpp"
 
-#pragma once
+// Reset
+#define RESET       "\033[0m"
+
+// Text colors
+#define BLACK       "\033[30m"
+#define RED         "\033[31m"
+#define GREEN       "\033[32m"
+#define YELLOW      "\033[33m"
+#define BLUE        "\033[34m"
+#define MAGENTA     "\033[35m"
+#define CYAN        "\033[36m"
+#define WHITE       "\033[37m"
 
 /**
  * @file server.hpp
