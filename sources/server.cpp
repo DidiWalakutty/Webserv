@@ -26,16 +26,17 @@ void Interrupt(int sig)
 }
 
 /**
- * @brief Construct a Server engine from parsed configuration blocks.
+ * @brief Construct the server engine with parsed configs.
  *
  * @param serverConfigs A list of parsed ServerParse structures,
  *        each representing a server block from the .conf file.
  *
  * @details
- * The constructor:
- * - Saves the server configs internally.
- * - Creates listening sockets for all servers.
- * - Initializes epoll to handle connections.
+ * - Stores all parsed server configurations in '_server',
+ * - Registers the SIGINT handler so server can shut down cleanly (Ctrl+C).
+ * - CreateSockets: listening sockets for each server configuration (one socket per ServerParse).
+ * - CreateEpoll: the epoll instance and registers the listening sockets in it.
+ * - If it fails, throw exception.
  */
 Server::Server(const std::vector<ServerParse>& serverConfigs)
 	: _servers(serverConfigs), epollFD(-1)
@@ -44,14 +45,8 @@ Server::Server(const std::vector<ServerParse>& serverConfigs)
 
 	try
 	{
-		CreateSockets();
-		CreateEpoll();
-		// std::cout << "Server is running on the following sockets: "; // Always starts from Socket 3
-		// for (size_t i = 0; i < serverSockets.size(); ++i)
-		// {
-		// 	std::cout << serverSockets[i] << " ";
-		// 	std::cout << std::endl;
-		// }
+		CreateSockets();	// like a door for clients to connect to
+		CreateEpoll();		// like a notification mechanism
 	}
 	catch (const std::exception& e)
 	{
@@ -69,26 +64,27 @@ Server::~Server()
 }
 
 /**
- * @brief Create listening sockets for all servers.
+ * @brief Creates listening sockets for all servers.
  *
  * @details
+ * A listening socket waits for incoming client connections.
+ * It only accepts new connections and does not send/receive HTTP data itself.
+ * Each accepted client gets its own separate client socket.
+ * 
  * For each ServerParse in _servers:
  *  - Creates a non-blocking TCP socket.
- *  - Allow quick restart with SO_REUSEADDR.
- *  - Binds to host and port.
- *  - Listens for incoming connections (SOMAXCONN backlog).
- *	- Each socketFD is stored in serverSockets and later added to epoll for monitoring
+ * 	- Set socket options (SO_REUSEADDR) to allow quick restart.
+ * 	- Bind the socket to the configured host and port.
+ *  - Start listening for incoming connections.
  * 
- * Differences from old code:
- * - Old code used `ServerConfig` with multiple ports and a SocketConfig.
- *   The type/domain/protocol were configurable via the struct.
- * - New code uses the parsed ServerParse:
- *     - Each server block has one port and host.
- *     - Type/domain/protocol are fixed (AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0).
- * - Old code assumed one server; new code supports multiple servers via _servers vector.
+ *  Summarized:
+ *  - One listening socket per server block (ServerParse).
+ *  - All listening sockets are stored in serverSockets.
+ *  - These sockets wlil be monitored by epoll.
  */
 void Server::CreateSockets()
 {
+	// Clean up any existing sockets before creating new ones
 	DestroySockets();
 
 	if (!serverSockets.empty())
@@ -100,27 +96,33 @@ void Server::CreateSockets()
 	{
 		const ServerParse& server = _servers[i];
 
-		int socketFD = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);		// AF_INET = IPv4, SOCK_STREAM = TCP
+		// --- Create non-blocking TCP socket ---
+		// AF_INET = IPv4, SOCK_STREAM = TCP (reliable connection), SOCK_NONBLOCK = non-blocking mode
+		int socketFD = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
 		if (socketFD < 0)
 		{
 			throw(std::runtime_error("Failed to create server socket."));
 		}
 
-		int opt = 1;	// sets socket options. SO_REUSEADDR allows a quick server restart
+		// --- Allow quick reuse of address/port after server restart ---
+		int opt = 1;	// sets socket options -> prevents "Address already in use"
 		if (setsockopt(socketFD, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0)
 		{
 			throw(std::runtime_error("Failed to set socket option,"));
 		}
 		
+		// --- Make socket non-blocking ---
 		SetNonBlocking(socketFD);
 
+		// --- Bind socket to configured host and port ---
 		sockaddr_in address{};							// struct that holds IP + port for the socket
 		address.sin_family = AF_INET;					// IPv4
-		address.sin_port = htons(server.port);			// convert port from host byte order to network byte order
+		address.sin_port = htons(server.port);			// converts port num to network byte order for the socket
 		address.sin_addr.s_addr = server.host.empty() 	// the IP address the socket listens on
 									? INADDR_ANY		// if !host, INADDR_ANY listens on all network interfaces
 									: inet_addr(server.host.c_str());	// converts string to numeric format for the socket
 
+		// --- Bind socket to IP and port ---							
 		if (bind(socketFD, (sockaddr*)&address, sizeof(address)) < 0)	// Associates the socket with a specific IP + port
 		{
 			throw(std::runtime_error("Failed to bind server socket."));
@@ -131,7 +133,8 @@ void Server::CreateSockets()
 		// inet_ntop(AF_INET, &address.sin_addr, buf, sizeof(buf));
 		// std::cout << "Bound socketFD " << socketFD << " to " << buf << ":" << ntohs(address.sin_port) << std::endl;
 
-		if (listen(socketFD, SOMAXCONN) < 0)			// Makes the socket start acception connections
+		// --- Start listening for incoming connections ---
+		if (listen(socketFD, SOMAXCONN) < 0)			// SOMAXCONN == max queue of pending connections
 		{
 			throw(std::runtime_error("Failed to listen on server socket."));
 		}
@@ -241,6 +244,7 @@ void Server::SetNonBlocking(const int &FD)
 	}
 }
 
+// Check if incoming FD is one of the server sockets (indicates new client connection)
 bool Server::IsServerSocket(const int &FD)
 {
 	for (const int &socketFD : serverSockets)
@@ -253,22 +257,36 @@ bool Server::IsServerSocket(const int &FD)
 	return (false);
 }
 
+/**
+ * @brief Accepts new client connections on a listening socket + adds them to epoll for monitoring.
+ * 
+ * @param event The epoll event triggered on a server socket indicating a new incoming connection.
+ * @details
+ * Calls accept() in a loop to handle all pending connections.
+ * For each accepted client:
+ * 	- Sets the client socket to non-blocking mode.
+ *  - Stores the client FD in the server's clients list.
+ *  - Maps which server accepted the client in clientToServer map for later reference when processing requests.
+ *  - Registers the client socket in epoll for EPOLLIN events to read incoming requests.
+ * 
+ *  Because the listening socket is non-blocking, accept() must be called until it returns EAGAIN/EWOULDBLOCK
+ *  which means the kernel has no more pending connections to accept.
+ */
 void Server::AddClient(const epoll_event &event)
 {
 	while (true)
 	{
 		sockaddr_in address{};
-		socklen_t length = sizeof(in_addr);
+		socklen_t length = sizeof(address);
 
 		int clientFD = accept(event.data.fd, (sockaddr *)&address, &length);
 		if (clientFD < 0)
 		{
 			if (errno == EAGAIN || errno == EWOULDBLOCK)
 			{
-				// The socket is marked nonblocking and no connections are present to be accepted.
+				// No more pending connections to accept
 				break;
 			}
-
 			throw(std::runtime_error("Failed to accept client connection."));
 		}
 
@@ -280,7 +298,7 @@ void Server::AddClient(const epoll_event &event)
 		clients.push_back(clientFD);
 		SetNonBlocking(clientFD);
 
-		// Remember which server accepted this client
+		// Map/remember which server this client is connected to
 		for (size_t i = 0; i < serverSockets.size(); i++)
 		{
 			if (serverSockets[i] == event.data.fd)
@@ -442,28 +460,31 @@ std::vector<char> Server::ReadClient(const int &FD)
 	return result;
 }
 
-/**
- * @brief Main server loop handling all connections and events.
- *
- * @details
- * - Waits for events on all server and client sockets using epoll.
- * - For server sockets: accepts new client connections.
- * - For client sockets: reads incoming data, parses HTTP requests, 
- *   generates responses, and writes them back.
- * - Handles client errors, disconnects, and cleanup automatically.
- * - Runs until Server::running is set to false (e.g., on SIGINT).
- * - Cleans up all sockets and epoll instance when the loop ends.
+/** 
+ *  @brief Main server loop that handles connections and I/O events/requests.
  * 
- * - epoll_event: List of notifications from the kernel. Each element contains:
- * 				- events[i].data.fd -> which socket
- * 				- events[i].events  -> what happened (readable, error etc)
- */
+ * @details
+ * - Uses epoll to wait for events on all registered file descriptors 
+ * 	 (server sockets, client sockets and CGI pipes).
+ * - Waits for I/O using epoll_wait(), then processes each triggered event:
+ * 		- Server Socket (EPOLLIN):
+ * 			-> Accept new client connection(s) and add them to epoll for monitoring.
+ * 		- Client Socket (EPOLLIN):
+ * 			-> EPOLLIN: read incoming data, parse HTTP request, build response and store it in write buffer.
+* 			-> EPOLLOUT: send buffered response data (handle partial writes because of non-blocking sockets) 
+						 and clean up or keep connection alive when done.
+ * 		- CGI pipe (EPOLLIN):
+ * 			-> Read CGI output and convert it into a response.
+ * - Handles disconnects and socket errors by removing clients and cleaning up resources.
+ * - Continues running until Server::running is set to false (SIGINT handler).
+ * */ 
 void Server::Start()
 {
-	std::cout << "--- Welcome to Webserv ---" << std::endl;
-	std::cout << "--- Server Side ---" << std::endl;
+	std::cout << CYAN << "--- Welcome to Webserv ---" << RESET << std::endl;
+	std::cout << CYAN << "--- Server Side ---" << RESET << std::endl;
 	running = true;
 
+	// Buffer for epoll events added by epoll_wait
 	epoll_event events[_maxEvents];
 
 	// std::cout << "Server FDs in epoll: ";
@@ -473,6 +494,7 @@ void Server::Start()
 
 	while (running)
 	{
+		/// --- Wait for events on registered FDs ---
 		int count = epoll_wait(epollFD, events, _maxEvents, -1);
 		if (count < 0) 
 		{
@@ -494,7 +516,7 @@ void Server::Start()
 				}
 				else
 				{
-					// Accept and immediately close to drain the kernel's pending connection queue,
+					// If too many clients, accept + close immediately to prevent hanging connections and free up kernel queue
 					// otherwise the server socket keeps firing EPOLLIN endlessly.
 					int tempFD = accept(events[i].data.fd, NULL, NULL);
 					if (tempFD >= 0)
@@ -511,11 +533,11 @@ void Server::Start()
 			// --- CGI Output from Child Process ---
 			// else if (cgiProcesses.count(fd) && (events[i].events & EPOLLIN))
 			// {
-			// 	// Handle CGI output from child process
-			// 	// 1. Read CGI output
-			// 	// 2. Append to cgiProcess->cgiOutput
-			// 	// 3. If EOF, parse output and send to client
-			// 	// 4. Clean up
+				// Handle CGI output from child process
+				// 1. Read CGI output
+				// 2. Append to cgiProcess->cgiOutput
+				// 3. If EOF, parse output and send to client
+				// 4. Clean up
 
 			// }
 			// --- Drain Pending Write ---
@@ -583,7 +605,7 @@ void Server::Start()
 			else if (events[i].events & EPOLLIN)
 			{
 				// --- Read Request ---
-				std::vector<char> data = ReadClient(events[i].data.fd); // using first server's max body size as reference for reading
+				std::vector<char> data = ReadClient(events[i].data.fd);
 				if (data.size() == 0)
 				{
 					// Empty data, client closed connection or already removed
@@ -668,15 +690,15 @@ void Server::Start()
 					continue;
 				}
 
-				// --- Select appropriate server based on which listening socket accepted the client ---
+				// --- Find corresponding server config for this client FD ---
 				const ServerParse* serverPtr = nullptr;
 				
-				// Looks up the client FD and which server is registrered with it.
+				// Find which server this client is connected to using the clientToServer map
 				std::map<int, size_t>::iterator it = clientToServer.find(events[i].data.fd);
-				// If we found the FD in the map, get corresponding server config.
+				// If found, get the corresponding ServerParse pointer
 				if (it != clientToServer.end())
 				{
-					// ->second is the index of the server.
+					// ->second is the index of the server in _servers vector
 					serverPtr = &_servers[it->second];
 				}
 
@@ -688,11 +710,10 @@ void Server::Start()
 					continue;
 				}
 
-
 				// --- Build and Send Response ---
 				HTTPResponse response(*serverPtr);
 				std::string responseStr = response.buildResponse(request);
-				std::cout << "Response total size: " << responseStr.size() << std::endl;
+				// std::cout << "Response total size: " << responseStr.size() << std::endl;
 
 				// --- Determine if connection should close after sending ---
 				auto connIt = request.headers.find("CONNECTION");
