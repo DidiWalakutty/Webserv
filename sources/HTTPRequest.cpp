@@ -39,6 +39,22 @@ bool HTTPRequest::parseRequest(const std::string raw)
 	if (!isValidResourcePath(resourcePath) || isCRLF(resourcePath))
 		throw HTTPRequestException("Invalid resource path: " + resourcePath);
 
+	// --- Split on query string at '?' if available ---
+	// Query string is stored for CGI; ignored for non-CGI requests.
+	size_t queryPos = resourcePath.find('?');
+	if (queryPos != std::string::npos)
+	{
+		queryStringCGI = resourcePath.substr(queryPos + 1);
+		resourcePath = resourcePath.substr(0, queryPos);
+	}
+	else
+	{
+		queryStringCGI.clear();;
+	}
+	if (!queryStringCGI.empty())
+		std::cout << "Parsed query string: " << queryStringCGI << std::endl;
+	std::cout << "Parsed resource path (without query): " << resourcePath << std::endl;
+
 	// --- Find HTTP Protocol Version ---
 	std::string strVersion = requestLine.substr(pathEnd + 1);
 	if (!isValidProtocolVersion(strVersion) || isCRLF(strVersion))
