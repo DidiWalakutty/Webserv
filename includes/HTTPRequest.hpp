@@ -14,6 +14,7 @@ public:
 	// from request line
 	HTTPMethod method;
 	std::string resourcePath;
+	std::string queryStringCGI;
 	HTTPProtocolVersion protocolVersion;
 	Server* server;
 
