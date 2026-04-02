@@ -79,15 +79,14 @@ Server::~Server()
  * 
  *  Summarized:
  *  - One listening socket per server block (ServerParse).
- *  - All listening sockets are stored in serverSockets.
+ *  - All listening sockets are stored in listeningSockets.
  *  - These sockets wlil be monitored by epoll.
  */
 void Server::CreateSockets()
 {
-	// Clean up any existing sockets before creating new ones
 	DestroySockets();
 
-	if (!serverSockets.empty())
+	if (!listeningSockets.empty())
 	{
 		throw(std::runtime_error("Server sockets already exists."));
 	}
@@ -96,7 +95,7 @@ void Server::CreateSockets()
 	{
 		const ServerParse& server = _servers[i];
 
-		// --- Create non-blocking TCP socket ---
+		// --- Create non-blocking TCP socket ---	 
 		// AF_INET = IPv4, SOCK_STREAM = TCP (reliable connection), SOCK_NONBLOCK = non-blocking mode
 		int socketFD = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
 		if (socketFD < 0)
@@ -105,7 +104,7 @@ void Server::CreateSockets()
 		}
 
 		// --- Allow quick reuse of address/port after server restart ---
-		int opt = 1;	// sets socket options -> prevents "Address already in use"
+		int opt = 1;	// turns on option to reuse address/port -> prevents "Address already in use"
 		if (setsockopt(socketFD, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0)
 		{
 			throw(std::runtime_error("Failed to set socket option,"));
@@ -139,7 +138,7 @@ void Server::CreateSockets()
 			throw(std::runtime_error("Failed to listen on server socket."));
 		}
 
-		serverSockets.push_back(socketFD);
+		listeningSockets.push_back(socketFD);
 	}
 }
 
@@ -162,7 +161,7 @@ void Server::CreateEpoll()
 		throw(std::runtime_error("Failed to create epoll instance."));
 	}
 
-	for (const int &socketFD : serverSockets)
+	for (const int &socketFD : listeningSockets)
 	{
 		epoll_event event{};
 		event.events = EPOLLIN;
@@ -177,7 +176,7 @@ void Server::CreateEpoll()
 
 void Server::DestroySockets()
 {
-	for (int &socketFD : serverSockets)
+	for (int &socketFD : listeningSockets)
 	{
 		if (socketFD < 0)
 		{
@@ -192,7 +191,7 @@ void Server::DestroySockets()
 		socketFD = -1;
 	}
 
-	serverSockets.clear();
+	listeningSockets.clear();
 }
 
 void Server::DestroyEpoll()
@@ -229,6 +228,11 @@ void Server::Destroy()
 	DestroyEpoll();
 }
 
+/**
+ * @brief Sets 
+ * 
+ * @param FD 
+ */
 void Server::SetNonBlocking(const int &FD)
 {
 	int flags = fcntl(FD, F_GETFL, 0);
@@ -244,10 +248,10 @@ void Server::SetNonBlocking(const int &FD)
 	}
 }
 
-// Check if incoming FD is one of the server sockets (indicates new client connection)
-bool Server::IsServerSocket(const int &FD)
+// Check if this FD is a listening socket (means a new client is connecting)
+bool Server::isListeningSocket(const int &FD)
 {
-	for (const int &socketFD : serverSockets)
+	for (const int &socketFD : listeningSockets)
 	{
 		if (socketFD == FD && socketFD >= 0)
 		{
@@ -284,7 +288,6 @@ void Server::AddClient(const epoll_event &event)
 		{
 			if (errno == EAGAIN || errno == EWOULDBLOCK)
 			{
-				// No more pending connections to accept
 				break;
 			}
 			throw(std::runtime_error("Failed to accept client connection."));
@@ -299,9 +302,9 @@ void Server::AddClient(const epoll_event &event)
 		SetNonBlocking(clientFD);
 
 		// Map/remember which server this client is connected to
-		for (size_t i = 0; i < serverSockets.size(); i++)
+		for (size_t i = 0; i < listeningSockets.size(); i++)
 		{
-			if (serverSockets[i] == event.data.fd)
+			if (listeningSockets[i] == event.data.fd)
 			{
 				clientToServer[clientFD] = i;
 				break;
@@ -316,9 +319,6 @@ void Server::AddClient(const epoll_event &event)
 		{
 			throw(std::runtime_error("Failed to add client socket to epoll."));
 		}
-
-		// std::cout << std::endl
-		// 		  << "Added FD: " << event.data.fd << std::endl;
 	}
 }
 
@@ -460,24 +460,20 @@ std::vector<char> Server::ReadClient(const int &FD)
 	return result;
 }
 
-/** 
- *  @brief Main server loop that handles connections and I/O events/requests.
- * 
+/**
+ * @brief Main event loop of the server.
+ *
  * @details
- * - Uses epoll to wait for events on all registered file descriptors 
- * 	 (server sockets, client sockets and CGI pipes).
- * - Waits for I/O using epoll_wait(), then processes each triggered event:
- * 		- Server Socket (EPOLLIN):
- * 			-> Accept new client connection(s) and add them to epoll for monitoring.
- * 		- Client Socket (EPOLLIN):
- * 			-> EPOLLIN: read incoming data, parse HTTP request, build response and store it in write buffer.
-* 			-> EPOLLOUT: send buffered response data (handle partial writes because of non-blocking sockets) 
-						 and clean up or keep connection alive when done.
- * 		- CGI pipe (EPOLLIN):
- * 			-> Read CGI output and convert it into a response.
- * - Handles disconnects and socket errors by removing clients and cleaning up resources.
- * - Continues running until Server::running is set to false (SIGINT handler).
- * */ 
+ * - Uses epoll to wait for activity on any FD.
+ *     → Listening socket → accept new clients
+ *     → Client socket:
+ *         - EPOLLIN  → read request, parse it, build response
+ *         - EPOLLOUT → send response (may require multiple writes)
+ *     → CGI pipe → read CGI output
+ *     → Error → remove client
+ *
+ * - Uses non-blocking sockets, so responses may be sent in parts.
+ */
 void Server::Start()
 {
 	std::cout << CYAN << "--- Welcome to Webserv ---" << RESET << std::endl;
@@ -488,8 +484,8 @@ void Server::Start()
 	epoll_event events[_maxEvents];
 
 	// std::cout << "Server FDs in epoll: ";
-	// for (size_t i = 0; i < serverSockets.size(); i++)
-    // std::cout << serverSockets[i] << " ";
+	// for (size_t i = 0; i < listeningSockets.size(); i++)
+    // std::cout << listeningSockets[i] << " ";
 	// std::cout << std::endl;
 
 	while (running)
@@ -507,8 +503,8 @@ void Server::Start()
 		{
 			int fd = events[i].data.fd;
 
-			// --- New Client Connection ---
-			if (IsServerSocket(fd))	// Accept new connection + add client
+			// 1) --- New Client Connection ---
+			if (isListeningSocket(fd))	// Accept new connection + add client
 			{
 				if (clients.size() < MAX_CLIENTS)
 				{
@@ -516,21 +512,21 @@ void Server::Start()
 				}
 				else
 				{
-					// If too many clients, accept + close immediately to prevent hanging connections and free up kernel queue
-					// otherwise the server socket keeps firing EPOLLIN endlessly.
+					// If too many clients: accept and immediately close
+					// to clear the pending connection queue (otherwise EPOLLIN keeps firing)
 					int tempFD = accept(events[i].data.fd, NULL, NULL);
 					if (tempFD >= 0)
 						close(tempFD);
 					std::cerr << "Too many clients connected. Rejected new connection." << std::endl;
 				}
 			}
-			// --- Socket Error or Hang Up ---
+			// 2)--- Socket Error or Disconnect ---
 			else if (events[i].events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP))	// If it's an error, remove Client
 			{
 				std::cout << "Remove client" << std::endl;
 				RemoveClient(events[i].data.fd);
 			}
-			// --- CGI Output from Child Process ---
+			// 3) --- CGI Output from Child Process ---
 			// else if (cgiProcesses.count(fd) && (events[i].events & EPOLLIN))
 			// {
 				// Handle CGI output from child process
@@ -540,7 +536,7 @@ void Server::Start()
 				// 4. Clean up
 
 			// }
-			// --- Drain Pending Write ---
+			// 4) --- Drain Pending Write ---
 			else if (events[i].events & EPOLLOUT)
 			{
 				int fd = events[i].data.fd;
@@ -565,7 +561,9 @@ void Server::Start()
 					{
 						if (errno == EAGAIN || errno == EWOULDBLOCK)
 							break; // Kernel buffer full — EPOLLOUT will fire again
-						std::cerr << "Write error for client FD: " << fd << std::endl;
+						std::cerr << "Write error for client FD: " << fd 
+								  << " | errno: " << errno
+								  << " (" <<std::strerror(errno) << ")" << std::endl;
 						RemoveClient(fd);
 						goto next_event;
 					}
@@ -601,10 +599,10 @@ void Server::Start()
 				}
 				next_event:;
 			}
-			// --- Regular Client Request ---
+			// 5) --- Regular Client Request ---
 			else if (events[i].events & EPOLLIN)
 			{
-				// --- Read Request ---
+				// 1) --- Read Request ---
 				std::vector<char> data = ReadClient(events[i].data.fd);
 				if (data.size() == 0)
 				{
@@ -624,7 +622,7 @@ void Server::Start()
 							  << BOLDYELLOW << "Read FD: " << events[i].data.fd 
 							  << " (data size: " << data.size() << " bytes)" << std::endl;
 
-				// --- Parse Request ---
+				// 2)--- Parse Request ---
 				HTTPRequest request(this);
 				try
 				{
@@ -690,7 +688,7 @@ void Server::Start()
 					continue;
 				}
 
-				// --- Find corresponding server config for this client FD ---
+				// 3) --- Find corresponding server config for this client FD ---
 				const ServerParse* serverPtr = nullptr;
 				
 				// Find which server this client is connected to using the clientToServer map
@@ -698,10 +696,8 @@ void Server::Start()
 				// If found, get the corresponding ServerParse pointer
 				if (it != clientToServer.end())
 				{
-					// ->second is the index of the server in _servers vector
-					serverPtr = &_servers[it->second];
+					serverPtr = &_servers[it->second]; // it->second = server index in _servers vector
 				}
-
 				// If no server found, failed to find server of client FD.
 				if (!serverPtr)
 				{
@@ -710,19 +706,19 @@ void Server::Start()
 					continue;
 				}
 
-				// --- Build and Send Response ---
+				// 4) --- Build HTTP Response ---
 				HTTPResponse response(*serverPtr);
 				std::string responseStr = response.buildResponse(request);
 				// std::cout << "Response total size: " << responseStr.size() << std::endl;
 
-				// --- Determine if connection should close after sending ---
+				// 5)--- Determine if connection should close after sending ---
 				auto connIt = request.headers.find("CONNECTION");
 				bool clientWantsClose = (connIt != request.headers.end() &&
 				                         connIt->second.find("close") != std::string::npos);
 				bool http10 = (request.protocolVersion == HTTPProtocolVersion::HTTP_1_0);
 				closeAfterWrite[events[i].data.fd] = (clientWantsClose || http10);
 
-				// --- Buffer response and register EPOLLOUT to drain it ---
+				// 6) --- Buffer response and register EPOLLOUT to drain it ---
 				pendingWrites[events[i].data.fd] = responseStr;
 				writeOffsets[events[i].data.fd] = 0;
 
