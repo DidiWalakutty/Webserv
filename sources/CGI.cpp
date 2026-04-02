@@ -1,8 +1,8 @@
 #include "HTTPResponse.hpp"
 #include "CGI.hpp"
 
-void HTTPResponse::RunCGI(const HTTPRequest& request, const std::string& filePath, const LocationParse& location)
-{
+// void HTTPResponse::RunCGI(const HTTPRequest& request, const std::string& filePath, const LocationParse& location)
+// {
 
 	// 		- for a simple blocking/synchronous CGI, your current parameters are enough
 	//		- for a real epoll-based CGI, you probably also need the client fd or another stored link to the client
@@ -40,4 +40,4 @@ void HTTPResponse::RunCGI(const HTTPRequest& request, const std::string& filePat
 
 	// --- !!! May have to store http repsonse in client output buffer until fully written !!! ---
 
-}
+// }
