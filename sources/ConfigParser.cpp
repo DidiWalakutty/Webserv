@@ -4,6 +4,8 @@ ConfigParser::ConfigParser() {}
 
 ConfigParser::~ConfigParser() {}
 
+// Verifies that no two servers share the same host and port.
+// Logs an error message and returns true if a duplicate is detected.
 static bool duplicatesAcrossServers(const std::vector<ServerParse>& servers)
 {
 	for (size_t i = 0; i < servers.size(); ++i)
@@ -23,6 +25,15 @@ static bool duplicatesAcrossServers(const std::vector<ServerParse>& servers)
 	return false;
 }
 
+/**
+ * @brief Parses the configuration file and fills the _servers vector.
+ *
+ * Clears any previously stored servers, validates the file, preprocesses its
+ * contents, parses all server blocks, and checks for duplicate host/port entries.
+ *
+ * @param file Path to the configuration file.
+ * @return true if parsing succeeds and all server blocks are valid, false otherwise.
+ */
 bool ConfigParser::parseConfigFile(const std::string& file)
 {
 	// --- Clear previous _servers ---
@@ -42,7 +53,7 @@ bool ConfigParser::parseConfigFile(const std::string& file)
 
 	if (infile.peek() == std::ifstream::traits_type::eof())
 	{
-		std::cerr << "Error: COnfig File is empty: " << file << std::endl;
+		std::cerr << "Error: Config File is empty: " << file << std::endl;
 		return false;
 	}
 
@@ -93,12 +104,26 @@ bool ConfigParser::parseConfigFile(const std::string& file)
 	return true;
 }
 
-// This function also increments currentLine to the line after the server block
-// Parses a server block and its nested location blocks
+/**
+ * @brief Parses a single server block, including its nested location blocks.
+ * 
+ * @details Starts parsing immediately after the opening "server {" line (++currentLine).
+ * Keeps advancing until finding the matching closing "}". Tracks opening and closing braces
+ * to ensure proper block structure. For each line, it checks if it's a location block header (calls parseLocationBlock).
+ * 
+ * Extracts key-value pairs for server directives (server_name, host, port etc).
+ * Updates currentLine to the line after the closing "}" of the server blocks.
+ * 
+ * @param fileLines Preprocessed configuration lines
+ * @param currentLine Index of the current line being parsed
+ * @param parsing_error Flag set to true if a parsing error occurs within the block
+ * @return ServerParse object containing the parsed server configuration
+ */
 ServerParse ConfigParser::parseServerBlock(const std::vector<std::string>& fileLines, size_t& currentLine, bool& parsing_error)
 {
+	// --- Initialize server parsing state and temporary storage for locations ---
 	ServerParse server;
-	std::vector<LocationParse> locations; 	// Temporary storage for locations to update default location values if empty
+	std::vector<LocationParse> locations;
 	bool location_error = false;
 
 	// -> loc. and serv. handle their own brackets 
@@ -106,10 +131,11 @@ ServerParse ConfigParser::parseServerBlock(const std::vector<std::string>& fileL
 	int brackclose = 0;
 	++currentLine;
 
+	// --- Enter server block parsing loop, continue until matching closing brace is found ---
 	while (currentLine < fileLines.size() && brackOpen > 0)
 	{
 		const std::string line = fileLines[currentLine]; // local copy we can modify
-		// --- Location Parsing ---
+		// --- Detect and parse nested location blocks ---
 		if (line.find("location") == 0)
 		{
 			// Counts brackets in location header
@@ -127,13 +153,13 @@ ServerParse ConfigParser::parseServerBlock(const std::vector<std::string>& fileL
 			continue;
 		}
 		
-		// --- Finds braces in each line and add ---
+		// --- Count and track brackets in server block line ---
 		size_t openCount = std::count(line.begin(), line.end(), '{');
 		size_t closeCount = std::count(line.begin(), line.end(), '}');
 		brackOpen += openCount;
 		brackclose += closeCount;
 
-		// --- Checks if we have more than one bracket of each ---
+		// --- Validate that no extra braces exist within the server block ---
 		if (brackOpen > 1)
 		{
 			std::cerr << "Error: found extra '{' in Server block at line: " << currentLine + 1 << std::endl;
@@ -151,7 +177,7 @@ ServerParse ConfigParser::parseServerBlock(const std::vector<std::string>& fileL
 		size_t equalPos = line.find("=");
 		if (equalPos != std::string::npos)
 		{
-			// directive with key=value format
+			// --- Parse key=value directives within the server block ---
 			std::string key = line.substr(0, equalPos);
 			std::string value = line.substr(equalPos + 1);
 
@@ -199,7 +225,7 @@ ServerParse ConfigParser::parseServerBlock(const std::vector<std::string>& fileL
 				server.root = value;
 			else if (key == "index")
 				server.index = value;
-			else if (key == "autoindex")		// directory listing on/off
+			else if (key == "autoindex")
 			{ 
 				if (value == "true" || value == "on")
 					server.autoIndex = true;
@@ -288,17 +314,20 @@ ServerParse ConfigParser::parseServerBlock(const std::vector<std::string>& fileL
 				parsing_error = true;
 			}
 		}
+		// --- Advance to next line and exit if closing brace is reached ---
 		++currentLine;
 		if (brackclose == 1)
 			break;
 	}
 
+	// --- Ensure server block is properly closed ---
 	if (brackclose != 1)
 	{
 		std::cerr << "Error: Server block not closed before end of file" << std::endl;
 		parsing_error = true;
 	}
 
+	// --- Propagate location parsing errors to server level ---
 	if (location_error == true)
 	parsing_error = true;
 
@@ -307,32 +336,53 @@ ServerParse ConfigParser::parseServerBlock(const std::vector<std::string>& fileL
 	return server; 
 }
 
-LocationParse ConfigParser::parseLocationBlock(const std::vector<std::string>& fileLines, size_t& currentline, bool& location_error)
+/**
+ * @brief Parses a single location block inside a server block.
+ *
+ * @details  * Starts parsing at the line containing the location header
+ * ("location /path {"), extracts the location path, initializes
+ * default values, and processes all directives inside the block.
+ *
+ * Tracks opening and closing braces to ensure the location block is
+ * properly structured. Updates currentLine while parsing and advances it
+ * to the line after the closing '}' of the location block.
+ *
+ * @param fileLines Preprocessed configuration lines.
+ * @param currentLine Index of the current parsing position (updated during parsing).
+ * @param location_error Flag set to true if a parsing error occurs.
+ *
+ * @return A LocationParse object containing parsed values
+ *         (may be partially filled on error).
+ */
+LocationParse ConfigParser::parseLocationBlock(const std::vector<std::string>& fileLines, size_t& currentLine, bool& location_error)
 {
 	LocationParse location;
 
 	// --- Extract the "location /path {" line ---
-	const std::string line = fileLines[currentline];
+	const std::string line = fileLines[currentLine];
 	size_t pathStart = line.find("location") + 8; // gives what's after "location"
 	size_t bracePos = line.find('{');
 
+	// --- Set default values ---
 	location.autoIndex = false;
 	location.uploadEnabled = false;
 	location.is_cgi = false;
 	location.maxBodySize = 0;
 	location.cgi_executable = "";
 
+	// --- Validate location header format ---
 	location.path = line.substr(pathStart, bracePos - pathStart);
 	trimWhitespace(location.path);
 	
 	int braceCount = 1;
-	++currentline;
+	++currentLine;
 	
-	while (currentline < fileLines.size())
+	// --- Enter location block and start parsing inner directives ---
+	while (currentLine < fileLines.size())
 	{
-		const std::string line = fileLines[currentline];
+		const std::string line = fileLines[currentLine];
 
-		// --- Location Braces Count ---
+		// --- Braces Count for tracking ---
 		size_t openCount = std::count(line.begin(), line.end(), '{');
 		size_t closeCount = std::count(line.begin(), line.end(), '}');
 		braceCount += openCount;
@@ -340,13 +390,13 @@ LocationParse ConfigParser::parseLocationBlock(const std::vector<std::string>& f
 	
 		if (braceCount > 1)
 		{
-			std::cerr << "Error: found extra '{' in location block at line: " << currentline + 1 << std::endl;
+			std::cerr << "Error: found extra '{' in location block at line: " << currentLine + 1 << std::endl;
 			location_error = true;
 			return location;
 		}
 		if (closeCount > 1)
 		{
-			std::cerr << "Error: found extra '}' in location block at line: " << currentline + 1 << std::endl;
+			std::cerr << "Error: found extra '}' in location block at line: " << currentLine + 1 << std::endl;
 			location_error = true;
 			return location;
 		}
@@ -389,7 +439,7 @@ LocationParse ConfigParser::parseLocationBlock(const std::vector<std::string>& f
 					location.autoIndex = false;
 				else
 				{
-					std::cerr << "Warning: Invalid autoindex value: '" << value << "' in location block at line: " << currentline + 1 << std::endl;
+					std::cerr << "Warning: Invalid autoindex value: '" << value << "' in location block at line: " << currentLine + 1 << std::endl;
 					location.autoIndex = false;
 					std::cerr << "Auto Index was defaulted to " << (location.autoIndex ? "true" : "false") << std::endl;
 				}
@@ -407,7 +457,7 @@ LocationParse ConfigParser::parseLocationBlock(const std::vector<std::string>& f
 					}
 					else
 					{
-						std::cerr << "Warning: Invalid HTTP method: '" << tokens[i] << "' in location block at line: " << currentline + 1 << std::endl;					
+						std::cerr << "Warning: Invalid HTTP method: '" << tokens[i] << "' in location block at line: " << currentLine + 1 << std::endl;					
 						// what do we want to do???
 					}
 				}
@@ -421,12 +471,12 @@ LocationParse ConfigParser::parseLocationBlock(const std::vector<std::string>& f
 						location.redirect.statusCode = std::stoi(tokens[0]);
 					}
 					catch (const std::invalid_argument&) {
-						std::cerr << "Error: Return statuscode is not a number at line: " << currentline + 1 << std::endl;
+						std::cerr << "Error: Return statuscode is not a number at line: " << currentLine + 1 << std::endl;
 						location_error = true;
 						location.redirect.statusCode = 0;
 					}
 					catch (const std::out_of_range&) {
-						std::cerr << "Error: Return status code is too big. Check line: " << currentline + 1 << std::endl;
+						std::cerr << "Error: Return status code is too big. Check line: " << currentLine + 1 << std::endl;
 						location_error = true;
 						location.redirect.statusCode = 0;
 					}
@@ -434,7 +484,7 @@ LocationParse ConfigParser::parseLocationBlock(const std::vector<std::string>& f
 				}
 				else
 				{
-					std::cerr << "Error: Invalid return directive format in location block at line: " << currentline + 1 << std::endl;
+					std::cerr << "Error: Invalid return directive format in location block at line: " << currentLine + 1 << std::endl;
 					location_error = true;
 				}
 			}
@@ -446,7 +496,7 @@ LocationParse ConfigParser::parseLocationBlock(const std::vector<std::string>& f
 					location.uploadEnabled = false;
 				else
 				{
-					std::cerr << "Warning: Invalid choice for uploadEnabled in location block at line: " << currentline + 1 << std::endl;
+					std::cerr << "Warning: Invalid choice for uploadEnabled in location block at line: " << currentLine + 1 << std::endl;
 					location.uploadEnabled = false;
 					std::cerr << "UploadEnabled was defaulted to " << (location.uploadEnabled ? "true" : "false") << std::endl;
 				}
@@ -459,7 +509,7 @@ LocationParse ConfigParser::parseLocationBlock(const std::vector<std::string>& f
 					location.is_cgi = false;
 				else
 				{
-					std::cerr << "Warning: Invalid choice for is_cgi in location block at line: " << currentline + 1 << std::endl;
+					std::cerr << "Warning: Invalid choice for is_cgi in location block at line: " << currentLine + 1 << std::endl;
 					location.is_cgi = false;
 					std::cerr << "Is_cgi was defaulted to " << (location.is_cgi ? "true" : "false") << std::endl;
 				}
@@ -479,23 +529,23 @@ LocationParse ConfigParser::parseLocationBlock(const std::vector<std::string>& f
 					location.maxBodySize = std::stoul(value);
 				}
 				catch (const std::invalid_argument&) {
-					std::cerr << "Error: Invalid max_body_size at line " << currentline + 1 << std::endl;
+					std::cerr << "Error: Invalid max_body_size at line " << currentLine + 1 << std::endl;
 					location_error = true;
 					location.maxBodySize = 0;
 				}
 				catch (const std::out_of_range&) {
-					std::cerr << "Error: Invalid max_body_size - too big - at line " << currentline + 1 << std::endl;
+					std::cerr << "Error: Invalid max_body_size - too big - at line " << currentLine + 1 << std::endl;
 					location_error = true;
 					location.maxBodySize = 0;
 				}
 			}
 			else
 			{
-				std::cerr << "Error: Unknown directive: '" << key << "' in location block at line: " << currentline + 1 << std::endl;
+				std::cerr << "Error: Unknown directive: '" << key << "' in location block at line: " << currentLine + 1 << std::endl;
 				location_error = true;
 			}
 		}
-		++currentline;
+		++currentLine;
 
 	}
 
@@ -504,7 +554,7 @@ LocationParse ConfigParser::parseLocationBlock(const std::vector<std::string>& f
 		std::cerr << "Error: Location block not closed before end of file block." << std::endl;
 		location_error = true;
 	}
-	++currentline;	// move past closing }
+	++currentLine;	// move past closing }
 	
 	return location;
 }
