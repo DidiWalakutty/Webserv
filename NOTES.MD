@@ -83,7 +83,7 @@ Summarized To Do List: -> hopefully a little clearer
 13. Check allowed methods -> Didi's part
 14.	What's stress-testing exactly?
 15. Max number of client (sockets)?
-16. If != isServerSocket, we still need to addClient + close immediately
+16. If != isListeningSocket, we still need to addClient + close immediately
 
 
 Summary:

@@ -59,7 +59,7 @@ private:
 	std::map<int, CGIInfo> cgiProcesses;		/**< @brief Map of active CGI processes, keyed by their associated client FD. */
 
 	int epollFD = -1;							/**< @brief Epoll instance of the file descriptor */
-	std::vector<int> serverSockets; 			/**< @brief Listening sockets (one per ServerParse) */
+	std::vector<int> listeningSockets; 			/**< @brief Listening sockets (one per ServerParse) */
 	std::vector<int> clients; 					/**< @brief Connected client sockets. */
 	std::map<int, size_t> clientToServer;		/**< @brief Tracks which server each client is connected to */
 	std::map<int, std::string> clientBuffers;	/**< @brief Incomplete request buffers for each client FD. */
@@ -92,7 +92,7 @@ private:
 	 * @param FD The file descriptor to check.
 	 * @return True if the file descriptor is a server socket.
 	 */
-	bool IsServerSocket(const int &FD);
+	bool isListeningSocket(const int &FD);
 
 	/**
 	 * @brief Adds and configures a new client to the server.
