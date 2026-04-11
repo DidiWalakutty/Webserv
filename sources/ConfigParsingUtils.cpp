@@ -105,6 +105,10 @@ std::string method_to_string(HTTPMethod m)
         case HTTPMethod::GET: return "GET";
         case HTTPMethod::POST: return "POST";
         case HTTPMethod::DELETE: return "DELETE";
+		case HTTPMethod::PUT: return "PUT";
+		case HTTPMethod::HEAD: return "HEAD";
+		case HTTPMethod::PATCH: return "PATCH";
+		case HTTPMethod::UNSUPPORTED: return "UNSUPPORTED";
         default: return "UNKNOWN";
     }
 }
