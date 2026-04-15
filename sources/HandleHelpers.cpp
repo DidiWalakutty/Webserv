@@ -261,3 +261,147 @@ std::string HTTPResponse::findExtension(const HTTPRequest& request, const std::s
 
     return ext; // Can be empty if unknown
 }
+
+bool HTTPResponse::checkGetAccess(const std::string& filePath)
+{
+	// Check if file path is empty
+	if (filePath.empty())
+	{
+		handleErrorPages(HTTPState::NotFound);
+		return false;
+	}
+
+	// Check if file exists
+	if (access(filePath.c_str(), F_OK) != 0)
+	{
+		handleErrorPages(HTTPState::NotFound);
+		return false;
+	}
+
+	// Check if file is readable/openable
+	if (access(filePath.c_str(), R_OK) != 0)
+	{
+		handleErrorPages(HTTPState::Forbidden);
+		return false;
+	}
+
+	return true;
+}
+
+/**
+ * @brief Checks if a directory exists and is writable for POST uploads.
+ *
+ * @details
+ * - Uses access() to verify existence (F_OK) and write permission (W_OK).
+ * - Uses stat() to retrieve file metadata and confirm the path is a directory.
+ * - struct stat stores information about the file (type, permissions, etc.).
+ * - S_ISDIR checks if the path refers to a directory.
+ */
+bool HTTPResponse::checkPostAccess(const std::string& filePath)
+{
+	// Check if file path is empty
+	if (filePath.empty())
+	{
+		handleErrorPages(HTTPState::NotFound);
+		return false;
+	}
+
+	// Check if path exists
+	if (access(filePath.c_str(), F_OK) != 0)
+	{
+		handleErrorPages(HTTPState::NotFound);
+		return false;
+	}
+
+	// Check if path is a directory (uploads must target a directory)
+	struct stat pathStat;
+	if (stat(filePath.c_str(), &pathStat) != 0 || !S_ISDIR(pathStat.st_mode))
+	{
+		handleErrorPages(HTTPState::Forbidden);
+		return false;
+	}
+	
+	// Check if directory is writable
+	if (access(filePath.c_str(), W_OK) != 0)
+	{
+		handleErrorPages(HTTPState::Forbidden);
+		return false;
+	}
+
+	return true;
+}
+
+/**
+ * @brief Checks if the file exists, is executable and readable for CGI execution.
+ * 	F_OK: Tests for existence of the file.
+ * 	R_OK: Tests for read permission.
+ * 	X_OK: Tests for execute permission.
+ */
+bool HTTPResponse::checkCGIAccess(const std::string& filePath)
+{
+	// Check if file path is empty
+	if (filePath.empty())
+	{
+		handleErrorPages(HTTPState::NotFound);
+		return false;
+	}
+
+	// Check if file exists
+	if (access(filePath.c_str(), F_OK) != 0)
+	{
+		handleErrorPages(HTTPState::NotFound);
+		return false;
+	}
+
+	// Check if file is readable and executable
+	if (access(filePath.c_str(), R_OK | X_OK) != 0)
+	{
+		handleErrorPages(HTTPState::Forbidden);
+		return false;
+	}
+
+	return true;
+}
+
+/**
+ * @brief Checks if a file exists and can be deleted.
+ *
+ * @details
+ * - Uses access() to verify existence (F_OK) and write permission (W_OK).
+ * - Uses stat() to retrieve file metadata.
+ * - struct stat stores information about the file (type, permissions, etc.).
+ * - S_ISDIR is used to prevent deletion of directories.
+ */
+bool HTTPResponse::checkDeleteAccess(const std::string& filePath)
+{
+	// Check if path is empty
+	if (filePath.empty())
+	{
+		handleErrorPages(HTTPState::NotFound);
+		return false;
+	}
+
+	// Check if path exists
+	if (access(filePath.c_str(), F_OK) != 0)
+	{
+		handleErrorPages(HTTPState::NotFound);
+		return false;
+	}
+
+	// Check if target is a directory (forbidden to delete)
+	struct stat pathStat;
+	if (stat(filePath.c_str(), &pathStat) != 0 || S_ISDIR(pathStat.st_mode))
+	{
+		handleErrorPages(HTTPState::Forbidden);
+		return false;
+	}
+	
+	// Check if file is writable before attempting deletion
+	if (access(filePath.c_str(), W_OK) != 0)
+	{
+		handleErrorPages(HTTPState::Forbidden);
+		return false;
+	}
+
+	return true;
+}

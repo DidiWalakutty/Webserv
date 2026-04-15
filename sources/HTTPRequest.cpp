@@ -15,8 +15,9 @@ bool HTTPRequest::parseRequest(const std::string raw)
 		throw HTTPRequestException("Invalid request format: does not start with valid HTTP method");
 
 	std::string methodStr = raw.substr(0, methodEnd);
-	if (!isValidMethod(methodStr))
-		throw HTTPRequestException("Invalid request format: does not start with valid HTTP method");
+	// Rather than throwing, we send an error response for invalid method
+	// if (!isValidMethod(methodStr))
+	// 	throw HTTPRequestException("Invalid request format: does not start with valid HTTP method");
 
 	// istringstream: treats a string like input we can read from line by line + token by token.
 	std::istringstream stream(raw);

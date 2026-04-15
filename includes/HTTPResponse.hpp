@@ -2,6 +2,8 @@
 #include "HTTPRequest.hpp"
 #include "Config.hpp"
 #include <algorithm>
+#include <unistd.h>
+#include <sys/stat.h>
 #include <ctime>
 #include <sstream>
 #include <set>
@@ -73,6 +75,10 @@ private:
 	std::string generateImagesGallery(const std::string& imagesDir);
 	std::string generateUploadAutoindex(const std::string& uploadDir);
 	std::string generateUploadFilename(const std::string& prefix);
+	bool checkGetAccess(const std::string& filePath);
+	bool checkPostAccess(const std::string& filePath);
+	bool checkCGIAccess(const std::string& filePath);
+	bool checkDeleteAccess(const std::string& filePath);
 	bool extractMultipartFile(const HTTPRequest& request, std::string& fileName, std::string& fileData, std::string& ext);
 	std::string findExtension(const HTTPRequest& request, const std::string& fileData);
 
@@ -80,7 +86,7 @@ private:
 	 * @brief Validates that the buffer is recieved totally.
 	 * @return True if the size mathces the expected size, false otherwise.
 	 */
-	bool validateSize(const std::string buffer, const std::string filePath);
+	bool validateSize(const std::string& buffer, const std::string& filePath);
 	
 	/**
 	 * @brief Prints the HTTP response details to the standard output.
