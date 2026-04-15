@@ -1,8 +1,18 @@
 #include "HTTPResponse.hpp"
+#include "server.hpp"
 #include "CGI.hpp"
 
-// void HTTPResponse::RunCGI(const HTTPRequest& request, const std::string& filePath, const LocationParse& location)
-// {
+void Server::startCGI(int clientFD, const HTTPRequest& request, const std::string& filePath, const LocationParse& location)
+{
+	// use the CGI struct: cgi->
+	std::shared_ptr<CGI> cgi(new CGI);
+
+	// test
+	std::cout << "in start CGI" << std::endl;
+	std::cout << "executable: " << location.cgi_executable;
+
+	return;
+}
 
 	// 		- for a simple blocking/synchronous CGI, your current parameters are enough
 	//		- for a real epoll-based CGI, you probably also need the client fd or another stored link to the client
