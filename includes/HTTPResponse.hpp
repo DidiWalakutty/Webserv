@@ -60,6 +60,11 @@ public:
 	 */
 	std::string buildResponse(HTTPRequest request);
 
+	/**
+	 * @brief Builds
+	 */
+	std::string buildErrorResponse(const HTTPRequest& request, HTTPState state);
+
 private:
 
 	// Handler functions
@@ -69,7 +74,6 @@ private:
 	void handlePOST(const HTTPRequest& request, const std::string& filePath);
 	void handleDELETE(const HTTPRequest& request, const std::string& filePath);
 	void handleErrorPages(HTTPState state);
-	void RunCGI(const HTTPRequest& request, const std::string& filePath, const LocationParse& location);
 
 	// Helper functions
 	std::string generateImagesGallery(const std::string& imagesDir);
@@ -77,7 +81,6 @@ private:
 	std::string generateUploadFilename(const std::string& prefix);
 	bool checkGetAccess(const std::string& filePath);
 	bool checkPostAccess(const std::string& filePath);
-	bool checkCGIAccess(const std::string& filePath);
 	bool checkDeleteAccess(const std::string& filePath);
 	bool extractMultipartFile(const HTTPRequest& request, std::string& fileName, std::string& fileData, std::string& ext);
 	std::string findExtension(const HTTPRequest& request, const std::string& fileData);

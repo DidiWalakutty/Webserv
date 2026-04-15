@@ -1,4 +1,5 @@
 #include "HTTPResponse.hpp"
+#include "server.hpp"
 #include "dirent.h"
 
  /**
@@ -323,38 +324,6 @@ bool HTTPResponse::checkPostAccess(const std::string& filePath)
 	
 	// Check if directory is writable
 	if (access(filePath.c_str(), W_OK) != 0)
-	{
-		handleErrorPages(HTTPState::Forbidden);
-		return false;
-	}
-
-	return true;
-}
-
-/**
- * @brief Checks if the file exists, is executable and readable for CGI execution.
- * 	F_OK: Tests for existence of the file.
- * 	R_OK: Tests for read permission.
- * 	X_OK: Tests for execute permission.
- */
-bool HTTPResponse::checkCGIAccess(const std::string& filePath)
-{
-	// Check if file path is empty
-	if (filePath.empty())
-	{
-		handleErrorPages(HTTPState::NotFound);
-		return false;
-	}
-
-	// Check if file exists
-	if (access(filePath.c_str(), F_OK) != 0)
-	{
-		handleErrorPages(HTTPState::NotFound);
-		return false;
-	}
-
-	// Check if file is readable and executable
-	if (access(filePath.c_str(), R_OK | X_OK) != 0)
 	{
 		handleErrorPages(HTTPState::Forbidden);
 		return false;

@@ -37,6 +37,7 @@ struct CGIInfo
 {
 	std::shared_ptr<CGI> cgiProcess;	// Pointer to CGI struct
 	bool pipeIsInput;					// true if pipeToChild (server -> CGI), false if pipeFromChild (CGI -> server)
+	int clientFD;						// which client this CGI belongs to
 };
 
 /**
@@ -54,84 +55,95 @@ struct CGIInfo
  */
 class Server
 {
-private:
-	std::vector<ServerParse> _servers;			/**< @brief Parsed server blocks from config file */
-	std::map<int, CGIInfo> cgiProcesses;		/**< @brief Map of active CGI processes, keyed by their associated client FD. */
+	private:
+		std::vector<ServerParse> _servers;			/**< @brief Parsed server blocks from config file */
+		std::map<int, CGIInfo> cgiProcesses;		/**< @brief Active CGI pipe FDs mapped to their CGI state and owning client. */
 
-	int epollFD = -1;							/**< @brief Epoll instance of the file descriptor */
-	std::vector<int> listeningSockets; 			/**< @brief Listening sockets (one per ServerParse) */
-	std::vector<int> clients; 					/**< @brief Connected client sockets. */
-	std::map<int, size_t> clientToServer;		/**< @brief Tracks which server each client is connected to */
-	std::map<int, std::string> clientBuffers;	/**< @brief Incomplete request buffers for each client FD. */
-	std::map<int, std::string> pendingWrites;	/**< @brief Full response data waiting to be sent, keyed by client FD. */
-	std::map<int, size_t> writeOffsets;			/**< @brief Bytes already sent for each pending write, keyed by client FD. */
-	std::map<int, bool> closeAfterWrite;		/**< @brief Whether to close the connection after the pending write completes. */
-	const int _maxEvents = 64; 					/**< @brief Maximum number of events to process per epoll_wait call. */
-	ssize_t maxRequestSize = 1;					/**< @brief Maximum allowed size for incoming HTTP requests. */
-	std::vector<HTTPMethod> allowedMethods; 	/**< @brief Default allowed HTTP methods for the server */
+		int epollFD = -1;							/**< @brief Epoll instance of the file descriptor */
+		std::vector<int> listeningSockets; 			/**< @brief Listening sockets (one per ServerParse) */
+		std::vector<int> clients; 					/**< @brief Connected client sockets. */
+		std::map<int, size_t> clientToServer;		/**< @brief Tracks which server each client is connected to */
+		std::map<int, std::string> clientBuffers;	/**< @brief Incomplete request buffers for each client FD. */
+		std::map<int, std::string> pendingWrites;	/**< @brief Full response data waiting to be sent, keyed by client FD. */
+		std::map<int, size_t> writeOffsets;			/**< @brief Bytes already sent for each pending write, keyed by client FD. */
+		std::map<int, bool> closeAfterWrite;		/**< @brief Whether to close the connection after the pending write completes. */
+		const int _maxEvents = 64; 					/**< @brief Maximum number of events to process per epoll_wait call. */
+		ssize_t maxRequestSize = 1;					/**< @brief Maximum allowed size for incoming HTTP requests. */
+		std::vector<HTTPMethod> allowedMethods; 	/**< @brief Default allowed HTTP methods for the server */
+		
+		void QueueResponse(int clientFD, const HTTPRequest& request, const std::string& responseStr);
+		
+		// --- Run CGI ---
+		bool IsCGIRequest(const HTTPRequest& request, const ServerParse& server, std::string& filePath, const LocationParse*& location);
+		void startCGI(int clientFD, const HTTPRequest& request, const std::string& filePath, const LocationParse& location);
+		void HandleCGIEvent(int fd);
+		void HandleCGIWrite(int fd, CGIInfo& info);
+		void HandleCGIRead(int fd, CGIInfo& info);
+		void CleanupCGI(std::shared_ptr<CGI> cgi);
+		HTTPState checkCGIAccess(const std::string& filePath);
 
 	public:
-	std::vector<HTTPMethod> getAllowedMethods() const { return allowedMethods; } /**< @brief Getter for allowed HTTP methods. */
+		std::vector<HTTPMethod> getAllowedMethods() const { return allowedMethods; } /**< @brief Getter for allowed HTTP methods. */
 
 	private:
-	void CreateSockets();	/**< @brief Creates and configures the server's sockets. */
-	void CreateEpoll();		/**< @brief Creates and configures the server's Epoll instance. */
+		void CreateSockets();	/**< @brief Creates and configures the server's sockets. */
+		void CreateEpoll();		/**< @brief Creates and configures the server's Epoll instance. */
 
-	void DestroySockets();	/**< @brief Destroys and closes the server's sockets. */
-	void DestroyEpoll();	/**< @brief Destroys and closes the server's Epoll instance. */
+		void DestroySockets();	/**< @brief Destroys and closes the server's sockets. */
+		void DestroyEpoll();	/**< @brief Destroys and closes the server's Epoll instance. */
 
 
-	/**
-	 * @brief Configures the file descriptor to be non blocking.
-	 * @param FD The file descriptor to configure.
-	 */
-	void SetNonBlocking(const int &FD);
+		/**
+		 * @brief Configures the file descriptor to be non blocking.
+		 * @param FD The file descriptor to configure.
+		 */
+		void SetNonBlocking(const int &FD);
 
-	/**
-	 * @brief Checks if the file descriptor is a server socket.
-	 * @param FD The file descriptor to check.
-	 * @return True if the file descriptor is a server socket.
-	 */
-	bool isListeningSocket(const int &FD);
+		/**
+		 * @brief Checks if the file descriptor is a server socket.
+		 * @param FD The file descriptor to check.
+		 * @return True if the file descriptor is a server socket.
+		 */
+		bool isListeningSocket(const int &FD);
 
-	/**
-	 * @brief Adds and configures a new client to the server.
-	 * @param event The Epoll request event.
-	 */
-	void AddClient(const epoll_event &event);
+		/**
+		 * @brief Adds and configures a new client to the server.
+		 * @param event The Epoll request event.
+		 */
+		void AddClient(const epoll_event &event);
 
-	/**
-	 * @brief Removes an existing client from the server.
-	 * @param clientFD The file descriptor of the client.
-	 */
-	void RemoveClient(const int &clientFD);
+		/**
+		 * @brief Removes an existing client from the server.
+		 * @param clientFD The file descriptor of the client.
+		 */
+		void RemoveClient(const int &clientFD);
 
-	/**
-	 * @brief Reads data from a client.
-	 * @param FD The file descriptor of the client to read from.
-	 * @return A buffer containing the data read from the client.
-	 */
-	std::vector<char> ReadClient(const int &FD);
+		/**
+		 * @brief Reads data from a client.
+		 * @param FD The file descriptor of the client to read from.
+		 * @return A buffer containing the data read from the client.
+		 */
+		std::vector<char> ReadClient(const int &FD);
 	
 	public:
-	static bool running; /**< @brief Describes if the server should close or keep running. */
-	
-	/**
-	 * @brief Initiates and configures the server.
-	 * @param ServerParse The configuration for the server.
-	 */
-	/**< @brief Construct server engine with parsed configs */
-	Server(const std::vector<ServerParse>& serverConfigs);
-	
-	~Server();
-	
-	void Destroy(); /**< @brief Destroys and closes the server. All server and associated resources are cleaned up. */
-	void setMaxRequestSize(size_t size);
+		static bool running; /**< @brief Describes if the server should close or keep running. */
+		
+		/**
+		 * @brief Initiates and configures the server.
+		 * @param ServerParse The configuration for the server.
+		 */
+		/**< @brief Construct server engine with parsed configs */
+		Server(const std::vector<ServerParse>& serverConfigs);
+		
+		~Server();
+		
+		void Destroy(); /**< @brief Destroys and closes the server. All server and associated resources are cleaned up. */
+		void setMaxRequestSize(size_t size);
 
-	/**
-	 * @brief Starts the main server loop.
-	 * @note This will block the rest of the program until the server is closed again.
-	 * @warning Should not be called after the server is destroyed.
-	 */
-	void Start();
+		/**
+		 * @brief Starts the main server loop.
+		 * @note This will block the rest of the program until the server is closed again.
+		 * @warning Should not be called after the server is destroyed.
+		 */
+		void Start();
 };
