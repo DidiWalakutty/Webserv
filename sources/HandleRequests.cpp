@@ -44,27 +44,6 @@ void HTTPResponse::handleGET(const HTTPRequest& request, const std::string& file
 		return;
 	}
 
-	// // --- CGI detection ---
-	// if (loc && loc->is_cgi)
-	// {
-	// 	size_t dot = filePath.find_last_of('.');
-	// 	if (dot != std::string::npos)
-	// 	{
-	// 		std::string ext = filePath.substr(dot);
-	// 		if (ext == loc->cgi_extension)
-	// 		{
-	//			if (!checkCGIAccess(filePath))
-	//				return;
-	// 			std::cout << "Handling CGI request for: " << filePath << std::endl;
-	// 			RunCGI(request, filePath, *loc);
-	// 			return;
-	// 		}
-	// 	}
-	// 	// Location is CGI, but requested target doesn't match expected CGI extension
-	// 	handleErrorPages(HTTPState::NotFound);
-	// 	return;
-	// }
-
 	// --- Check if file exists and is accessible ---
 	if (!checkGetAccess(filePath))
 		return;
@@ -253,26 +232,6 @@ void HTTPResponse::handlePOST(const HTTPRequest& request, const std::string& fil
 		return;
 	}
 	
-	// // --- CGI detection ---
-	// if (location && location->is_cgi)
-	// {
-	// 	size_t dot = filePath.find_last_of('.');
-	// 	if (dot != std::string::npos)
-	// 	{
-	// 		std::string ext = filePath.substr(dot);
-	// 		if (ext == location->cgi_extension)
-	// 		{
-	// 			if (!checkCGIAccess(filePath))
-	// 				return;
-	// 			std::cout << "Handling CGI request for: " << filePath << std::endl;
-	// 			RunCGI(request, filePath, *location);
-	// 			return;
-	// 		}
-	// 	}
-	// 	// Location is CGI, but requested target doesn't match expected CGI extension
-	// 	handleErrorPages(HTTPState::NotFound);
-	// 	return;
-	// }
 
 	// --- Normal Upload Handling ---
 
