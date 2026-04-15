@@ -2,6 +2,8 @@
 
 #include <iostream>
 #include <vector>
+#include <string>
+#include <sys/types.h>
 
 struct CGI
 {
@@ -20,4 +22,8 @@ struct CGI
 
 	bool cgiComplete = false; 			// Flag to indicate if CGI process is complete
 	int cgiExitStatus = -1;				// Exit status of CGI process (for error handling)
+
+	HTTPProtocolVersion protocolVersion;
+	bool closeAfterResponse = false;	// close the client connection when response is send? 
+										// will update 'if (shouldClose)' in Start()
 };
