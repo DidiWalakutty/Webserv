@@ -19,11 +19,11 @@ void HTTPResponse::handleGET(const HTTPRequest& request, const std::string& file
 	const LocationParse* loc = serverParse.get_best_location(request.resourcePath);
 
 	std::cout << "Resource path is: " << request.resourcePath << std::endl;
-	std::cout << "Best location path is: " << loc->path << std::endl;
+	if (loc)
+		std::cout << "Best location path is: " << loc->path << std::endl;
+	else
+		std::cout << "No matching location found for this request path." << std::endl;
 
-	// when testing if website sees redirect.
-	// std::cout << "loc redirect statuscode: " << loc->redirect.statusCode << std::endl;
-	// std::cout << "loc redirect targeturl: " << loc->redirect.targetURL << std::endl;
 	// --- Redirect takes priority ---
 	if (loc && loc->redirect.statusCode != 0 && !loc->redirect.targetURL.empty())
 	{
@@ -47,18 +47,14 @@ void HTTPResponse::handleGET(const HTTPRequest& request, const std::string& file
 	// // --- CGI detection ---
 	// if (loc && loc->is_cgi)
 	// {
-	// 	if (filePath.empty())
-	// 	{
-	// 		handleErrorPages(HTTPState::NotFound);
-	// 		return;
-	// 	}
-
 	// 	size_t dot = filePath.find_last_of('.');
 	// 	if (dot != std::string::npos)
 	// 	{
 	// 		std::string ext = filePath.substr(dot);
 	// 		if (ext == loc->cgi_extension)
 	// 		{
+	//			if (!checkCGIAccess(filePath))
+	//				return;
 	// 			std::cout << "Handling CGI request for: " << filePath << std::endl;
 	// 			RunCGI(request, filePath, *loc);
 	// 			return;
@@ -69,13 +65,17 @@ void HTTPResponse::handleGET(const HTTPRequest& request, const std::string& file
 	// 	return;
 	// }
 
+	// --- Check if file exists and is accessible ---
+	if (!checkGetAccess(filePath))
+		return;
+
 	// --- Special Case for /upload: generate autoindex if index file is requested --- 
 	if (filePath == "www/upload/upload_index.html" || filePath == "www/upload/upload_index.html/")
 	{
 		std::ifstream file(filePath.c_str());
 		if (!file.is_open())
 		{
-			handleErrorPages(HTTPState::NotFound);
+			handleErrorPages(HTTPState::InternalServerError); // Already checked in checkGetAccess, so should now be an unexpected error.
 			return;
 		}
 
@@ -109,7 +109,7 @@ void HTTPResponse::handleGET(const HTTPRequest& request, const std::string& file
 		std::ifstream file(filePath);
 		if (!file.is_open()) 
 		{ 
-			handleErrorPages(HTTPState::NotFound); 
+			handleErrorPages(HTTPState::InternalServerError); // Already checked in checkGetAccess, so should now be an unexpected error.
 			return; 
 		}
 
@@ -172,7 +172,7 @@ void HTTPResponse::handleGET(const HTTPRequest& request, const std::string& file
 		std::ifstream mfile(requestedPath, std::ios::binary);
 		if (!mfile.is_open())
 		{
-			handleErrorPages(HTTPState::NotFound);
+			handleErrorPages(HTTPState::InternalServerError); // Already checked in checkGetAccess, so should now be an unexpected error.
 			return;
 		}
 
@@ -256,18 +256,14 @@ void HTTPResponse::handlePOST(const HTTPRequest& request, const std::string& fil
 	// // --- CGI detection ---
 	// if (location && location->is_cgi)
 	// {
-	// 	if (filePath.empty())
-	// 	{
-	// 		handleErrorPages(HTTPState::NotFound);
-	// 		return;
-	// 	}
-
 	// 	size_t dot = filePath.find_last_of('.');
 	// 	if (dot != std::string::npos)
 	// 	{
 	// 		std::string ext = filePath.substr(dot);
 	// 		if (ext == location->cgi_extension)
 	// 		{
+	// 			if (!checkCGIAccess(filePath))
+	// 				return;
 	// 			std::cout << "Handling CGI request for: " << filePath << std::endl;
 	// 			RunCGI(request, filePath, *location);
 	// 			return;
@@ -372,8 +368,16 @@ void HTTPResponse::handlePOST(const HTTPRequest& request, const std::string& fil
 	// --- Add extension to filename ---
 	fileName += ext; // add extension to filename
 
-	// --- File path to save the upload to ---
-	std::string fullPath = filePath + fileName;
+	// Check if directory exists and is writable
+	if (!checkPostAccess(filePath))
+		return ;
+
+	// --- Ensure filePath ends with a slash for correct concatenation ---
+	std::string fullPath = filePath;
+	if (!fullPath.empty() && fullPath.back() != '/')
+		fullPath += "/";
+	fullPath += fileName;
+
 	std::cout << "Saving uploaded file to: " << fullPath << std::endl;
 	std::cout << "FileName is: " << fileName << std::endl;
 
@@ -416,9 +420,14 @@ void HTTPResponse::handleDELETE(const HTTPRequest& request, const std::string& f
 {
 	// --- Check if DELETE method is allowed for this location ---
 	const LocationParse* location = serverParse.get_best_location(request.resourcePath);
-	if (std::find(location->allowedMethods.begin(), location->allowedMethods.end(), HTTPMethod::DELETE) == location->allowedMethods.end())
+
+	// --- Check if DELETE is allowed for this location ---
+	if (!location ||
+		std::find(location->allowedMethods.begin(),
+	          	  location->allowedMethods.end(),
+	          	  HTTPMethod::DELETE) == location->allowedMethods.end())
 	{
-		perror("DELETE method not allowed for this location");
+		std::cerr << "DELETE method not allowed for this location" << std::endl;
 		handleErrorPages(HTTPState::MethodNotAllowed);
 		return;
 	}
@@ -431,20 +440,9 @@ void HTTPResponse::handleDELETE(const HTTPRequest& request, const std::string& f
 		return;
 	}
 
-	// --- Check if file exists ---
-	if (!serverParse.file_exists(filePath) || filePath.empty())
-	{
-		handleErrorPages(HTTPState::NotFound);
+	// --- Check if target exists and can be deleted ---
+	if (!checkDeleteAccess(filePath))
 		return;
-	}
-
-	// --- Check if file is a directory (forbidden to delete) ---
-	if (serverParse.is_directory(filePath))
-	{
-		perror("Attempted to delete a directory");
-		handleErrorPages(HTTPState::Forbidden);
-		return;
-	}
 
 	// --- Attempt to delete the file ---
 	if (std::remove(filePath.c_str()) != 0)		// deletion failed
@@ -473,18 +471,15 @@ void HTTPResponse::handleDELETE(const HTTPRequest& request, const std::string& f
  */
 void HTTPResponse::handleHEAD(const HTTPRequest& request, const std::string& filePath)
 {
-	// --- Check if file exists ---
-	if (!serverParse.file_exists(filePath))
-	{
-		handleErrorPages(HTTPState::NotFound);
+	// --- Check if file exists and is accessible ---
+	if (!checkGetAccess(filePath))
 		return;
-	}
 
 	// --- Set headers if file exists ---
 	std::ifstream file(filePath, std::ios::binary);
 	if (!file.is_open())
 	{
-		handleErrorPages(HTTPState::Forbidden);
+		handleErrorPages(HTTPState::InternalServerError); // Already checked in checkGetAccess, so should now be an unexpected error.
 		return;
 	}
 
@@ -533,7 +528,7 @@ void HTTPResponse::handleErrorPages(HTTPState state)
 	}
 	std::ifstream file(resolvedErrorPath, std::ios::binary);
 
-	// --- If the error page exists, server it ---
+	// --- If the error page exists, serve it ---
 	if (file.is_open())
 	{
 		std::stringstream buffer;
@@ -558,7 +553,7 @@ void HTTPResponse::handleErrorPages(HTTPState state)
 	}
 }
 
-bool HTTPResponse::validateSize(const std::string buffer, const std::string filePath)
+bool HTTPResponse::validateSize(const std::string& buffer, const std::string& filePath)
 {
 	std::ifstream file(filePath.c_str(), std::ios::binary | std::ios::ate);
 	if (!file.is_open())
