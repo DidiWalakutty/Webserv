@@ -50,7 +50,27 @@ std::string HTTPResponse::setDate()
 std::string HTTPResponse::buildResponse(HTTPRequest request)
 {
 	std::cerr << "In buildResponse(), with request: " << methodToString(request.method) << " " << request.resourcePath << std::endl;
-	
+
+	// --- URI length check (RFC 7230: 414 URI Too Long) ---
+	if (request.resourcePath.size() > 8192)
+	{
+		protocolVersion = request.protocolVersion;
+		headers.clear();
+		body.clear();
+		handleErrorPages(HTTPState::URITooLong);
+		headers["CONTENT-LENGTH"] = std::to_string(body.size());
+		headers["SERVER"] = "Webserv_Didi_Goksu_and_Reinier";
+		headers["CONNECTION"] = "keep-alive";
+		headers["DATE"] = setDate();
+		std::string response =
+			protocolVersionToString(request.protocolVersion) + " " +
+			statusCode + " " + reasonPhrase + "\r\n";
+		for (const auto &h : headers)
+			response += h.first + ": " + h.second + "\r\n";
+		response += "\r\n" + body;
+		return response;
+	}
+
 	protocolVersion = request.protocolVersion;
 	headers.clear();
 	body.clear();
@@ -141,7 +161,6 @@ std::string HTTPResponse::parseResponseStr(const HTTPRequest request, const std:
 			break;
 		case HTTPMethod::DELETE:
 			handleDELETE(request, filePath);
-			updateForHTTPState(HTTPState::NoContent);
 			break;
 		case HTTPMethod::HEAD:
 			handleHEAD(request, filePath);

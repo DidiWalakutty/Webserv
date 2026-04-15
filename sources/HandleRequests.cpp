@@ -418,6 +418,10 @@ void HTTPResponse::handlePOST(const HTTPRequest& request, const std::string& fil
  */
 void HTTPResponse::handleDELETE(const HTTPRequest& request, const std::string& filePath)
 {
+	// --- Check if target exists and can be deleted (404 must take priority over 405) ---
+	if (!checkDeleteAccess(filePath))
+		return;
+
 	// --- Check if DELETE method is allowed for this location ---
 	const LocationParse* location = serverParse.get_best_location(request.resourcePath);
 
@@ -439,10 +443,6 @@ void HTTPResponse::handleDELETE(const HTTPRequest& request, const std::string& f
 		handleErrorPages(HTTPState::Forbidden);
 		return;
 	}
-
-	// --- Check if target exists and can be deleted ---
-	if (!checkDeleteAccess(filePath))
-		return;
 
 	// --- Attempt to delete the file ---
 	if (std::remove(filePath.c_str()) != 0)		// deletion failed
