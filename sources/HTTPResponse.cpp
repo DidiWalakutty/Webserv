@@ -45,6 +45,40 @@ std::string HTTPResponse::setDate()
 	return ss.str().end()[-1] == '\n' ? ss.str().substr(0, ss.str().length() - 1) : ss.str();
 }
 
+/**
+ * @brief Builds a complete HTTP error response for a given state.
+ *
+ * @details
+ * Initializes the response, generates the appropriate error page (custom or default),
+ * sets the required headers, and returns the final HTTP response string.
+ *
+ * @param request The original HTTP request (used for protocol/version info).
+ * @param state The HTTP error state to generate a response for.
+ * @return The fully formatted HTTP response string.
+ */
+std::string HTTPResponse::buildErrorResponse(const HTTPRequest& request, HTTPState state)
+{
+	protocolVersion = request.protocolVersion;
+	headers.clear();
+	body.clear();
+	handleErrorPages(state);
+
+	headers["SERVER"] = "Webserv_Didi_Goksu_and_Reinier";
+	headers["CONNECTION"] = "keep-alive";
+	headers["DATE"] = setDate();
+
+	std::string response =
+		protocolVersionToString(request.protocolVersion) + " " +
+		statusCode + " " + reasonPhrase + "\r\n";
+
+	for (const auto &h : headers)
+		response += h.first + ": " + h.second + "\r\n";
+
+	response += "\r\n" + body;
+
+	return response;
+}
+
 // Updated the buildresponse to create the correct path and checking if it exists.
 // We only need to serve the index.html file in case we use a GET / HEAD request.
 std::string HTTPResponse::buildResponse(HTTPRequest request)
