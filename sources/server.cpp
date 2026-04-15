@@ -483,11 +483,6 @@ void Server::Start()
 	// Buffer for epoll events added by epoll_wait
 	epoll_event events[_maxEvents];
 
-	// std::cout << "Server FDs in epoll: ";
-	// for (size_t i = 0; i < listeningSockets.size(); i++)
-    // std::cout << listeningSockets[i] << " ";
-	// std::cout << std::endl;
-
 	while (running)
 	{
 		/// --- Wait for events on registered FDs ---
@@ -520,27 +515,23 @@ void Server::Start()
 					std::cerr << "Too many clients connected. Rejected new connection." << std::endl;
 				}
 			}
-			// 2)--- Socket Error or Disconnect ---
+
+			// 2) --- CGI Pipe Events ---
+			// else if (cgiProcesses.count(fd))
+			// {
+			// 	HandleCGIEvent(fd);
+			// }
+
+			// 3)--- Socket Error or Disconnect ---
 			else if (events[i].events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP))	// If it's an error, remove Client
 			{
 				std::cout << "Remove client" << std::endl;
 				RemoveClient(events[i].data.fd);
 			}
-			// 3) --- CGI Output from Child Process ---
-			// else if (cgiProcesses.count(fd) && (events[i].events & EPOLLIN))
-			// {
-				// Handle CGI output from child process
-				// 1. Read CGI output
-				// 2. Append to cgiProcess->cgiOutput
-				// 3. If EOF, parse output and send to client
-				// 4. Clean up
 
-			// }
 			// 4) --- Drain Pending Write ---
 			else if (events[i].events & EPOLLOUT)
 			{
-				int fd = events[i].data.fd;
-
 				if (!pendingWrites.count(fd))
 				{
 					// Nothing to send — switch back to reading
@@ -599,11 +590,12 @@ void Server::Start()
 				}
 				next_event:;
 			}
+
 			// 5) --- Regular Client Request ---
 			else if (events[i].events & EPOLLIN)
 			{
-				// 1) --- Read Request ---
-				std::vector<char> data = ReadClient(events[i].data.fd);
+				// 5.1) --- Read Request ---
+				std::vector<char> data = ReadClient(fd);
 				if (data.size() == 0)
 				{
 					// Empty data, client closed connection or already removed
@@ -622,7 +614,7 @@ void Server::Start()
 							  << BOLDYELLOW << "Read FD: " << events[i].data.fd 
 							  << " (data size: " << data.size() << " bytes)" << std::endl;
 
-				// 2)--- Parse Request ---
+				// 5.2)--- Parse Request ---
 				HTTPRequest request(this);
 				try
 				{
@@ -643,9 +635,10 @@ void Server::Start()
 					int statusCodeInt = static_cast<int>(errorState);
 
 					const ServerParse* parserErrorServer = nullptr;
-					std::map<int, size_t>::iterator mapIt = clientToServer.find(events[i].data.fd);
-					if (mapIt != clientToServer.end())
-						parserErrorServer = &_servers[mapIt->second];
+					// std::map<int, size_t>::iterator mapIt = clientToServer.find(events[i].data.fd);
+					auto it = clientToServer.find(fd);
+					if (it != clientToServer.end())
+						parserErrorServer = &_servers[it->second];
 
 					// Skip error logging for common disconnect/malformed request cases
 					if (excMsg != "Empty (raw) request string" && 
@@ -684,15 +677,15 @@ void Server::Start()
 						"\r\nConnection: close\r\n\r\n" + body;
 					ssize_t bw = write(events[i].data.fd, response.c_str(), response.size());
 					(void)bw;
-					RemoveClient(events[i].data.fd);
+					RemoveClient(fd);
 					continue;
 				}
 
-				// 3) --- Find corresponding server config for this client FD ---
+				// 6) --- Find corresponding server config for this client FD ---
 				const ServerParse* serverPtr = nullptr;
 				
 				// Find which server this client is connected to using the clientToServer map
-				std::map<int, size_t>::iterator it = clientToServer.find(events[i].data.fd);
+				std::map<int, size_t>::iterator it = clientToServer.find(fd);
 				// If found, get the corresponding ServerParse pointer
 				if (it != clientToServer.end())
 				{
@@ -706,30 +699,34 @@ void Server::Start()
 					continue;
 				}
 
-				// 4) --- Build HTTP Response ---
+				// 7) --- CGI routing
+				std::string filePath;
+				const LocationParse* loc = nullptr;
+
+				if (IsCGIRequest(request, *serverPtr, filePath, loc))
+				{
+					// HTTPState cgiAccessState = checkCGIAccess(filePath);
+					// access wasn't good, return error page
+					// if (cgiAccessState != HTTPState::Ok)
+					// {
+					// 	HTTPResponse response(*serverPtr);
+					// 	std::string responseStr = response.buildErrorResponse(request, cgiAccessState);
+					// 	QueueResponse(fd, request, responseStr);
+					// 	continue;
+					// }
+
+					// access was OK, handle CGI
+					std::cout <<  "Handling CGI request for: " << filePath  << std::endl;
+					startCGI(fd, request,  filePath, *loc);
+					continue;
+				}
+
+				// 8) --- Normal non-CGI Response ---
 				HTTPResponse response(*serverPtr);
 				std::string responseStr = response.buildResponse(request);
-				// std::cout << "Response total size: " << responseStr.size() << std::endl;
+				
+				QueueResponse(fd, request, responseStr);
 
-				// 5)--- Determine if connection should close after sending ---
-				auto connIt = request.headers.find("CONNECTION");
-				bool clientWantsClose = (connIt != request.headers.end() &&
-				                         connIt->second.find("close") != std::string::npos);
-				bool http10 = (request.protocolVersion == HTTPProtocolVersion::HTTP_1_0);
-				closeAfterWrite[events[i].data.fd] = (clientWantsClose || http10);
-
-				// 6) --- Buffer response and register EPOLLOUT to drain it ---
-				pendingWrites[events[i].data.fd] = responseStr;
-				writeOffsets[events[i].data.fd] = 0;
-
-				epoll_event writeEv{};
-				writeEv.events = EPOLLOUT;
-				writeEv.data.fd = events[i].data.fd;
-				if (epoll_ctl(epollFD, EPOLL_CTL_MOD, events[i].data.fd, &writeEv) < 0)
-				{
-					std::cerr << "Failed to register EPOLLOUT for client: " << events[i].data.fd << std::endl;
-					RemoveClient(events[i].data.fd);
-				}
 			}
 		}
 	}
