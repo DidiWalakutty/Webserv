@@ -35,7 +35,7 @@
 
 struct CGIInfo
 {
-	std::shared_ptr<CGI> cgiProcess;	// Pointer to CGI struct
+	std::shared_ptr<CGI> cgi;	// Pointer to CGI struct
 	bool pipeIsInput;					// true if pipeToChild (server -> CGI), false if pipeFromChild (CGI -> server)
 	int clientFD;						// which client this CGI belongs to
 };

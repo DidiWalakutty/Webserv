@@ -1,29 +1,23 @@
-#pragma once
+#pragma		once
 
-#include <iostream>
-#include <vector>
-#include <string>
-#include <sys/types.h>
+#include	<signal.h>
+#include	<string.h>
+#include	<fcntl.h>
+#include	<sys/wait.h>
 
-struct CGI
+
+
+struct	CGI
 {
-	std::string scriptPath;				// full path to CGI script
-	std::string cgiExecutable;  		// path to CGI executable
-	pid_t pid;							// PID of CGI process
-
-	int pipeToChild[2];					// server -> CGI
-	int pipeFromChild[2];				// CGI -> server
-
-	std::vector<std::string> tempEnv;	// temporary storage or env variables ("KEY=VALUE")
-	std::vector<char*> env;				// final/converted env vector for execve
-
-	std::string cgiOutput; 				// Data read from CGI (headers + body)
-	std::string inputData; 				// POST body for CGI input (if applicable)
-
-	bool cgiComplete = false; 			// Flag to indicate if CGI process is complete
-	int cgiExitStatus = -1;				// Exit status of CGI process (for error handling)
-
-	HTTPProtocolVersion protocolVersion;
-	bool closeAfterResponse = false;	// close the client connection when response is send? 
-										// will update 'if (shouldClose)' in Start()
+	int			fd_stdin = -1;
+	int			fd_stdout = -1;
+	pid_t		pid = -1;
+	bool		write_finished = false;
+	std::string	body = "";
+	size_t		body_size = 0;
+	size_t		body_written = 0;
+	bool		read_finished = false;
+	bool		cgi_finished = false;
+	time_t		start_time;
+	std::string	output = "";
 };
