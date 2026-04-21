@@ -2,18 +2,6 @@
 #include "server.hpp"
 #include "CGI.hpp"
 
-// void Server::startCGI(int clientFD, const HTTPRequest& request, const std::string& filePath, const LocationParse& location)
-// {
-// 	// use the CGI struct: cgi->
-// 	std::shared_ptr<CGI> cgi(new CGI);
-
-// 	// test
-// 	std::cout << "in start CGI" << std::endl;
-// 	std::cout << "executable: " << location.cgi_executable;
-
-// 	return;
-// }
-
 	// 		- for a simple blocking/synchronous CGI, your current parameters are enough
 	//		- for a real epoll-based CGI, you probably also need the client fd or another stored link to the client
 	// 0. prepare CGI struct with needed info (script path, executable, env variables)
@@ -55,15 +43,15 @@
 
 
 static int						childCGI(const HTTPRequest& request,const std::string& filePath, const LocationParse& location, int pipe_p2c[2], int pipe_c2p[2]);
-static int						ignoreSigPipe(void);
+// static int						ignoreSigPipe(void);
 static int						createPipe(int pipe2open[2]);
 static pid_t					forkCGI();
 static int						redirectPipe(int oldfd, int newfd);
-static int						closePipe(int& pipe2close);
+static int						closeFd(int& fd);
 static std::vector<std::string>	buildArgV(const std::string& filePath, const LocationParse& location);
 static std::string				method2Str(HTTPMethod method);
 static std::string				protocol2Str(HTTPProtocolVersion version);
-static std::vector<std::string>	buildEnvP(const HTTPRequest& request, const std::string& filePath);
+static std::vector<std::string>	buildEnvP(const HTTPRequest& request, const std::string& filePath, const LocationParse& location);
 static std::vector<char*>		str2Ptr(std::vector<std::string>& str);
 static int						executeCGI(std::vector<std::string>& argV_str, std::vector<std::string>& envP_str);
 static int						nonblockPipe(int fd);
@@ -83,9 +71,9 @@ void	Server::startCGI(int clientFD, const HTTPRequest& request, const std::strin
 
 	while (true)
 	{		
-		/* BLOCK SIGNAL SO THE CHILD DOESN"T CRASH THE PARENT (REPLACE TO START UP, ONLY NEEDS TO RUN ONCE?) */
-		if (ignoreSigPipe())
-			break;
+		// /* BLOCK SIGNAL SO THE CHILD DOESN"T CRASH THE PARENT (REPLACE TO START UP, ONLY NEEDS TO RUN ONCE?) */
+		// if (ignoreSigPipe())
+		// 	break;
 
 		/* PIPES */
 		if (createPipe(pipe_p2c) ||
@@ -103,8 +91,8 @@ void	Server::startCGI(int clientFD, const HTTPRequest& request, const std::strin
 
 		/* ***PARENT*** */
 		/* CLOSE PIPES */
-		if (closePipe(pipe_p2c[0]) ||
-			closePipe(pipe_c2p[1]))
+		if (closeFd(pipe_p2c[0]) ||
+			closeFd(pipe_c2p[1]))
 			break;
 
 		/* SET TO NONBLOCKING */
@@ -142,10 +130,10 @@ static int	childCGI(const HTTPRequest& request, const std::string& filePath, con
 		return (removeCGIChild(pipe_p2c, pipe_c2p), 1);
 
 	/* CLOSE PIPES */
-	if (closePipe(pipe_p2c[0]) ||
-		closePipe(pipe_p2c[1]) ||
-		closePipe(pipe_c2p[0]) ||
-		closePipe(pipe_c2p[1]))
+	if (closeFd(pipe_p2c[0]) ||
+		closeFd(pipe_p2c[1]) ||
+		closeFd(pipe_c2p[0]) ||
+		closeFd(pipe_c2p[1]))
 		return (removeCGIChild(pipe_p2c, pipe_c2p), 2);
 
 	/* BUILD ARGV */
@@ -154,7 +142,7 @@ static int	childCGI(const HTTPRequest& request, const std::string& filePath, con
 		return (3);
 
 	/* BUILD ENVP */
-	envP_str = buildEnvP(request, filePath);
+	envP_str = buildEnvP(request, filePath, location);
 	if (envP_str.empty())
 		return (4);
 
@@ -166,15 +154,15 @@ static int	childCGI(const HTTPRequest& request, const std::string& filePath, con
 
 
 
-static int	ignoreSigPipe(void)
-{
-	if (signal(SIGPIPE, SIG_IGN) == SIG_ERR)
-	{
-		std::cerr << "signal(SIGPIPE): " << strerror(errno) << std::endl;
-		return (1);
-	}
-	return (0);
-}
+// static int	ignoreSigPipe(void)
+// {
+// 	if (signal(SIGPIPE, SIG_IGN) == SIG_ERR)
+// 	{
+// 		std::cerr << "signal(SIGPIPE): " << strerror(errno) << std::endl;
+// 		return (1);
+// 	}
+// 	return (0);
+// }
 
 
 
@@ -213,16 +201,16 @@ static int	redirectPipe(int oldfd, int newfd)
 
 
 
-static int	closePipe(int& pipe2close)
+static int	closeFd(int& fd)
 {
-	if (pipe2close == -1)
+	if (fd == -1)
 		return (0);
-	if (close(pipe2close) == -1)
+	if (close(fd) == -1)
 	{
 		std::cerr << "close(): " << strerror(errno) << std::endl;
 		return (1);
 	}
-	pipe2close = -1;
+	fd = -1;
 	return (0);
 }
 
@@ -284,7 +272,7 @@ static std::string	protocol2Str(HTTPProtocolVersion version)
 
 
 
-static std::vector<std::string>	buildEnvP(const HTTPRequest& request, const std::string& filePath)
+static std::vector<std::string>	buildEnvP(const HTTPRequest& request, const std::string& filePath, const LocationParse& location)
 {
 	std::vector<std::string>	envP_str;
 
@@ -294,17 +282,23 @@ static std::vector<std::string>	buildEnvP(const HTTPRequest& request, const std:
 		return {};
 	}
 	envP_str.push_back("REQUEST_METHOD=" + method2Str(request.method));
-	envP_str.push_back("SCRIPT_NAME=" + request.resourcePath);
 	envP_str.push_back("SCRIPT_FILENAME=" + filePath);
+	envP_str.push_back("SCRIPT_NAME=" + request.resourcePath);
 	envP_str.push_back("SERVER_PROTOCOL=" + protocol2Str(request.protocolVersion));
 	envP_str.push_back("GATEWAY_INTERFACE=CGI/1.1");
-	envP_str.push_back("REDIRECT_STATUS=200");
-	envP_str.push_back("PATH_INFO=" + request.resourcePath);
 	envP_str.push_back("QUERY_STRING=" + request.queryStringCGI);
+
+	envP_str.push_back("REQUEST_URI=/script.php?a=1");									/* WHICH VARIABLE? */
+	envP_str.push_back("SERVER_NAME=localhost");										/* WHICH VARIABLE? */
+	envP_str.push_back("SERVER_PORT=8080");												/* WHICH VARIABLE? */
+	envP_str.push_back("SERVER_SOFTWARE=webserv/1.0");									/* WHICH VARIABLE? */
+	envP_str.push_back("REMOTE_ADDR=127.0.0.1");										/* WHICH VARIABLE? */
+
 	if (request.method == HTTPMethod::POST ||
 		request.method == HTTPMethod::PUT ||
 		request.method == HTTPMethod::PATCH)
 	{
+		envP_str.push_back("QUERY_STRING=");
 		std::string	len = "";
 		if (request.headers.count("Content-Length"))
 			len = request.headers.at("Content-Length");
@@ -314,6 +308,8 @@ static std::vector<std::string>	buildEnvP(const HTTPRequest& request, const std:
 			type = request.headers.at("Content-Type");
 		envP_str.push_back("CONTENT_TYPE=" + type);
 	}
+	if (location.cgi_extension != ".php")
+		envP_str.push_back("REDIRECT_STATUS=200");
 	return (envP_str);
 }
 
@@ -395,14 +391,14 @@ static int	addProcess(std::shared_ptr<CGI> cgi, std::map<int, CGIInfo>& cgiProce
 	{
 		if (cgiProcesses.count(cgi->fd_stdin))
 		{
-			std::cerr << "FD already tracked: " << cgi->fd_stdin << std::endl;
+			std::cerr << "FD_STDIN already tracked: " << cgi->fd_stdin << std::endl;
 			return (1);
 		}
 		cgiProcesses[cgi->fd_stdin] = CGIInfo{cgi, true, clientFD};
 	}
 	if (cgiProcesses.count(cgi->fd_stdout))
 	{
-		std::cerr << "FD already tracked: " << cgi->fd_stdout << std::endl;
+		std::cerr << "FD_STDOUT already tracked: " << cgi->fd_stdout << std::endl;
 		return (1);
 	}
 	cgiProcesses[cgi->fd_stdout] = CGIInfo{cgi, false, clientFD};
@@ -418,7 +414,7 @@ static int	addEpoll(std::shared_ptr<CGI> cgi, int epollFD)
 
 	if (cgi->write_finished == false)
 	{
-		evIn.events = EPOLLOUT;
+		evIn.events  = EPOLLOUT | EPOLLERR | EPOLLHUP;
 		evIn.data.fd = cgi->fd_stdin;
 		if (epoll_ctl(epollFD, EPOLL_CTL_ADD, cgi->fd_stdin, &evIn) == -1 &&
 			errno != EEXIST)
@@ -427,7 +423,7 @@ static int	addEpoll(std::shared_ptr<CGI> cgi, int epollFD)
 			return (1);
 		}
 	}
-	evOut.events = EPOLLIN;
+	evOut.events = EPOLLIN | EPOLLERR | EPOLLHUP;
 	evOut.data.fd = cgi->fd_stdout;
 	if (epoll_ctl(epollFD, EPOLL_CTL_ADD, cgi->fd_stdout, &evOut) == -1 &&
 		errno != EEXIST)
@@ -445,7 +441,7 @@ static void	removeCGIParent(std::shared_ptr<CGI> cgi, int pipe_p2c[2], int pipe_
 	int	status;
 
 	if (pipe_p2c[0] != -1)
-		closePipe(pipe_p2c[0]);
+		closeFd(pipe_p2c[0]);
 	if (pipe_p2c[1] != -1)
 	{
 		if (epoll_ctl(epollFD, EPOLL_CTL_DEL, pipe_p2c[1], NULL) == -1 &&
@@ -455,7 +451,7 @@ static void	removeCGIParent(std::shared_ptr<CGI> cgi, int pipe_p2c[2], int pipe_
 			std::cerr << "epoll_ctl(DEL): " << strerror(errno) << std::endl;
 		}
 		cgiProcesses.erase(pipe_p2c[1]);
-		closePipe(pipe_p2c[1]);
+		closeFd(pipe_p2c[1]);
 	}
 	if (pipe_c2p[0] != -1)
 	{
@@ -466,14 +462,15 @@ static void	removeCGIParent(std::shared_ptr<CGI> cgi, int pipe_p2c[2], int pipe_
 			std::cerr << "epoll_ctl(DEL): " << strerror(errno) << std::endl;
 		}
 		cgiProcesses.erase(pipe_c2p[0]);
-		closePipe(pipe_c2p[0]);
+		closeFd(pipe_c2p[0]);
 	}
 	if (pipe_c2p[1] != -1)
-		closePipe(pipe_c2p[1]);
+		closeFd(pipe_c2p[1]);
 	if (cgi->pid > 0)
 	{
-		kill(cgi->pid, SIGKILL);
 		waitpid(cgi->pid, &status, WNOHANG);
+		kill(cgi->pid, SIGKILL);
+		waitpid(cgi->pid, &status, 0);
 	}
 }
 
@@ -482,11 +479,238 @@ static void	removeCGIParent(std::shared_ptr<CGI> cgi, int pipe_p2c[2], int pipe_
 static void	removeCGIChild(int pipe_p2c[2], int pipe_c2p[2])
 {
 	if (pipe_p2c[0] != -1)
-		closePipe(pipe_p2c[0]);
+		closeFd(pipe_p2c[0]);
 	if (pipe_p2c[1] != -1)
-		closePipe(pipe_p2c[1]);
+		closeFd(pipe_p2c[1]);
 	if (pipe_c2p[0] != -1)
-		closePipe(pipe_c2p[0]);
+		closeFd(pipe_c2p[0]);
 	if (pipe_c2p[1] != -1)
-		closePipe(pipe_c2p[1]);
+		closeFd(pipe_c2p[1]);
 }
+
+
+
+
+
+
+
+
+
+static void	handleCGIWrite(int fd, std::shared_ptr<CGI> cgi);
+static void	handleCGIRead(int fd, std::shared_ptr<CGI> cgi);
+static void	cleanupCGI(std::shared_ptr<CGI> cgi);
+
+
+
+void	Server::handleCGIEvent(int fd, uint32_t events)
+{
+	std::map<int, CGIInfo>::iterator	it = cgiProcesses.find(fd);
+	if (it == cgiProcesses.end())
+		return;
+
+	CGIInfo&							info = it->second;
+	std::shared_ptr<CGI>				cgi = info.cgi;
+	int									status = 0;
+	pid_t								result;
+
+	if (events & (EPOLLERR | EPOLLHUP))
+	{
+		if (info.pipeIsInput)
+			cgi->write_finished = true;
+		else
+			cgi->read_finished = true;
+	}
+	if (info.pipeIsInput && (events & EPOLLOUT))
+	{
+		handleCGIWrite(fd, cgi);
+		if (cgi->write_finished == true)
+		{
+			epoll_ctl(epollFD, EPOLL_CTL_DEL, fd, NULL);
+			cgiProcesses.erase(fd);
+			closeFd(fd);
+		}
+	}
+	else if (!info.pipeIsInput && (events & EPOLLIN))
+	{
+		handleCGIRead(fd, cgi);
+		if (cgi->read_finished == true)
+		{
+			epoll_ctl(epollFD, EPOLL_CTL_DEL, fd, NULL);
+			cgiProcesses.erase(fd);
+			closeFd(fd);
+		}
+	}
+	result = waitpid(cgi->pid, &status, WNOHANG);
+	if (result == cgi->pid)
+		cgi->cgi_finished = true;
+	if (cgi->write_finished == true &&
+		cgi->read_finished == true &&
+		cgi->cgi_finished == true)
+	{
+		if (cgi->output.empty())
+		{
+			cgi->output =
+				"HTTP/1.1 502 Bad Gateway\r\n"
+				"Content-Length: 0\r\n"
+				"Connection: close\r\n\r\n";
+		}
+		pendingWrites[info.clientFD] = cgi->output;
+		writeOffsets[info.clientFD] = 0;
+		closeAfterWrite[info.clientFD] = true;
+		epoll_event ev{};
+		ev.events = EPOLLOUT;
+		ev.data.fd = info.clientFD;
+		epoll_ctl(epollFD, EPOLL_CTL_MOD, info.clientFD, &ev);
+		cleanupCGI(cgi);
+	}
+}
+
+
+
+static void	handleCGIWrite(int fd, std::shared_ptr<CGI> cgi)
+{
+	ssize_t	n;
+
+	while (cgi->body_written < cgi->body_size)
+	{
+		n = write(fd, cgi->body.data() + cgi->body_written, cgi->body_size - cgi->body_written);
+		if (n > 0)
+			cgi->body_written += n;
+		else if (n == 0)
+			return;
+		else
+		{
+			if (errno == EINTR)
+				continue;
+			if (errno == EAGAIN || errno == EWOULDBLOCK)
+				return;
+			if (errno == EPIPE)
+				break;
+			break;
+		}
+	}
+	cgi->write_finished = true;
+}
+
+
+
+static void	handleCGIRead(int fd, std::shared_ptr<CGI> cgi)
+{
+	char	buffer[8192];
+	ssize_t	n;
+
+	while (true)
+	{
+		n = read(fd, buffer, sizeof(buffer));
+		if (n > 0)
+			cgi->output.append(buffer, n);
+		else if (n == 0)
+			break;
+		else
+		{
+			if (errno == EINTR)
+				continue;
+			if (errno == EAGAIN || errno == EWOULDBLOCK)
+				return;
+			break;
+		}
+	}
+	cgi->read_finished = true;
+}
+
+
+
+static void	cleanupCGI(std::shared_ptr<CGI> cgi)
+{
+	int	status;
+	
+	if (cgi->fd_stdin != -1)
+		closeFd(cgi->fd_stdin);
+	if (cgi->fd_stdout != -1)
+		closeFd(cgi->fd_stdout);
+	waitpid(cgi->pid, &status, WNOHANG);
+}
+
+
+
+
+
+// void Server::handleCGIEvent(int fd, uint32_t events)
+// {
+// 	auto it = cgiProcesses.find(fd);
+// 	if (it == cgiProcesses.end())
+// 		return;
+
+// 	CGIInfo& info = it->second;
+// 	std::shared_ptr<CGI> cgi = info.cgi;
+
+// 	int status = 0;
+// 	pid_t result;
+
+// 	if (events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP))
+// 	{
+// 		if (info.pipeIsInput)
+// 			cgi->write_finished = true;
+// 		else
+// 			cgi->read_finished = true;
+// 	}
+
+// 	if (info.pipeIsInput && (events & EPOLLOUT))
+// 	{
+// 		handleCGIWrite(fd, cgi);
+
+// 		if (cgi->write_finished)
+// 		{
+// 			epoll_ctl(epollFD, EPOLL_CTL_DEL, fd, NULL);
+// 			cgiProcesses.erase(fd);
+
+// 			if (cgi->fd_stdin == fd)
+// 				cgi->fd_stdin = -1;
+
+// 			closeFd(fd);
+// 		}
+// 	}
+// 	else if (!info.pipeIsInput && (events & EPOLLIN))
+// 	{
+// 		handleCGIRead(fd, cgi);
+
+// 		if (cgi->read_finished)
+// 		{
+// 			epoll_ctl(epollFD, EPOLL_CTL_DEL, fd, NULL);
+// 			cgiProcesses.erase(fd);
+
+// 			if (cgi->fd_stdout == fd)
+// 				cgi->fd_stdout = -1;
+
+// 			closeFd(fd);
+// 		}
+// 	}
+
+// 	result = waitpid(cgi->pid, &status, WNOHANG);
+// 	if (result == cgi->pid)
+// 		cgi->cgi_finished = true;
+
+// 	if (cgi->write_finished &&
+// 		cgi->read_finished &&
+// 		cgi->cgi_finished)
+// 	{
+// 		if (cgi->output.empty())
+// 		{
+// 			cgi->output =
+// 				"HTTP/1.1 502 Bad Gateway\r\n"
+// 				"Content-Length: 0\r\n"
+// 				"Connection: close\r\n\r\n";
+// 		}
+
+// 		pendingWrites[info.clientFD] = cgi->output;
+// 		writeOffsets[info.clientFD] = 0;
+// 		closeAfterWrite[info.clientFD] = true;
+
+// 		epoll_event ev{};
+// 		ev.events = EPOLLOUT;
+// 		ev.data.fd = info.clientFD;
+// 		epoll_ctl(epollFD, EPOLL_CTL_MOD, info.clientFD, &ev);
+
+// 		cleanupCGI(cgi);
+// 	}
+// }

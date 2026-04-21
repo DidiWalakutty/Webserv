@@ -35,7 +35,7 @@
 
 struct CGIInfo
 {
-	std::shared_ptr<CGI> cgi;	// Pointer to CGI struct
+	std::shared_ptr<CGI> cgi;			// Pointer to CGI struct
 	bool pipeIsInput;					// true if pipeToChild (server -> CGI), false if pipeFromChild (CGI -> server)
 	int clientFD;						// which client this CGI belongs to
 };
@@ -76,10 +76,11 @@ class Server
 		// --- Run CGI ---
 		bool IsCGIRequest(const HTTPRequest& request, const ServerParse& server, std::string& filePath, const LocationParse*& location);
 		void startCGI(int clientFD, const HTTPRequest& request, const std::string& filePath, const LocationParse& location);
-		void HandleCGIEvent(int fd);
-		void HandleCGIWrite(int fd, CGIInfo& info);
-		void HandleCGIRead(int fd, CGIInfo& info);
-		void CleanupCGI(std::shared_ptr<CGI> cgi);
+		// void handleCGIEvent(int fd);
+		void handleCGIEvent(int fd, uint32_t events);
+		// void HandleCGIWrite(int fd, CGIInfo& info);
+		// void HandleCGIRead(int fd, CGIInfo& info);
+		// void CleanupCGI(std::shared_ptr<CGI> cgi);
 		HTTPState checkCGIAccess(const std::string& filePath);
 
 	public:
