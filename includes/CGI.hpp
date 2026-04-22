@@ -5,7 +5,7 @@
 #include	<fcntl.h>
 #include	<sys/wait.h>
 
-
+#define		TIMEOUT_MS 5000
 
 struct	CGI
 {

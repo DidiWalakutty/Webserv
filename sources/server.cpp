@@ -517,10 +517,8 @@ void Server::Start()
 			}
 
 			// 2) --- CGI Pipe Events ---
-			// else if (cgiProcesses.count(fd))
-			// {
-			// 	HandleCGIEvent(fd);
-			// }
+			else if (cgiProcesses.count(fd))
+				handleCGIEvent(fd, events[i].events);
 
 			// 3)--- Socket Error or Disconnect ---
 			else if (events[i].events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP))	// If it's an error, remove Client
@@ -672,7 +670,7 @@ void Server::Start()
 						body = statusMessage.code + ": " + statusMessage.message;
 					}
 					std::string response =
-						"HTTP/1.1 " + statusMessage.code + " " + statusMessage.message + "\r\nContent-Type: " + contentType +
+						"HTTP/1.1 " + statusMessage.code + " " + statusMessage.message +ServerParse "\r\nContent-Type: " + contentType +
 						"\r\nContent-Length: " + std::to_string(body.size()) +
 						"\r\nConnection: close\r\n\r\n" + body;
 					ssize_t bw = write(events[i].data.fd, response.c_str(), response.size());

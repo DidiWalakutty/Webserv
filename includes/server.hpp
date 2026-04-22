@@ -75,7 +75,7 @@ class Server
 		
 		// --- Run CGI ---
 		bool IsCGIRequest(const HTTPRequest& request, const ServerParse& server, std::string& filePath, const LocationParse*& location);
-		void startCGI(int clientFD, const HTTPRequest& request, const std::string& filePath, const LocationParse& location);
+		void startCGI(int clientFD, const HTTPRequest& request, const ServerParse& server, const std::string& filePath, const LocationParse& location);
 		// void handleCGIEvent(int fd);
 		void handleCGIEvent(int fd, uint32_t events);
 		// void HandleCGIWrite(int fd, CGIInfo& info);

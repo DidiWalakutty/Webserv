@@ -42,7 +42,7 @@
 
 
 
-static int						childCGI(const HTTPRequest& request,const std::string& filePath, const LocationParse& location, int pipe_p2c[2], int pipe_c2p[2]);
+static int						childCGI(const HTTPRequest& request, const ServerParse& server, const std::string& filePath, const LocationParse& location, int pipe_p2c[2], int pipe_c2p[2]);
 // static int						ignoreSigPipe(void);
 static int						createPipe(int pipe2open[2]);
 static pid_t					forkCGI();
@@ -51,7 +51,7 @@ static int						closeFd(int& fd);
 static std::vector<std::string>	buildArgV(const std::string& filePath, const LocationParse& location);
 static std::string				method2Str(HTTPMethod method);
 static std::string				protocol2Str(HTTPProtocolVersion version);
-static std::vector<std::string>	buildEnvP(const HTTPRequest& request, const std::string& filePath, const LocationParse& location);
+static std::vector<std::string>	buildEnvP(const HTTPRequest& request, const ServerParse& server, const std::string& filePath, const LocationParse& location);
 static std::vector<char*>		str2Ptr(std::vector<std::string>& str);
 static int						executeCGI(std::vector<std::string>& argV_str, std::vector<std::string>& envP_str);
 static int						nonblockPipe(int fd);
@@ -63,7 +63,7 @@ static void						removeCGIChild(int pipe_p2c[2], int pipe_c2p[2]);
 
 
 
-void	Server::startCGI(int clientFD, const HTTPRequest& request, const std::string& filePath, const LocationParse& location)
+void	Server::startCGI(int clientFD, const HTTPRequest& request, const ServerParse& server, const std::string& filePath, const LocationParse& location)
 {
 	std::shared_ptr<CGI>	cgi(new CGI);
 	int						pipe_p2c[2] = {-1, -1};
@@ -87,7 +87,7 @@ void	Server::startCGI(int clientFD, const HTTPRequest& request, const std::strin
 
 		/* ***CHILD*** */
 		else if (cgi->pid == 0)
-			_exit(childCGI(request, filePath, location, pipe_p2c, pipe_c2p));
+			_exit(childCGI(request, server, filePath, location, pipe_p2c, pipe_c2p));
 
 		/* ***PARENT*** */
 		/* CLOSE PIPES */
@@ -118,7 +118,7 @@ void	Server::startCGI(int clientFD, const HTTPRequest& request, const std::strin
 
 
 
-static int	childCGI(const HTTPRequest& request, const std::string& filePath, const LocationParse& location, int pipe_p2c[2], int pipe_c2p[2])
+static int	childCGI(const HTTPRequest& request, const ServerParse& server, const std::string& filePath, const LocationParse& location, int pipe_p2c[2], int pipe_c2p[2])
 {
 	std::vector<std::string>	argV_str;
 	std::vector<std::string>	envP_str;
@@ -142,7 +142,7 @@ static int	childCGI(const HTTPRequest& request, const std::string& filePath, con
 		return (3);
 
 	/* BUILD ENVP */
-	envP_str = buildEnvP(request, filePath, location);
+	envP_str = buildEnvP(request, server, filePath, location);
 	if (envP_str.empty())
 		return (4);
 
@@ -270,9 +270,7 @@ static std::string	protocol2Str(HTTPProtocolVersion version)
 	}
 }
 
-
-
-static std::vector<std::string>	buildEnvP(const HTTPRequest& request, const std::string& filePath, const LocationParse& location)
+static std::vector<std::string>	buildEnvP(const HTTPRequest& request, const ServerParse& server, const std::string& filePath, const LocationParse& location)
 {
 	std::vector<std::string>	envP_str;
 
@@ -281,24 +279,19 @@ static std::vector<std::string>	buildEnvP(const HTTPRequest& request, const std:
 		std::cerr << "Unsupported method" << std::endl;
 		return {};
 	}
-	envP_str.push_back("REQUEST_METHOD=" + method2Str(request.method));
-	envP_str.push_back("SCRIPT_FILENAME=" + filePath);
-	envP_str.push_back("SCRIPT_NAME=" + request.resourcePath);
-	envP_str.push_back("SERVER_PROTOCOL=" + protocol2Str(request.protocolVersion));
 	envP_str.push_back("GATEWAY_INTERFACE=CGI/1.1");
+	envP_str.push_back("REQUEST_METHOD=" + method2Str(request.method));
+	envP_str.push_back("SCRIPT_NAME=" + request.resourcePath);
+	envP_str.push_back("SERVER_NAME=" + server.serverName);
+	envP_str.push_back("SERVER_PORT=" + std::to_string(server.port));
+	envP_str.push_back("SERVER_PROTOCOL=" + protocol2Str(request.protocolVersion));
+	envP_str.push_back("SERVER_SOFTWARE=webserv/1.0");
+	envP_str.push_back("REMOTE_ADDR=" + getpeername());
 	envP_str.push_back("QUERY_STRING=" + request.queryStringCGI);
-
-	envP_str.push_back("REQUEST_URI=/script.php?a=1");									/* WHICH VARIABLE? */
-	envP_str.push_back("SERVER_NAME=localhost");										/* WHICH VARIABLE? */
-	envP_str.push_back("SERVER_PORT=8080");												/* WHICH VARIABLE? */
-	envP_str.push_back("SERVER_SOFTWARE=webserv/1.0");									/* WHICH VARIABLE? */
-	envP_str.push_back("REMOTE_ADDR=127.0.0.1");										/* WHICH VARIABLE? */
-
 	if (request.method == HTTPMethod::POST ||
 		request.method == HTTPMethod::PUT ||
 		request.method == HTTPMethod::PATCH)
 	{
-		envP_str.push_back("QUERY_STRING=");
 		std::string	len = "";
 		if (request.headers.count("Content-Length"))
 			len = request.headers.at("Content-Length");
@@ -308,8 +301,11 @@ static std::vector<std::string>	buildEnvP(const HTTPRequest& request, const std:
 			type = request.headers.at("Content-Type");
 		envP_str.push_back("CONTENT_TYPE=" + type);
 	}
-	if (location.cgi_extension != ".php")
+	if (location.cgi_extension == ".php")
+	{
 		envP_str.push_back("REDIRECT_STATUS=200");
+		envP_str.push_back("SCRIPT_FILENAME=" + filePath);
+	}
 	return (envP_str);
 }
 
@@ -344,16 +340,14 @@ static int	executeCGI(std::vector<std::string>& argV_str, std::vector<std::strin
 
 static int	nonblockPipe(int fd)
 {
-	int	flags = fcntl(fd, F_GETFL, 0);
-
-	if (flags == -1)
-	{
-		std::cerr << "fcntl(F_GETFL): " << strerror(errno) << std::endl;
-		return (1);
-	}
-	if (fcntl(fd, F_SETFL, flags | O_NONBLOCK) == -1)
+	if (fcntl(fd, F_SETFL, O_NONBLOCK) == -1)
 	{
 		std::cerr << "fcntl(F_SETFL): " << strerror(errno) << std::endl;
+		return (1);
+	}
+	if (fcntl(fd, F_SETFD, FD_CLOEXEC) == -1)
+	{
+		std::cerr << "fcntl(F_SETFD): " << strerror(errno) << std::endl;
 		return (1);
 	}
 	return (0);
@@ -496,8 +490,10 @@ static void	removeCGIChild(int pipe_p2c[2], int pipe_c2p[2])
 
 
 
-static void	handleCGIWrite(int fd, std::shared_ptr<CGI> cgi);
-static void	handleCGIRead(int fd, std::shared_ptr<CGI> cgi);
+
+
+static void	handleCGIWrite(int fd, std::shared_ptr<CGI> cgi,  int epollFD, std::map<int, CGIInfo>& cgiProcesses);
+static void	handleCGIRead(int fd, std::shared_ptr<CGI> cgi, int epollFD, std::map<int, CGIInfo>& cgiProcesses);
 static void	cleanupCGI(std::shared_ptr<CGI> cgi);
 
 
@@ -507,7 +503,6 @@ void	Server::handleCGIEvent(int fd, uint32_t events)
 	std::map<int, CGIInfo>::iterator	it = cgiProcesses.find(fd);
 	if (it == cgiProcesses.end())
 		return;
-
 	CGIInfo&							info = it->second;
 	std::shared_ptr<CGI>				cgi = info.cgi;
 	int									status = 0;
@@ -520,9 +515,14 @@ void	Server::handleCGIEvent(int fd, uint32_t events)
 		else
 			cgi->read_finished = true;
 	}
-	if (info.pipeIsInput && (events & EPOLLOUT))
+
+
+
+	if (info.pipeIsInput == true &&
+		cgi->write_finished == false &&
+		(events & EPOLLOUT))
 	{
-		handleCGIWrite(fd, cgi);
+		handleCGIWrite(fd, cgi, epollFD, cgiProcesses);
 		if (cgi->write_finished == true)
 		{
 			epoll_ctl(epollFD, EPOLL_CTL_DEL, fd, NULL);
@@ -530,19 +530,30 @@ void	Server::handleCGIEvent(int fd, uint32_t events)
 			closeFd(fd);
 		}
 	}
-	else if (!info.pipeIsInput && (events & EPOLLIN))
+	else if (info.pipeIsInput == false &&
+		cgi->read_finished == false &&
+		(events & EPOLLIN))
 	{
-		handleCGIRead(fd, cgi);
+		handleCGIRead(fd, cgi, epollFD, cgiProcesses);
 		if (cgi->read_finished == true)
 		{
 			epoll_ctl(epollFD, EPOLL_CTL_DEL, fd, NULL);
 			cgiProcesses.erase(fd);
 			closeFd(fd);
 		}
+		
 	}
-	result = waitpid(cgi->pid, &status, WNOHANG);
-	if (result == cgi->pid)
+
+
+	// TIMEOUT!!!
+	if (waitpid(cgi->pid, &status, WNOHANG) == cgi->pid)
 		cgi->cgi_finished = true;
+
+
+
+
+
+
 	if (cgi->write_finished == true &&
 		cgi->read_finished == true &&
 		cgi->cgi_finished == true)
@@ -554,6 +565,11 @@ void	Server::handleCGIEvent(int fd, uint32_t events)
 				"Content-Length: 0\r\n"
 				"Connection: close\r\n\r\n";
 		}
+
+
+
+
+
 		pendingWrites[info.clientFD] = cgi->output;
 		writeOffsets[info.clientFD] = 0;
 		closeAfterWrite[info.clientFD] = true;
@@ -567,7 +583,7 @@ void	Server::handleCGIEvent(int fd, uint32_t events)
 
 
 
-static void	handleCGIWrite(int fd, std::shared_ptr<CGI> cgi)
+static void	handleCGIWrite(int fd, std::shared_ptr<CGI> cgi, int epollFD, std::map<int, CGIInfo>& cgiProcesses)
 {
 	ssize_t	n;
 
@@ -594,7 +610,7 @@ static void	handleCGIWrite(int fd, std::shared_ptr<CGI> cgi)
 
 
 
-static void	handleCGIRead(int fd, std::shared_ptr<CGI> cgi)
+static void	handleCGIRead(int fd, std::shared_ptr<CGI> cgi, int epollFD, std::map<int, CGIInfo>& cgiProcesses)
 {
 	char	buffer[8192];
 	ssize_t	n;
@@ -635,82 +651,5 @@ static void	cleanupCGI(std::shared_ptr<CGI> cgi)
 
 
 
-// void Server::handleCGIEvent(int fd, uint32_t events)
-// {
-// 	auto it = cgiProcesses.find(fd);
-// 	if (it == cgiProcesses.end())
-// 		return;
 
-// 	CGIInfo& info = it->second;
-// 	std::shared_ptr<CGI> cgi = info.cgi;
 
-// 	int status = 0;
-// 	pid_t result;
-
-// 	if (events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP))
-// 	{
-// 		if (info.pipeIsInput)
-// 			cgi->write_finished = true;
-// 		else
-// 			cgi->read_finished = true;
-// 	}
-
-// 	if (info.pipeIsInput && (events & EPOLLOUT))
-// 	{
-// 		handleCGIWrite(fd, cgi);
-
-// 		if (cgi->write_finished)
-// 		{
-// 			epoll_ctl(epollFD, EPOLL_CTL_DEL, fd, NULL);
-// 			cgiProcesses.erase(fd);
-
-// 			if (cgi->fd_stdin == fd)
-// 				cgi->fd_stdin = -1;
-
-// 			closeFd(fd);
-// 		}
-// 	}
-// 	else if (!info.pipeIsInput && (events & EPOLLIN))
-// 	{
-// 		handleCGIRead(fd, cgi);
-
-// 		if (cgi->read_finished)
-// 		{
-// 			epoll_ctl(epollFD, EPOLL_CTL_DEL, fd, NULL);
-// 			cgiProcesses.erase(fd);
-
-// 			if (cgi->fd_stdout == fd)
-// 				cgi->fd_stdout = -1;
-
-// 			closeFd(fd);
-// 		}
-// 	}
-
-// 	result = waitpid(cgi->pid, &status, WNOHANG);
-// 	if (result == cgi->pid)
-// 		cgi->cgi_finished = true;
-
-// 	if (cgi->write_finished &&
-// 		cgi->read_finished &&
-// 		cgi->cgi_finished)
-// 	{
-// 		if (cgi->output.empty())
-// 		{
-// 			cgi->output =
-// 				"HTTP/1.1 502 Bad Gateway\r\n"
-// 				"Content-Length: 0\r\n"
-// 				"Connection: close\r\n\r\n";
-// 		}
-
-// 		pendingWrites[info.clientFD] = cgi->output;
-// 		writeOffsets[info.clientFD] = 0;
-// 		closeAfterWrite[info.clientFD] = true;
-
-// 		epoll_event ev{};
-// 		ev.events = EPOLLOUT;
-// 		ev.data.fd = info.clientFD;
-// 		epoll_ctl(epollFD, EPOLL_CTL_MOD, info.clientFD, &ev);
-
-// 		cleanupCGI(cgi);
-// 	}
-// }
