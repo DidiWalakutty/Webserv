@@ -10,7 +10,7 @@
 			// pipeToChild -> send POST body
 			// pipeFromChild -> read CGI output (headers + body)
 		
-	// 2. Fork  a child process (to run the CGI script).
+	// 2. Fork a child process (to run the CGI script).
 			// In the child process == CGI script, we will execute the CGI script.
 			// In the parent process == server, we will send input (if POST) and read output from the CGI.
 
@@ -54,7 +54,7 @@ static std::string				protocol2Str(HTTPProtocolVersion version);
 static std::vector<std::string>	buildEnvP(const HTTPRequest& request, const ServerParse& server, const std::string& filePath, const LocationParse& location);
 static std::vector<char*>		str2Ptr(std::vector<std::string>& str);
 static int						executeCGI(std::vector<std::string>& argV_str, std::vector<std::string>& envP_str);
-static int						nonblockPipe(int fd);
+static int						nonblockFd(int fd);
 static int						updateStruct(std::shared_ptr<CGI> cgi, int fd_stdin, int fd_stdout, const HTTPRequest& request);
 static int						addProcess(std::shared_ptr<CGI> cgi, std::map<int, CGIInfo>& cgiProcesses, int clientFD);
 static int						addEpoll(std::shared_ptr<CGI> cgi, int epollFD);
@@ -96,8 +96,8 @@ void	Server::startCGI(int clientFD, const HTTPRequest& request, const ServerPars
 			break;
 
 		/* SET TO NONBLOCKING */
-		if (nonblockPipe(pipe_p2c[1]) ||
-			nonblockPipe(pipe_c2p[0]))
+		if (nonblockFd(pipe_p2c[1]) ||
+			nonblockFd(pipe_c2p[0]))
 			break;
 
 		/* UPDATE STRUCT */
@@ -286,7 +286,7 @@ static std::vector<std::string>	buildEnvP(const HTTPRequest& request, const Serv
 	envP_str.push_back("SERVER_PORT=" + std::to_string(server.port));
 	envP_str.push_back("SERVER_PROTOCOL=" + protocol2Str(request.protocolVersion));
 	envP_str.push_back("SERVER_SOFTWARE=webserv/1.0");
-	envP_str.push_back("REMOTE_ADDR=" + getpeername());
+	envP_str.push_back("REMOTE_ADDR=");
 	envP_str.push_back("QUERY_STRING=" + request.queryStringCGI);
 	if (request.method == HTTPMethod::POST ||
 		request.method == HTTPMethod::PUT ||
@@ -338,14 +338,28 @@ static int	executeCGI(std::vector<std::string>& argV_str, std::vector<std::strin
 
 
 
-static int	nonblockPipe(int fd)
+static int	nonblockFd(int fd)
 {
-	if (fcntl(fd, F_SETFL, O_NONBLOCK) == -1)
+	int flags;
+
+	flags = fcntl(fd, F_GETFL, 0);
+	if (flags == -1)
+	{
+		std::cerr << "fcntl(F_GETFL): " << strerror(errno) << std::endl;
+		return (1);
+	}
+	if (fcntl(fd, F_SETFL, flags | O_NONBLOCK) == -1)
 	{
 		std::cerr << "fcntl(F_SETFL): " << strerror(errno) << std::endl;
 		return (1);
 	}
-	if (fcntl(fd, F_SETFD, FD_CLOEXEC) == -1)
+	flags = fcntl(fd, F_GETFD, 0);
+	if (flags == -1)
+	{
+		std::cerr << "fcntl(F_GETFD): " << strerror(errno) << std::endl;
+		return (1);
+	}
+	if (fcntl(fd, F_SETFD, flags | FD_CLOEXEC) == -1)
 	{
 		std::cerr << "fcntl(F_SETFD): " << strerror(errno) << std::endl;
 		return (1);
@@ -408,7 +422,7 @@ static int	addEpoll(std::shared_ptr<CGI> cgi, int epollFD)
 
 	if (cgi->write_finished == false)
 	{
-		evIn.events  = EPOLLOUT | EPOLLERR | EPOLLHUP;
+		evIn.events = EPOLLOUT | EPOLLERR | EPOLLHUP;
 		evIn.data.fd = cgi->fd_stdin;
 		if (epoll_ctl(epollFD, EPOLL_CTL_ADD, cgi->fd_stdin, &evIn) == -1 &&
 			errno != EEXIST)
@@ -488,168 +502,286 @@ static void	removeCGIChild(int pipe_p2c[2], int pipe_c2p[2])
 
 
 
-
-
-
-
-static void	handleCGIWrite(int fd, std::shared_ptr<CGI> cgi,  int epollFD, std::map<int, CGIInfo>& cgiProcesses);
-static void	handleCGIRead(int fd, std::shared_ptr<CGI> cgi, int epollFD, std::map<int, CGIInfo>& cgiProcesses);
-static void	cleanupCGI(std::shared_ptr<CGI> cgi);
-
-
-
 void	Server::handleCGIEvent(int fd, uint32_t events)
 {
 	std::map<int, CGIInfo>::iterator	it = cgiProcesses.find(fd);
 	if (it == cgiProcesses.end())
+	{
+		epoll_ctl(epollFD, EPOLL_CTL_DEL, fd, NULL);
 		return;
-	CGIInfo&							info = it->second;
+	}
+	CGIInfo								info = it->second;
 	std::shared_ptr<CGI>				cgi = info.cgi;
-	int									status = 0;
-	pid_t								result;
 
-	if (events & (EPOLLERR | EPOLLHUP))
+	if (info.pipeIsInput)
 	{
-		if (info.pipeIsInput)
-			cgi->write_finished = true;
-		else
-			cgi->read_finished = true;
+		if (!cgi->write_finished && (events & EPOLLOUT))
+			handleCGIWrite(info);
+		else if (events & (EPOLLERR | EPOLLHUP))
+			handleCGIError(info);
 	}
-
-
-
-	if (info.pipeIsInput == true &&
-		cgi->write_finished == false &&
-		(events & EPOLLOUT))
+	else
 	{
-		handleCGIWrite(fd, cgi, epollFD, cgiProcesses);
-		if (cgi->write_finished == true)
-		{
-			epoll_ctl(epollFD, EPOLL_CTL_DEL, fd, NULL);
-			cgiProcesses.erase(fd);
-			closeFd(fd);
-		}
+		if (!cgi->read_finished && (events & (EPOLLIN | EPOLLHUP | EPOLLERR)))
+			handleCGIRead(info);
+		if (!cgi->read_finished && (events & EPOLLERR))
+			handleCGIError(info);
 	}
-	else if (info.pipeIsInput == false &&
-		cgi->read_finished == false &&
-		(events & EPOLLIN))
+	handleCGIWait(info);
+	if (cgi->write_finished && cgi->read_finished && cgi->cgi_finished)
 	{
-		handleCGIRead(fd, cgi, epollFD, cgiProcesses);
-		if (cgi->read_finished == true)
+		if (!cgi->responseSent)
 		{
-			epoll_ctl(epollFD, EPOLL_CTL_DEL, fd, NULL);
-			cgiProcesses.erase(fd);
-			closeFd(fd);
+			if (cgi->output.empty())
+				handleCGIError502(info);
+			else
+				handleCGIResponse(info);
 		}
-		
-	}
-
-
-	// TIMEOUT!!!
-	if (waitpid(cgi->pid, &status, WNOHANG) == cgi->pid)
-		cgi->cgi_finished = true;
-
-
-
-
-
-
-	if (cgi->write_finished == true &&
-		cgi->read_finished == true &&
-		cgi->cgi_finished == true)
-	{
-		if (cgi->output.empty())
-		{
-			cgi->output =
-				"HTTP/1.1 502 Bad Gateway\r\n"
-				"Content-Length: 0\r\n"
-				"Connection: close\r\n\r\n";
-		}
-
-
-
-
-
-		pendingWrites[info.clientFD] = cgi->output;
-		writeOffsets[info.clientFD] = 0;
-		closeAfterWrite[info.clientFD] = true;
-		epoll_event ev{};
-		ev.events = EPOLLOUT;
-		ev.data.fd = info.clientFD;
-		epoll_ctl(epollFD, EPOLL_CTL_MOD, info.clientFD, &ev);
-		cleanupCGI(cgi);
+		handleCGICleanUp(cgi);
 	}
 }
 
 
 
-static void	handleCGIWrite(int fd, std::shared_ptr<CGI> cgi, int epollFD, std::map<int, CGIInfo>& cgiProcesses)
+void	Server::handleCGIError(CGIInfo& info)
 {
-	ssize_t	n;
+	std::shared_ptr<CGI>	cgi = info.cgi;
+
+	if (cgiProcesses.count(cgi->fd_stdin))
+	{
+		epoll_ctl(epollFD, EPOLL_CTL_DEL, cgi->fd_stdin, NULL);
+		cgiProcesses.erase(cgi->fd_stdin);
+		closeFd(cgi->fd_stdin);
+	}
+	if (cgiProcesses.count(cgi->fd_stdout))
+	{
+		epoll_ctl(epollFD, EPOLL_CTL_DEL, cgi->fd_stdout, NULL);
+		cgiProcesses.erase(cgi->fd_stdout);
+		closeFd(cgi->fd_stdout);
+	}
+	cgi->write_finished = true;
+	cgi->read_finished = true;
+	cgi->cgi_finished = true;
+	cgi->output.clear();
+	kill(cgi->pid, SIGKILL);
+	waitpid(cgi->pid, NULL, WNOHANG);
+	handleCGIError502(info);
+}
+
+
+
+void Server::handleCGIWrite(CGIInfo& info)
+{
+	std::shared_ptr<CGI>	cgi = info.cgi;
+	ssize_t					ret;
 
 	while (cgi->body_written < cgi->body_size)
 	{
-		n = write(fd, cgi->body.data() + cgi->body_written, cgi->body_size - cgi->body_written);
-		if (n > 0)
-			cgi->body_written += n;
-		else if (n == 0)
-			return;
-		else
+		ret = write(cgi->fd_stdin, cgi->body.c_str() + cgi->body_written, cgi->body_size - cgi->body_written);
+		if (ret < 0)
 		{
-			if (errno == EINTR)
-				continue;
 			if (errno == EAGAIN || errno == EWOULDBLOCK)
 				return;
-			if (errno == EPIPE)
-				break;
-			break;
+			if (errno == EINTR)
+				continue;
+			handleCGIError(info);
+			return;
 		}
+		cgi->body_written += ret;
 	}
 	cgi->write_finished = true;
+	epoll_ctl(epollFD, EPOLL_CTL_DEL, cgi->fd_stdin, NULL);
+	cgiProcesses.erase(cgi->fd_stdin);
+	closeFd(cgi->fd_stdin);
 }
 
 
 
-static void	handleCGIRead(int fd, std::shared_ptr<CGI> cgi, int epollFD, std::map<int, CGIInfo>& cgiProcesses)
+void Server::handleCGIRead(CGIInfo& info)
 {
-	char	buffer[8192];
-	ssize_t	n;
+	std::shared_ptr<CGI>	cgi = info.cgi;
+	char					buf[65536];
+	ssize_t					ret;
 
 	while (true)
 	{
-		n = read(fd, buffer, sizeof(buffer));
-		if (n > 0)
-			cgi->output.append(buffer, n);
-		else if (n == 0)
-			break;
+		ret = read(cgi->fd_stdout, buf, sizeof(buf));
+		if (ret > 0)
+			cgi->output.append(buf, static_cast<size_t>(ret));
+		else if (ret == 0)
+		{
+			cgi->read_finished = true;
+			epoll_ctl(epollFD, EPOLL_CTL_DEL, cgi->fd_stdout, NULL);
+			cgiProcesses.erase(cgi->fd_stdout);
+			closeFd(cgi->fd_stdout);
+			return;
+		}
 		else
 		{
-			if (errno == EINTR)
-				continue;
 			if (errno == EAGAIN || errno == EWOULDBLOCK)
 				return;
-			break;
+			if (errno == EINTR)
+				continue;
+			handleCGIError(info);
+			return;
 		}
 	}
-	cgi->read_finished = true;
 }
 
 
 
-static void	cleanupCGI(std::shared_ptr<CGI> cgi)
+void Server::handleCGIWait(CGIInfo& info)
 {
-	int	status;
-	
-	if (cgi->fd_stdin != -1)
-		closeFd(cgi->fd_stdin);
-	if (cgi->fd_stdout != -1)
-		closeFd(cgi->fd_stdout);
-	waitpid(cgi->pid, &status, WNOHANG);
+	std::shared_ptr<CGI>	cgi = info.cgi;
+	if (cgi->cgi_finished)
+		return;
+	int						status = 0;
+	pid_t					result = waitpid(cgi->pid, &status, WNOHANG);
+
+	if (result == cgi->pid)
+	{
+		cgi->cgi_finished = true;
+		return;
+	}
+	else if (result == -1)
+	{
+		handleCGIError(info);
+		return;
+	}
+	time_t	now = time(NULL);
+	if (now != (time_t)-1 &&
+		(now - cgi->start_time) < TIMEOUT_MS)
+		return;
+	handleCGIError(info);
 }
 
 
 
+/* FROM HERE */
 
 
 
+void Server::handleCGIResponse(CGIInfo& info)
+{
+	std::shared_ptr<CGI>	cgi = info.cgi;
+	int			clientFD = info.clientFD;
 
+	cgi->responseSent = true;
+
+	// Find the blank line separating CGI headers from body
+	std::string	boundary = "\r\n\r\n";
+	size_t		split = cgi->output.find(boundary);
+	if (split == std::string::npos)
+	{
+		boundary = "\n\n";
+		split = cgi->output.find(boundary);
+	}
+
+	std::string	cgiHeaders;
+	std::string	cgiBody;
+	if (split == std::string::npos)
+	{
+		// No header/body separator — treat everything as body
+		cgiHeaders = "Content-Type: text/html";
+		cgiBody = cgi->output;
+	}
+	else
+	{
+		cgiHeaders = cgi->output.substr(0, split);
+		cgiBody = cgi->output.substr(split + boundary.size());
+	}
+
+	// Extract optional Status: header written by the CGI script
+	std::string	statusLine = "200 OK";
+	size_t		statusPos = cgiHeaders.find("Status:");
+	if (statusPos != std::string::npos)
+	{
+		size_t	valueStart = statusPos + 7;
+		while (valueStart < cgiHeaders.size() && cgiHeaders[valueStart] == ' ')
+			valueStart++;
+		size_t	valueEnd = cgiHeaders.find('\n', valueStart);
+		statusLine = cgiHeaders.substr(
+			valueStart,
+			valueEnd == std::string::npos ? std::string::npos : valueEnd - valueStart);
+		if (!statusLine.empty() && statusLine.back() == '\r')
+			statusLine.pop_back();
+
+		// Remove Status: line so it doesn't appear twice in the response
+		size_t	lineEnd = cgiHeaders.find('\n', statusPos);
+		cgiHeaders.erase(statusPos,
+			lineEnd == std::string::npos ? std::string::npos : lineEnd - statusPos + 1);
+	}
+
+	std::string	response =
+		"HTTP/1.1 " + statusLine + "\r\n" +
+		cgiHeaders + "\r\n" +
+		"Content-Length: " + std::to_string(cgiBody.size()) + "\r\n" +
+		"Connection: close\r\n\r\n" +
+		cgiBody;
+
+	queueCGIResponse(clientFD, response);
+}
+
+
+
+void Server::handleCGIError502(CGIInfo& info)
+{
+	std::cerr << "CGI produced no output — sending 502." << std::endl;
+
+	info.cgi->responseSent = true;
+
+	std::string	response =
+		"HTTP/1.1 502 Bad Gateway\r\n"
+		"Content-Type: text/plain\r\n"
+		"Content-Length: 11\r\n"
+		"Connection: close\r\n\r\n"
+		"Bad Gateway";
+
+	queueCGIResponse(info.clientFD, response);
+}
+
+
+
+void Server::queueCGIResponse(int clientFD, const std::string& response)
+{
+	pendingWrites[clientFD] = response;
+	writeOffsets[clientFD] = 0;
+	closeAfterWrite[clientFD] = true;
+
+	epoll_event	ev{};
+	ev.events = EPOLLOUT;
+	ev.data.fd = clientFD;
+	if (epoll_ctl(epollFD, EPOLL_CTL_MOD, clientFD, &ev) == -1)
+	{
+		std::cerr << "CGI: epoll_ctl(MOD clientFD " << clientFD
+			<< "): " << strerror(errno) << std::endl;
+		RemoveClient(clientFD);
+	}
+}
+
+
+
+void Server::handleCGICleanUp(std::shared_ptr<CGI> cgi)
+{
+	// Close any pipe fds still open (timeout path may leave them)
+	std::map<int, CGIInfo>::iterator	it = cgiProcesses.begin();
+	while (it != cgiProcesses.end())
+	{
+		if (it->second.cgi == cgi)
+		{
+			int	orphanFd = it->first;
+			epoll_ctl(epollFD, EPOLL_CTL_DEL, orphanFd, NULL);
+			closeFd(orphanFd);
+			it = cgiProcesses.erase(it);
+		}
+		else
+			++it;
+	}
+
+	// Final reap — WNOHANG since handleCGIWait already killed if needed
+	if (cgi->pid > 0)
+	{
+		int	status = 0;
+		waitpid(cgi->pid, &status, WNOHANG);
+	}
+}
