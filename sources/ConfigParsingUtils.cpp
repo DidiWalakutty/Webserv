@@ -108,7 +108,8 @@ std::string method_to_string(HTTPMethod m)
 		case HTTPMethod::PUT: return "PUT";
 		case HTTPMethod::HEAD: return "HEAD";
 		case HTTPMethod::PATCH: return "PATCH";
-		default: return "UNSUPPORTED";
+		case HTTPMethod::UNSUPPORTED: return "UNSUPPORTED";
+        default: return "UNKNOWN";
     }
 }
 
@@ -138,12 +139,6 @@ static void print_location(const LocationParse& loc)
 
     std::cout << "    is_cgi: ";
     if (loc.is_cgi)
-        std::cout << "true" << "\n";
-    else
-        std::cout << "false\n";
-
-    std::cout << "    uploadEnabled: ";
-    if (loc.uploadEnabled)
         std::cout << "true" << "\n";
     else
         std::cout << "false\n";
