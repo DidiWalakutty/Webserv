@@ -246,12 +246,27 @@ static bool isValidIndex(const std::string& name)
 	return false;
 }
 
+/**
+ * @brief Checks that each location's settings are consistent and valid.
+ *  - Verifies redirect-only locations do not mix with other settings.
+ *  - Checks correct usage of CGI settings (is_cgi, executable, extension).
+ *  - Ensures upload and CGI features are not combined.
+ *  - Requires the root ("/") location to allow GET for basic site access.
+ */
 static bool validateMethodsAndBools(const LocationParse& loc)
 {
 	bool hasGet = false;
 	bool hasPost = false;
 	bool hasDelete = false;
 
+	// --- Path must exist ---
+	if (loc.path.empty())
+	{
+		std::cerr << "Error: Location path cannot be empty" << std::endl;
+		return false;
+	}
+
+	// --- Validate allowed methods ---
 	for (size_t i = 0; i < loc.allowedMethods.size(); ++i)
 	{
 		HTTPMethod m = loc.allowedMethods[i];
@@ -266,127 +281,51 @@ static bool validateMethodsAndBools(const LocationParse& loc)
 		}
 	}
 
-	if (loc.path.empty())
+	// --- Redirect locations should not mix with other settings ---
+	if (!loc.redirect.targetURL.empty())
 	{
-		std::cerr << "Error: Location path cannot be empty" << std::endl;
+		if (!loc.allowedMethods.empty() || loc.autoIndex 
+		    || loc.is_cgi || !loc.root.empty() || !loc.index.empty()
+			|| !loc.cgi_extension.empty() || !loc.cgi_executable.empty())
+		{
+			std::cerr << "Error: Redirect location should only define redirect status code and target URL." << std::endl;
+			return false;
+		}
+	}
+
+	// --- If CGI-related fields are set, is_cgi must be true ---
+	if ((!loc.cgi_extension.empty() || !loc.cgi_executable.empty()) && !loc.is_cgi)
+	{
+		std::cerr << "Error: CGI extension/executable should only be defined if is_cgi is true." << std::endl;
 		return false;
 	}
 
-	if (loc.path == "/upload")
-	{
-		if (!loc.uploadEnabled || !loc.autoIndex)
-		{
-			std::cerr << "Error: Location '/upload' must have uploadEnabled and autoindex set to true" << std::endl;
-			return false;
-		}
-		if (!hasPost)
-		{
-			std::cerr << "Error: Location '/upload', must have atleast HTTPMethod POST" << std::endl;
-			return false;
-		}
-	}
-
-	if (loc.path == "/cgi-bin")
-	{
-		if (!loc.is_cgi)
-		{
-			std::cerr << "Error: Location '/cgi-bin' must have is_cgi set to true" << std::endl;
-			return false;
-		}
-		if (!hasGet)
-		{
-			std::cerr << "Error: Location 'cgi-bin' must have atleast HTTPMethod GET" << std::endl;
-			return false;
-		}
-	}
-
-	if (loc.path == "/images")
-	{
-		if (!hasGet)
-		{
-			std::cerr << "Error: Location /images' must have atleast HTTPMethod GET" << std::endl;
-			return false;
-		}
-	}
-
+	// --- Validate CGI settings ---
 	if (loc.is_cgi)
 	{
-		if (hasDelete)
+		if (loc.cgi_extension.empty() || loc.cgi_executable.empty())
 		{
-			std::cerr << "Error: CGI location cannot allow DELETE method." << std::endl;
+			std::cerr << "Error: CGI location must have cgi_extension and cgi_executable defined if is_cgi is true." << std::endl;
 			return false;
 		}
-		if (!hasGet && !hasPost)
+		if (!hasGet && !hasPost && !hasDelete)
 		{
-			std::cerr << "Error: CGI Location must allow GET and/or POST." << std::endl;
-			return false;
-		}
-		if (loc.uploadEnabled || loc.autoIndex)
-		{
-			std::cerr << "Error: CGI location cannot have uploadEnabled or autoIndex set to true." << std::endl;
-			return false;
-		}
-		if (loc.cgi_executable.empty() || loc.cgi_extension.empty())
-		{
-			std::cerr << "Error: CGI location must have cgi_executable and cgi_extension defined if is_cgi is true." << std::endl;
-			return false;
-		}
-		if (loc.cgi_extension != ".py")
-		{
-			std::cerr << "Error: Only '.py' CGI extension is currently supported." << std::endl;
+			std::cerr << "Error: CGI Location must allow at least one of GET, POST or DELETE." << std::endl;
 			return false;
 		}
 	}
 
-	// != -> XOR, meaning both should be defined or both should be empty/
-	if (!loc.cgi_extension.empty() != !loc.cgi_executable.empty())
+	if (loc.is_cgi && loc.autoIndex)
 	{
-		if (!loc.is_cgi)
-		{
-			std::cerr << "Error: CGI extension + executable should only be defined if is_cgi is true." << std::endl;
-			return false;
-		}	
+		std::cerr << "Error: CGI execution and autoindex cannot be enabled at the same time." << std::endl;
+		return false;
 	}
 
-	if (loc.uploadEnabled)
+	// --- Make sure homepage is accessible ---
+	if (loc.path == "/" && !hasGet)
 	{
-		if (!hasPost || !hasDelete)
-		{
-			std::cerr << "Error: UploadEnable requires both POST and DELETE methods" << std::endl;
-			return false;
-		}
-		if (loc.is_cgi)
-		{
-			std::cerr << "Error: UploadEnabled cannot have is_cgi set to true." << std::endl;
-			return false;
-		}
-	}
-
-	if (!loc.redirect.targetURL.empty())
-	{
-		if (!loc.allowedMethods.empty() || loc.uploadEnabled || loc.autoIndex || loc.is_cgi || !loc.root.empty() || !loc.index.empty())
-		{
-			std::cerr << "Error: Redirect location should be empty, except for status code and target url" << std::endl;
-			return false;
-		}
-	}
-
-	if (loc.redirect.targetURL.empty() && loc.path == "/")
-	{
-		if (!hasGet)
-		{
-			std::cout << "Error: Location: " << loc.path << " should have HTTPMethod GET." << std::endl;
-			return false;
-		}
-	}
-
-	for (HTTPMethod m : loc.allowedMethods)
-	{
-		if (m != HTTPMethod::GET && m != HTTPMethod::POST && m != HTTPMethod::DELETE)
-		{
-			std::cerr << "Error: only HTTP methods GET, POST and DELETE are allowed." << std::endl;
-			return false;
-		}
+		std::cerr << "Error: Location with path '/' must allow GET method." << std::endl;
+		return false;
 	}
 
 	return true;
@@ -428,10 +367,16 @@ static bool validatePathsAndMethods(const ServerParse& server)
 		}
 		if (loc.redirect.statusCode != 0)
 		{
-			if (!loc.allowedMethods.empty() || loc.uploadEnabled || loc.autoIndex || \
+			if (!loc.allowedMethods.empty() || loc.autoIndex || \
 				loc.is_cgi || !loc.root.empty() || !loc.index.empty())
 			{
 				std::cerr << "Error: Redirection location should be empty, except for status code and target url" << std::endl;
+				return false;
+			}
+			if (loc.redirect.statusCode != 301 && loc.redirect.statusCode != 302
+				&& loc.redirect.statusCode != 307 && loc.redirect.statusCode != 308)
+			{
+				std::cerr << "Error: Redirect status code must be either 301, 302, 307 or 308." << std::endl;
 				return false;
 			}
 
@@ -551,7 +496,6 @@ bool ConfigParser::validateServerParse(ServerParse& server)
 			loc.index.clear();
 			loc.allowedMethods.clear();
 			loc.autoIndex = false;
-			loc.uploadEnabled = false;
 			loc.is_cgi = false;
 		}
 	}
