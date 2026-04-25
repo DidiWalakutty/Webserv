@@ -6,7 +6,7 @@
 /*   By: diwalaku <diwalaku@codam.student.nl>         +#+                     */
 /*                                                   +#+                      */
 /*   Created: 2026/04/15 21:27:32 by diwalaku      #+#    #+#                 */
-/*   Updated: 2026/04/25 17:42:44 by rbom          ########   odam.nl         */
+/*   Updated: 2026/04/25 18:01:06 by diwalaku      ########   odam.nl         */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -46,6 +46,10 @@ HTTPState Server::checkCGIAccess(const std::string& filePath)
 bool Server::IsCGIRequest(const HTTPRequest& request, const ServerParse& server,
                           std::string& filePath, const LocationParse*& location)
 {
+	// --- Only GET and POST are considered CGI requests ---
+	if (HTTPMethod::GET != request.method && HTTPMethod::POST != request.method)
+		return false;
+		
 	// --- 1. Find matching location ---
 	location = server.get_best_location(request.resourcePath);
 	if (!location)
@@ -54,6 +58,7 @@ bool Server::IsCGIRequest(const HTTPRequest& request, const ServerParse& server,
 	// --- 2. Must be marked as CGI ---
 	if (!location->is_cgi)
 		return false;
+
 
 	// --- 3. Build filesystem path ---
 	filePath = server.build_filesystem_path(request.resourcePath);
