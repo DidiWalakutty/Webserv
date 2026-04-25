@@ -42,6 +42,7 @@ Server::Server(const std::vector<ServerParse>& serverConfigs)
 	: _servers(serverConfigs), epollFD(-1)
 {
 	signal(SIGINT, Interrupt);
+	signal(SIGPIPE, SIG_IGN);
 
 	try
 	{
@@ -715,7 +716,7 @@ void Server::Start()
 
 					// access was OK, handle CGI
 					std::cout <<  "Handling CGI request for: " << filePath  << std::endl;
-					startCGI(fd, request,  filePath, *loc);
+					startCGI(fd, request, *serverPtr, filePath, *loc);
 					continue;
 				}
 

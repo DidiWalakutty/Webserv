@@ -5,7 +5,7 @@
 #include	<fcntl.h>
 #include	<sys/wait.h>
 
-#define		TIMEOUT_MS 5000
+#define		TIMEOUT 5
 
 struct	CGI
 {
@@ -18,6 +18,6 @@ struct	CGI
 	ssize_t		body_written = 0;
 	bool		read_finished = false;
 	bool		cgi_finished = false;
-	time_t		start_time;
+	time_t		start_time = 0;
 	std::string	output = "";
 };
