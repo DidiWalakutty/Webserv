@@ -22,7 +22,7 @@
 constexpr size_t KB = 1024;
 constexpr size_t MB = 1024 * KB;
 
-static const size_t MIN_CONFIG_BODY_SIZE = 1;					// 1 byte
+static const size_t MIN_CONFIG_BODY_SIZE = 1;		// 1 byte
 static const size_t MAX_CONFIG_BODY_SIZE = 10 * MB;	// 10 MB
 
 // --- Reads + Validates .conf file ---
@@ -46,7 +46,6 @@ class ConfigParser {
 
 		// --- Validation Data ---
 		bool validateServerParse(ServerParse& server);
-		// bool validateLocationParse(const LocationParse& location) const;
 		bool isValidHTTPMethod(const std::string& method) const;
 		bool stringToHTTPMethod(const std::string& method, HTTPMethod& outMethod);
 
