@@ -1,5 +1,4 @@
 #include "HTTPResponse.hpp"
-#include "server.hpp"
 #include "dirent.h"
 
  /**
@@ -25,7 +24,9 @@ std::string HTTPResponse::generateImagesGallery(const std::string& imagesDir)
     while ((entry = readdir(dir)) != NULL) 
     {
         std::string name = entry->d_name;
-        if (name == "." || name == "..") continue;
+		// Skip current directory
+        if (name == "." || name == "..") 
+			continue;
 
         if (name.find(".png") != std::string::npos || 
             name.find(".jpg") != std::string::npos ||
@@ -45,22 +46,69 @@ std::string HTTPResponse::generateImagesGallery(const std::string& imagesDir)
 }
 
 /**
+ * @brief Generates a simple HTML directory listing (autoindex).
+ *
+ * @param dirPath Filesystem path to read directory contents from.
+ * @param urlPath URL path to use for the links in the listing (e.g., "/files/").
+ *
+ * @details
+ * - Lists all files in the directory as links.
+ * - Used when no index file is present and autoindex is enabled.
+ * - Returns a minimal HTML page showing the directory contents.
+ */
+std::string HTTPResponse::generateAutoindex(const std::string& dirPath, const std::string& urlPath)
+{
+	DIR *dir = opendir(dirPath.c_str());
+	if (!dir) 
+		return "<html><body><h1>Unable to open directory</h1></body></html>";
+	
+	struct dirent *entry;
+	std::stringstream html;
+
+	html << "<html><head><title>Index of " << urlPath << "</title></head>";
+	html << "<body>";
+	html << "<h1>Index of " << urlPath << "</h1>";
+	html << "<ul>";
+
+	while ((entry = readdir(dir)) != NULL) 
+	{
+		std::string name = entry->d_name;
+		
+		// Skip current directory
+		if (name == "." || name == "..") 
+			continue;
+
+		std::string link = urlPath;
+		if (!link.empty() && link.back() != '/')
+			link += "/";
+		link += name;
+
+		html << "<li><a href=\"" << link << "\">" << name << "</a></li>";
+	}
+	html << "</ul>";
+	html << "</body></html>";
+
+	closedir(dir);
+	return html.str();
+}
+
+/**
  * @brief Generates an HTML autoindex page for all uploaded files in the /upload directory.
  *
  * @details
- * - Opens the specified upload directory.
- * - Iterates over all entries except "." and "..", to avoid listing current + parent directory.
- * - Ignores any .html files to prevent accidental deletion of the autoindex page itself.
- * - Generates an HTML page containing clickable links <a> for each file.
- * - Adds a delete button next to each file, which triggers a DELETE request to remove the file from the server.
- * - Used to provide directory listing for GET /upload.
- * - Does not perform permission or method checks.
+ * - Reads all files in the directory (skips "." and ".." and .html files).
+ * - Uses a stringstream to build HTML dynamically.
+ * - Each file is wrapped in a <div class="file-item">:
+ *     - <a> tag → opens the file in the browser
+ *     - optional <button> → triggers delete via JavaScript
  */
-std::string HTTPResponse::generateUploadAutoindex(const std::string& uploadDir)
+std::string HTTPResponse::generateUploadList(const std::string& uploadDir, bool allowDelete)
 {
    	DIR* dir = opendir(uploadDir.c_str());
 	if (!dir)
+	{
         return "";
+	}
 
     struct dirent* entry;
     std::stringstream ss;
@@ -68,7 +116,6 @@ std::string HTTPResponse::generateUploadAutoindex(const std::string& uploadDir)
     while ((entry = readdir(dir)) != NULL)
     {
         std::string name = entry->d_name;
-
         if (name == "." || name == "..")
             continue;
 
@@ -76,10 +123,13 @@ std::string HTTPResponse::generateUploadAutoindex(const std::string& uploadDir)
             continue;
 
         ss << "<div class=\"file-item\">"
-           << "<a href=\"/upload/" << name << "\" target=\"_blank\">" << name << "</a>"
-           << "<button class=\"delete-btn\" "
-           << "onclick=\"deleteFile('" << name << "')\">Delete</button>"
-           << "</div>";
+		   << "<a href=\"/upload/" << name << "\" target=\"_blank\">" << name << "</a>";
+		if (allowDelete)
+		{
+			ss << "<button class=\"delete-btn\" "
+			   << "onclick=\"deleteFile('" << name << "')\">Delete</button>";
+		}
+		ss << "</div>";
     }
 
     closedir(dir);
@@ -333,6 +383,38 @@ bool HTTPResponse::checkPostAccess(const std::string& filePath)
 }
 
 /**
+ * @brief Checks if the file exists, is executable and readable for CGI execution.
+ * 	F_OK: Tests for existence of the file.
+ * 	R_OK: Tests for read permission.
+ * 	X_OK: Tests for execute permission.
+ */
+bool HTTPResponse::checkCGIAccess(const std::string& filePath)
+{
+	// Check if file path is empty
+	if (filePath.empty())
+	{
+		handleErrorPages(HTTPState::NotFound);
+		return false;
+	}
+
+	// Check if file exists
+	if (access(filePath.c_str(), F_OK) != 0)
+	{
+		handleErrorPages(HTTPState::NotFound);
+		return false;
+	}
+
+	// Check if file is readable and executable
+	if (access(filePath.c_str(), R_OK | X_OK) != 0)
+	{
+		handleErrorPages(HTTPState::Forbidden);
+		return false;
+	}
+
+	return true;
+}
+
+/**
  * @brief Checks if a file exists and can be deleted.
  *
  * @details
@@ -372,5 +454,38 @@ bool HTTPResponse::checkDeleteAccess(const std::string& filePath)
 		return false;
 	}
 
+	return true;
+}
+
+HTTPState HTTPResponse::getRedirectState(int code) const
+{
+	switch (code)
+	{
+		case 301: return HTTPState::MovedPermanently;
+		case 302: return HTTPState::Found;
+		case 307: return HTTPState::TemporaryRedirect;
+		case 308: return HTTPState::PermanentRedirect;
+		default:  return HTTPState::InternalServerError; // should never happen if validated
+	}
+}
+
+bool HTTPResponse::validateSize(const std::string& buffer, const std::string& filePath)
+{
+	std::ifstream file(filePath.c_str(), std::ios::binary | std::ios::ate);
+	if (!file.is_open())
+	{
+		std::cerr << "Could not reopen file to validate size: " << filePath << std::endl;
+		handleErrorPages(HTTPState::InternalServerError);
+		return false;
+	}
+
+	std::ifstream::pos_type expected = file.tellg();
+	file.close();
+	if (expected < 0 || buffer.size() != static_cast<size_t>(expected))
+	{
+		std::cerr << "Buffer size mismatch: buffer is " << buffer.size() << " bytes, expected was " << expected << " bytes" << std::endl;
+		handleErrorPages(HTTPState::InternalServerError);
+		return false;
+	}
 	return true;
 }
