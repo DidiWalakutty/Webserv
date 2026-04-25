@@ -6,7 +6,7 @@
 /*   By: diwalaku <diwalaku@codam.student.nl>         +#+                     */
 /*                                                   +#+                      */
 /*   Created: 2026/04/15 21:27:32 by diwalaku      #+#    #+#                 */
-/*   Updated: 2026/04/22 18:21:39 by rbom          ########   odam.nl         */
+/*   Updated: 2026/04/25 17:42:44 by rbom          ########   odam.nl         */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -27,7 +27,7 @@ HTTPState Server::checkCGIAccess(const std::string& filePath)
 	// --- 3. Reject directories ---
 	if (S_ISDIR(st.st_mode))
 		return HTTPState::Forbidden;
-
+		
 	// --- 4. Check read permission ---
 	if (access(filePath.c_str(), R_OK) != 0)
 		return HTTPState::Forbidden;
@@ -39,7 +39,7 @@ HTTPState Server::checkCGIAccess(const std::string& filePath)
 	// Needed??? --- 6. Prevents checking sockets, pipes etc
 	if (!S_ISREG(st.st_mode))
 		return HTTPState::Forbidden;
-
+		
 	return HTTPState::Ok;
 }
 

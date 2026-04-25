@@ -671,7 +671,7 @@ void Server::Start()
 						body = statusMessage.code + ": " + statusMessage.message;
 					}
 					std::string response =
-						"HTTP/1.1 " + statusMessage.code + " " + statusMessage.message +ServerParse "\r\nContent-Type: " + contentType +
+						"HTTP/1.1 " + statusMessage.code + " " + statusMessage.message + "\r\nContent-Type: " + contentType +
 						"\r\nContent-Length: " + std::to_string(body.size()) +
 						"\r\nConnection: close\r\n\r\n" + body;
 					ssize_t bw = write(events[i].data.fd, response.c_str(), response.size());
@@ -704,15 +704,15 @@ void Server::Start()
 
 				if (IsCGIRequest(request, *serverPtr, filePath, loc))
 				{
-					// HTTPState cgiAccessState = checkCGIAccess(filePath);
+					HTTPState cgiAccessState = checkCGIAccess(filePath);
 					// access wasn't good, return error page
-					// if (cgiAccessState != HTTPState::Ok)
-					// {
-					// 	HTTPResponse response(*serverPtr);
-					// 	std::string responseStr = response.buildErrorResponse(request, cgiAccessState);
-					// 	QueueResponse(fd, request, responseStr);
-					// 	continue;
-					// }
+					if (cgiAccessState != HTTPState::Ok)
+					{
+						HTTPResponse response(*serverPtr);
+						std::string responseStr = response.buildErrorResponse(request, cgiAccessState);
+						QueueResponse(fd, request, responseStr);
+						continue;
+					}
 
 					// access was OK, handle CGI
 					std::cout <<  "Handling CGI request for: " << filePath  << std::endl;
