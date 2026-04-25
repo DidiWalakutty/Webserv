@@ -73,17 +73,20 @@ private:
 	void handleHEAD(const HTTPRequest& request, const std::string& filePath);
 	void handlePOST(const HTTPRequest& request, const std::string& filePath);
 	void handleDELETE(const HTTPRequest& request, const std::string& filePath);
+	void handleDirectoryRequest(const HTTPRequest& request, const LocationParse* loc, const std::string& filePath);
 	void handleErrorPages(HTTPState state);
 
 	// Helper functions
 	std::string generateImagesGallery(const std::string& imagesDir);
-	std::string generateUploadAutoindex(const std::string& uploadDir);
+	std::string generateAutoindex(const std::string& dirPath, const std::string& urlPath);
+	std::string generateUploadList(const std::string& uploadDir, bool allowDelete);
 	std::string generateUploadFilename(const std::string& prefix);
 	bool checkGetAccess(const std::string& filePath);
 	bool checkPostAccess(const std::string& filePath);
 	bool checkDeleteAccess(const std::string& filePath);
 	bool extractMultipartFile(const HTTPRequest& request, std::string& fileName, std::string& fileData, std::string& ext);
 	std::string findExtension(const HTTPRequest& request, const std::string& fileData);
+	HTTPState getRedirectState(int code) const;
 
 	/**
 	 * @brief Validates that the buffer is recieved totally.
