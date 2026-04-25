@@ -23,7 +23,6 @@ struct LocationParse
 
 	bool autoIndex = false; 	/* Enable or disable directory listing */
 	bool is_cgi = false;   		/* True if this location executes CGI scripts */
-	bool uploadEnabled = false; /* True if file uploads are allowed in this location */
 	
 	std::string cgi_extension; 	/* If is_cgi is true, the file extension that triggers CGI execution (e.g., .py) */
 	std::string cgi_executable; /* needed???CGI executable name to call for CGI requests */
