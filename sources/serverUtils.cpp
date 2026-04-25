@@ -6,7 +6,7 @@
 /*   By: diwalaku <diwalaku@codam.student.nl>         +#+                     */
 /*                                                   +#+                      */
 /*   Created: 2026/04/15 21:27:32 by diwalaku      #+#    #+#                 */
-/*   Updated: 2026/04/25 18:01:06 by diwalaku      ########   odam.nl         */
+/*   Updated: 2026/04/25 18:02:43 by diwalaku      ########   odam.nl         */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -58,7 +58,6 @@ bool Server::IsCGIRequest(const HTTPRequest& request, const ServerParse& server,
 	// --- 2. Must be marked as CGI ---
 	if (!location->is_cgi)
 		return false;
-
 
 	// --- 3. Build filesystem path ---
 	filePath = server.build_filesystem_path(request.resourcePath);
