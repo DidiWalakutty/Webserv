@@ -365,7 +365,6 @@ LocationParse ConfigParser::parseLocationBlock(const std::vector<std::string>& f
 
 	// --- Set default values ---
 	location.autoIndex = false;
-	location.uploadEnabled = false;
 	location.is_cgi = false;
 	location.maxBodySize = 0;
 	location.cgi_executable = "";
@@ -486,19 +485,6 @@ LocationParse ConfigParser::parseLocationBlock(const std::vector<std::string>& f
 				{
 					std::cerr << "Error: Invalid return directive format in location block at line: " << currentLine + 1 << std::endl;
 					location_error = true;
-				}
-			}
-			else if (key == "uploadEnabled")
-			{
-				if (value == "true")
-					location.uploadEnabled = true;
-				else if (value == "false")
-					location.uploadEnabled = false;
-				else
-				{
-					std::cerr << "Warning: Invalid choice for uploadEnabled in location block at line: " << currentLine + 1 << std::endl;
-					location.uploadEnabled = false;
-					std::cerr << "UploadEnabled was defaulted to " << (location.uploadEnabled ? "true" : "false") << std::endl;
 				}
 			}
 			else if (key == "is_cgi")
