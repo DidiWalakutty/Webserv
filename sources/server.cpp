@@ -629,7 +629,14 @@ void Server::Start()
 					bool isPayloadTooLarge =
 						excMsg == "Content-Length exceeds maximum allowed size" ||
 						excMsg == "Body size exceeds maximum limit";
-					HTTPState errorState = isPayloadTooLarge ? HTTPState::RequestTooLarge : HTTPState::BadRequest;
+					bool isLengthRequired =
+						excMsg.find("Missing required Content-Length header for method") != std::string::npos ||
+						excMsg.find("Invalid Content-Length header value") != std::string::npos;
+					HTTPState errorState = HTTPState::BadRequest;
+					if (isPayloadTooLarge)
+						errorState = HTTPState::RequestTooLarge;
+					else if (isLengthRequired)
+						errorState = HTTPState::LengthRequired;
 					HTTPMessage statusMessage = HTTPCommon::HTTPStatusMap.at(errorState);
 					int statusCodeInt = static_cast<int>(errorState);
 
@@ -726,6 +733,12 @@ void Server::Start()
 				
 				QueueResponse(fd, request, responseStr);
 
+				// 9) --- If client wants to close connection, mark it for closing after write ---
+				if (request.headers.count("Connection") && request.headers["Connection"] == "close")
+				{
+					closeAfterWrite[fd] = true;
+					std::cout << "Client requested Connection: close. Will close after response is sent." << std::endl;
+				}
 			}
 		}
 	}

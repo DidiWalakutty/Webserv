@@ -119,7 +119,7 @@ void HTTPResponse::handleDirectoryRequest(const HTTPRequest& request, const Loca
 	}
 
 	// --- Directory exists, but no index and autoindex is off ---
-	handleErrorPages(HTTPState::Forbidden);
+	handleErrorPages(HTTPState::NotFound);
 }
 
 
@@ -444,6 +444,8 @@ void HTTPResponse::handleHEAD(const HTTPRequest& request, const std::string& fil
 		return;
 	}
 
+	std::cout << "File opened successfully for HEAD request" << std::endl;
+
 	// --- Get file size for Content-Length header ---
 	file.seekg(0, std::ios::end);			// Move the read pointer to end of the file
 	std::streampos fileSize = file.tellg();	// Get current pos -> this is the byte sized file
@@ -452,6 +454,8 @@ void HTTPResponse::handleHEAD(const HTTPRequest& request, const std::string& fil
 	body.clear(); // No body for HEAD response
 	headers["CONTENT-TYPE"] = parseContentType(filePath);
 	headers["CONTENT-LENGTH"] = std::to_string(fileSize);
+	request.printRequest();
+	std::cout << "HEAD request headers set with Content-Length: " << fileSize << std::endl;
 	updateForHTTPState(HTTPState::Ok);
 }
 

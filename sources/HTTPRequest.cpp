@@ -91,20 +91,18 @@ bool HTTPRequest::parseRequest(const std::string raw)
 	if (headers.find("HOST") == headers.end())
 		throw HTTPRequestException("Missing required Host header");
 
-	if (headers.find("CONTENT-LENGTH") != headers.end())
+	bool hasContentLength = (headers.find("CONTENT-LENGTH") != headers.end());
+	bool hasTransferEncoding = (headers.find("TRANSFER-ENCODING") != headers.end());
+
+	if (hasContentLength)
 	{
 		if (headers["CONTENT-LENGTH"].empty() || !std::all_of(headers["CONTENT-LENGTH"].begin(), headers["CONTENT-LENGTH"].end(), ::isdigit))
 			throw HTTPRequestException("Invalid Content-Length header value: " + headers["CONTENT-LENGTH"]);
 		size_t contentLength = std::stoul(headers["CONTENT-LENGTH"]);
 		if (contentLength > MAX_BODY_SIZE)
 			throw HTTPRequestException("Content-Length exceeds maximum allowed size");
-		if (contentLength == 0 && (method == HTTPMethod::POST || method == HTTPMethod::PUT || method == HTTPMethod::PATCH))
-			throw HTTPRequestException("Content-Length header must be greater than 0 for method: " + methodStr);
 	}
-	// --- !!! --- Patch or Delete needed?? DEL does not need body.
-	else if (methodStr == "PUT" || methodStr == "PATCH")
-		throw HTTPRequestException("Missing required Content-Length header for method: " + methodStr);
-	if (headers.find("TRANSFER-ENCODING") != headers.end())
+	if (hasTransferEncoding)
 	{
 		if (headers["TRANSFER-ENCODING"] == "chunked")
 		{
@@ -117,6 +115,13 @@ bool HTTPRequest::parseRequest(const std::string raw)
 		{
 			throw HTTPRequestException("Unsupported Transfer-Encoding: " + headers["TRANSFER-ENCODING"]);	
 		}
+	}
+
+	// For methods that usually carry a payload, require explicit body framing.
+	if ((method == HTTPMethod::POST || method == HTTPMethod::PUT || method == HTTPMethod::PATCH)
+		&& !hasContentLength && !hasTransferEncoding)
+	{
+		throw HTTPRequestException("Missing required Content-Length header for method: " + methodStr);
 	}
 	// If request has no body, we end here.
 	if (stream.eof())

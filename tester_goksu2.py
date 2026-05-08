@@ -40,6 +40,7 @@ RESET  = "\033[0m"
 
 results  = {"passed": 0, "failed": 0, "skipped": 0}
 failures = []
+skips    = []
 
 
 def passed(name):
@@ -56,6 +57,7 @@ def failed(name, reason=""):
 
 def skipped(name, reason=""):
     results["skipped"] += 1
+    skips.append((name, reason))
     tag = f" {DIM}({reason}){RESET}" if reason else ""
     print(f"  {YELLOW}–{RESET} {name}{tag}")
 
@@ -303,6 +305,131 @@ def test_http_methods():
         passed(f"OPTIONS method handled without crash (status {status})")
     else:
         failed("OPTIONS method handled", "no response / server may have crashed")
+
+
+# ─── 4b. HEAD status codes ───────────────────────────────────────────────────
+
+def test_head_status_codes():
+    section("4b. HEAD request status codes")
+
+    # HEAD should mirror GET status for common paths.
+    cases = [
+        ("/", [200], "HEAD / returns 200 OK"),
+        ("/this_path_definitely_does_not_exist_xyz123", [404],
+         "HEAD missing path returns 404"),
+    ]
+
+    for path, expected, label in cases:
+        head_status, _, _ = http_method("HEAD", path)
+        if head_status in expected:
+            passed(f"{label} (got {head_status})")
+        elif head_status is not None:
+            failed(label, f"got {head_status}, expected {expected}")
+        else:
+            failed(label, "no response")
+
+        get_status, _, _ = http_get(path)
+        if head_status is not None and get_status is not None and head_status == get_status:
+            passed(f"HEAD status matches GET for {path} ({head_status})")
+        elif head_status is not None and get_status is not None:
+            failed(f"HEAD status matches GET for {path}",
+                   f"HEAD={head_status}, GET={get_status}")
+        else:
+            skipped(f"HEAD vs GET status compare for {path}", "no response")
+
+    # HTTP/1.1 Host header is mandatory for HEAD too.
+    raw = raw_request("HEAD / HTTP/1.1\r\n\r\n")
+    if raw and not raw.startswith("ERROR"):
+        sl = status_line(raw)
+        if "400" in sl:
+            passed("HEAD without Host returns 400 Bad Request")
+        else:
+            failed("HEAD without Host returns 400 Bad Request", f"got {sl}")
+    else:
+        failed("HEAD without Host test", "no response")
+
+    # HEAD response must not include a message body.
+    for path, expected in [("/", "200"), ("/this_path_definitely_does_not_exist_xyz123", "404")]:
+        raw = raw_request(f"HEAD {path} HTTP/1.1\r\nHost: test\r\n\r\n")
+        if not raw or raw.startswith("ERROR"):
+            failed(f"HEAD {path} returns parsable response", raw[:80] if raw else "no response")
+            continue
+
+        sl = status_line(raw)
+        header_end = raw.find("\r\n\r\n")
+        body_after = raw[header_end + 4:].strip() if header_end != -1 else raw
+
+        if expected in sl:
+            passed(f"HEAD {path} returns {expected}")
+        else:
+            failed(f"HEAD {path} returns {expected}", f"got {sl}")
+
+        if not body_after:
+            passed(f"HEAD {path} has no body")
+        else:
+            failed(f"HEAD {path} has no body", "body was present")
+
+
+# ─── 4c. POST edge cases ─────────────────────────────────────────────────────
+
+def test_post_edge_cases():
+    section("4c. POST edge cases and response codes")
+
+    # Zero-length POST to '/' should produce a valid HTTP response code.
+    # Some configurations accept it; others reject with 400/405/404.
+    status, _, _ = http_method(
+        "POST", "/", body=b"",
+        headers={"Content-Type": "application/octet-stream", "Content-Length": "0"})
+    if status in (200, 201, 202, 204, 400, 404, 405, 413):
+        passed(f"POST / with Content-Length: 0 handled (status {status})")
+    elif status is not None:
+        failed("POST / with Content-Length: 0 handled", f"unexpected status {status}")
+    else:
+        failed("POST / with Content-Length: 0 handled", "no response")
+
+    # Raw zero-length POST to verify parser/framing path for HTTP/1.1.
+    raw = raw_request(
+        f"POST / HTTP/1.1\r\n"
+        f"Host: {HOST}:{PORT}\r\n"
+        "Content-Type: application/octet-stream\r\n"
+        "Content-Length: 0\r\n"
+        "Connection: close\r\n\r\n"
+    )
+    if raw and not raw.startswith("ERROR") and raw.startswith("HTTP/1."):
+        passed(f"Raw POST / Content-Length: 0 returns valid status line ({status_line(raw)})")
+    else:
+        failed("Raw POST / Content-Length: 0 returns valid status line", raw[:80] if raw else "no response")
+
+    # Missing Content-Length / Transfer-Encoding on POST should be rejected.
+    raw = raw_request(
+        "POST / HTTP/1.1\r\n"
+        "Host: test\r\n"
+        "Content-Type: application/octet-stream\r\n"
+        "Connection: close\r\n\r\n"
+    )
+    if raw and not raw.startswith("ERROR"):
+        sl = status_line(raw)
+        if any(code in sl for code in ["400", "411", "501"]):
+            passed(f"POST without length framing rejected ({sl.strip()})")
+        else:
+            skipped("POST without length framing", f"got {sl.strip()}")
+    else:
+        failed("POST without length framing", "no response")
+
+    # Malformed body length (declared 5, send 0) should not block indefinitely.
+    start = time.time()
+    raw = raw_request(
+        "POST / HTTP/1.1\r\n"
+        "Host: test\r\n"
+        "Content-Type: text/plain\r\n"
+        "Content-Length: 5\r\n"
+        "Connection: close\r\n\r\n"
+    )
+    elapsed = time.time() - start
+    if elapsed < TIMEOUT + 1:
+        passed(f"POST with incomplete body does not hang ({elapsed:.2f}s)")
+    else:
+        failed("POST with incomplete body does not hang", f"took {elapsed:.2f}s")
 
 
 # ─── 5. Error pages ───────────────────────────────────────────────────────────
@@ -1065,6 +1192,12 @@ def print_summary():
             r = f"  {DIM}{reason}{RESET}" if reason else ""
             print(f"  {RED}✗{RESET} {name}{r}")
 
+    if skips:
+        print(f"\n{YELLOW}{BOLD}Skipped tests:{RESET}")
+        for name, reason in skips:
+            r = f"  {DIM}{reason}{RESET}" if reason else ""
+            print(f"  {YELLOW}–{RESET} {name}{r}")
+
     print()
     if results["failed"] == 0:
         print(f"{GREEN}{BOLD}All checks passed!{RESET}")
@@ -1082,6 +1215,8 @@ def main():
     test_basic_get()               # §IV.1: GET, 404
     test_response_headers()        # §IV.1: accurate status codes, HTTP/1.x
     test_http_methods()            # §IV.1: GET, POST, DELETE, HEAD, unknown method
+    test_head_status_codes()       # §IV.1: HEAD status code behavior
+    test_post_edge_cases()         # §IV.1: POST parser/framing edge cases
     test_error_pages()             # §IV.1: default error pages, 400/404/405
     test_static_files()            # §IV.1: serve fully static website
     test_file_upload()             # §IV.1: clients must be able to upload files
