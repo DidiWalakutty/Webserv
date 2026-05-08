@@ -443,7 +443,7 @@ bool HTTPResponse::checkDeleteAccess(const std::string& filePath)
 	struct stat pathStat;
 	if (stat(filePath.c_str(), &pathStat) != 0 || S_ISDIR(pathStat.st_mode))
 	{
-		handleErrorPages(HTTPState::Forbidden);
+		handleErrorPages(HTTPState::MethodNotAllowed);
 		return false;
 	}
 	

@@ -825,7 +825,7 @@ def test_redirections():
 def test_directory_listing():
     section("16. Directory listing (subject: enable/disable directory listing per route)")
 
-    listing_candidates = ["/files", "/uploads", "/static", "/www"]
+    listing_candidates = ["/www/html/images", "/upload", "/www/cgi-bin"]
     for path in listing_candidates:
         status, headers, body = http_get(path)
         if status == 200:
