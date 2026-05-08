@@ -29,8 +29,6 @@ struct LocationParse
 	
 	size_t maxBodySize = 0;		/* Max allowed body size in bytes for this location */
 	Redirect redirect;							/* Optional redirect for this location (status code + target URL)*/
-
-	bool method_allowed(HTTPMethod m) const;	/* Checks if a specific HTTP method is allowed */
 };
 
 /* Configuration for a server block */

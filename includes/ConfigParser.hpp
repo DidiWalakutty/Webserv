@@ -38,7 +38,6 @@ class ConfigParser {
 
 		// --- Split by Token ---
 		std::vector<std::string> splitByWhitespace(const std::string& line) const;
-		std::vector<std::string> splitBySemicolon(const std::string& line) const;
 
 		// --- Parse Server and Location Blocks ---
 		ServerParse parseServerBlock(const std::vector<std::string>& fileLines, size_t& currentLine, bool& parsing_error);
@@ -46,7 +45,6 @@ class ConfigParser {
 
 		// --- Validation Data ---
 		bool validateServerParse(ServerParse& server);
-		bool isValidHTTPMethod(const std::string& method) const;
 		bool stringToHTTPMethod(const std::string& method, HTTPMethod& outMethod);
 
 	public:
@@ -58,8 +56,6 @@ class ConfigParser {
 		const std::vector<ServerParse>& getServers() const { return _servers; } // Returns the parsed server configurations
 
 		// --- Accessors for best location and error pages ---
-		const LocationParse* getBestLocation(const ServerParse& server, const std::string& path) const;
-		const std::string* getErrorPage(const ServerParse& server, int errorCode) const;
 		const ssize_t getMaxBodySize(const ServerParse& server);
 		// For debugging: print parsed config
 		void print_server(const ServerParse& server) const;
