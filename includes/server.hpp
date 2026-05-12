@@ -77,14 +77,14 @@ class Server
 		bool IsCGIRequest(const HTTPRequest& request, const ServerParse& server, std::string& filePath, const LocationParse*& location);
 		void startCGI(int clientFD, const HTTPRequest& request, const ServerParse& server, const std::string& filePath, const LocationParse& location);
 		void handleCGIEvent(int fd, uint32_t events);
-		void handleCGIError(CGIInfo& info);
-		void handleCGIWrite(CGIInfo& info);
-		void handleCGIRead(CGIInfo& info);
-		void handleCGIWait(CGIInfo& info);
-		void handleCGIResponse(CGIInfo& info);
-		void handleCGIError502(CGIInfo& info);
+		void handleCGITimeOut(std::shared_ptr<CGI> cgi);
+		void handleCGIError(std::shared_ptr<CGI> cgi);
+		void handleCGIWrite(std::shared_ptr<CGI> cgi, uint32_t events);
+		void handleCGIRead(std::shared_ptr<CGI> cgi, uint32_t events);
+		void handleCGIWait(std::shared_ptr<CGI> cgi);
+		void handleCGIResponse(std::shared_ptr<CGI> cgi);
+		void handleCGIErrorResponse(std::shared_ptr<CGI> cgi);
 		void queueCGIResponse(int clientFD, const std::string& response);
-		void handleCGICleanUp(std::shared_ptr<CGI> cgi);
 		HTTPState checkCGIAccess(const std::string& filePath);
 
 	public:

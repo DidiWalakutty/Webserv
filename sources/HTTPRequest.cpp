@@ -188,7 +188,7 @@ bool HTTPRequest::isValidProtocolVersion(const std::string protocolVersion) cons
 
 bool HTTPRequest::isValidBody(const std::string body) const
 {
-	if (method == HTTPMethod::GET || method == HTTPMethod::HEAD || method == HTTPMethod::DELETE)
+	if (!body.empty() && (method == HTTPMethod::GET || method == HTTPMethod::HEAD || method == HTTPMethod::DELETE))
 		std::cout << "The body is provided for method " << methodToString(method) << ", which typically does not have a body. This is allowed but unusual." << std::endl;
 	if (headers.find("CONTENT-TYPE") == headers.end())
 		std::cout << "No content-type header provided for body." << std::endl;
