@@ -224,10 +224,10 @@ std::string HTTPResponse::findExtension(const HTTPRequest& request, const std::s
         // Forbidden types
         else if (ct == "application/x-msdownload") 
 			ext = ".exe";
-        else if (ct == "application/x-sh") 
-			ext = ".sh";
-        else if (ct == "application/x-php") 
-			ext = ".php";
+        // else if (ct == "application/x-sh") 
+		// 	ext = ".sh";
+        // else if (ct == "application/x-php") 
+		// 	ext = ".php";
         else if (ct == "application/x-bat") 
 			ext = ".bat";
         else if (ct == "application/x-cmd") 

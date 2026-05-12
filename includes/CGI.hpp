@@ -11,6 +11,7 @@ struct	CGI
 {
 	int			fd_stdin = -1;
 	int			fd_stdout = -1;
+	int			fd_client = -1;
 	pid_t		pid = -1;
 	bool		write_finished = false;
 	std::string	body = "";
@@ -19,5 +20,7 @@ struct	CGI
 	bool		read_finished = false;
 	bool		cgi_finished = false;
 	time_t		start_time = 0;
+	bool		time_out = false;
+	bool		error = false;
 	std::string	output = "";
 };
