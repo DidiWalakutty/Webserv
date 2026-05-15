@@ -77,6 +77,8 @@ private:
 	void handleErrorPages(HTTPState state);
 
 	// Helper functions
+	void setStandardHeaders();
+	bool serveInjectedPage(const std::string& filePath, const std::string& placeholder, const std::string& inject);
 	std::string generateImagesGallery(const std::string& imagesDir);
 	std::string generateAutoindex(const std::string& dirPath, const std::string& urlPath);
 	std::string generateUploadList(const std::string& uploadDir, bool allowDelete);

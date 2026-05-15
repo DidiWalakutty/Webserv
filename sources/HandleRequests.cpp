@@ -1,5 +1,31 @@
 #include "HTTPResponse.hpp"
 
+bool HTTPResponse::serveInjectedPage(const std::string& filePath, const std::string& placeholder, const std::string& inject)
+{
+	std::ifstream file(filePath.c_str());
+	if (!file.is_open())
+	{
+		handleErrorPages(HTTPState::InternalServerError);
+		return false;
+	}
+	std::stringstream buffer;
+	buffer << file.rdbuf();
+	if (!validateSize(buffer.str(), filePath))
+		return false;
+	std::string html = buffer.str();
+	file.close();
+
+	size_t pos = html.find(placeholder);
+	if (pos != std::string::npos)
+		html.replace(pos, placeholder.size(), inject);
+
+	body = html;
+	headers["CONTENT-TYPE"] = "text/html";
+	headers["CONTENT-LENGTH"] = std::to_string(body.size());
+	updateForHTTPState(HTTPState::Ok);
+	return true;
+}
+
 void HTTPResponse::handleDirectoryRequest(const HTTPRequest& request, const LocationParse* loc, const std::string& filePath)
 {
 	std::cout << "in directory handling" << std::endl;
@@ -20,67 +46,18 @@ void HTTPResponse::handleDirectoryRequest(const HTTPRequest& request, const Loca
 		// --- Special Case: /upload page ---
 		if (loc->path == "/upload")
 		{
-			std::ifstream file(filePath.c_str());
-			if (!file)
-			{
-				handleErrorPages(HTTPState::InternalServerError);
-				return;
-			}
-
-			std::stringstream buffer;
-			buffer << file.rdbuf();
-			if (!validateSize(buffer.str(), filePath))	
-				return;
-			std::string html = buffer.str();
-			file.close();
-
 			bool allowDelete = std::find(loc->allowedMethods.begin(), loc->allowedMethods.end(),
 										HTTPMethod::DELETE) != loc->allowedMethods.end();
-			
-			// generate dynamic upload list + inject
-			std::string fileList = generateUploadList(loc->root, allowDelete);
-			size_t pos = html.find("<div id=\"files\"></div>");
-			if (pos != std::string::npos)
-			{
-				html.replace(pos, std::string("<div id=\"files\"></div>").length(), fileList);
-			}
-
-			body = html;
-			headers["CONTENT-TYPE"] = "text/html";
-			headers["CONTENT-LENGTH"] = std::to_string(body.size());
-			updateForHTTPState(HTTPState::Ok);
+			serveInjectedPage(filePath, "<div id=\"files\"></div>",
+							 generateUploadList(loc->root, allowDelete));
 			return;
 		}
 
 		// --- Special Case: /images page ---
 		if (loc->path == "/images")
 		{
-			std::ifstream file(filePath.c_str());
-			if (!file.is_open())
-			{
-				handleErrorPages(HTTPState::InternalServerError);
-				return;
-			}
-
-			std::stringstream buffer;
-			buffer << file.rdbuf();
-			if (!validateSize(buffer.str(), filePath))	
-				return;
-			std::string html = buffer.str();
-			file.close();
-
-			// --- Inject gallery into placeholder ---
-			std::string gallery = generateImagesGallery(loc->root);
-			size_t pos = html.find("<div class=\"gallery\" id=\"images\">");
-			if (pos != std::string::npos)
-			{
-				html.replace(pos, std::string("<div class=\"gallery\" id=\"images\">").length(), gallery);
-			}
-
-			body = html;
-			headers["CONTENT-TYPE"] = "text/html";
-			headers["CONTENT-LENGTH"] = std::to_string(body.size());
-			updateForHTTPState(HTTPState::Ok);
+			serveInjectedPage(filePath, "<div class=\"gallery\" id=\"images\">",
+							 generateImagesGallery(loc->root));
 			return;
 		}
 
@@ -171,17 +148,6 @@ void HTTPResponse::handleGET(const HTTPRequest& request, const std::string& file
 			return;
 		}
 	}
-
-	// --- Check if path exists and if it's a file or directory ---
-	// struct stat pathStat;
-	// if (stat(filePath.c_str(), &pathStat) != 0)
-	// {
-	// 	handleErrorPages(HTTPState::NotFound);
-	// 	return;
-	// }
-	// bool isDirectory = S_ISDIR(pathStat.st_mode);
-
-	// std::cout << "Path is a directory: " << std::boolalpha << isDirectory << std::endl;
 
 	// --- Handle directory requests separately ---
 	if (request.resourcePath == loc->path || request.resourcePath == loc->path + "/")

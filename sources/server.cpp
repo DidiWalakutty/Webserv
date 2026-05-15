@@ -132,11 +132,6 @@ void Server::CreateSockets()
 			throw(std::runtime_error("Failed to bind server socket."));
 		}
 
-		// Check to which IP the socket is bound.
-		// char buf[INET_ADDRSTRLEN];
-		// inet_ntop(AF_INET, &address.sin_addr, buf, sizeof(buf));
-		// std::cout << "Bound socketFD " << socketFD << " to " << buf << ":" << ntohs(address.sin_port) << std::endl;
-
 		// --- Start listening for incoming connections ---
 		if (listen(socketFD, SOMAXCONN) < 0)			// SOMAXCONN == max queue of pending connections
 		{
@@ -378,15 +373,7 @@ std::vector<char> Server::ReadClient(const int &FD)
 	if (bytesRead < 0)
 	{
 		if (errno == EAGAIN || errno == EWOULDBLOCK)
-		{
-			// No new data available right now - check if we have incomplete request buffered
-			if (clientBuffers.find(FD) != clientBuffers.end())
-			{
-				// Return empty - keep waiting for more data
-				return result;
-			}
 			return result;
-		}
 		else
 		{
 			// Read error - remove this client instead of crashing the server
@@ -571,6 +558,7 @@ void Server::Start()
 
 				const std::string& data = pendingWrites[fd];
 				size_t& offset = writeOffsets[fd];
+				bool writeError = false;
 
 				while (offset < data.size())
 				{
@@ -583,14 +571,15 @@ void Server::Start()
 								  << " | errno: " << errno
 								  << " (" <<std::strerror(errno) << ")" << std::endl;
 						RemoveClient(fd);
-						goto next_event;
+						writeError = true;
+						break;
 					}
 					offset += static_cast<size_t>(sent);
 					std::cout << "Bytes written: " << sent << " | Total sent: " << offset
 					          << " / " << data.size() << std::endl;
 				}
 
-				if (offset >= data.size())
+				if (!writeError && offset >= data.size())
 				{
 					// All data sent — clean up and decide whether to keep alive
 					bool shouldClose = closeAfterWrite.count(fd) && closeAfterWrite[fd];
@@ -615,7 +604,6 @@ void Server::Start()
 						}
 					}
 				}
-				next_event:;
 			}
 
 			// 5) --- Regular Client Request ---

@@ -20,22 +20,21 @@ void HTTPResponse::printResponse() const
 				  << body << std::endl;
 }
 
-	std::string HTTPResponse::parseContentType(const std::string filePath)
-	{
-		if (filePath.ends_with(".html"))
-			return "text/html";
-		else if (filePath.ends_with(".css"))
-			return "text/css";
-		else if (filePath.ends_with(".js"))
-			return "application/javascript";
-		else if (filePath.ends_with(".png"))
-			return "image/png";
-		else if (filePath.ends_with(".jpg") || filePath.ends_with(".jpeg"))
-			return "image/jpeg";
-		else
-			return "text/plain";
-	}
+std::string HTTPResponse::parseContentType(const std::string filePath)
+{
+	size_t dot = filePath.find_last_of('.');
+	if (dot == std::string::npos)
+		return "text/plain";
+	auto it = allowedExtensions.find(filePath.substr(dot));
+	return (it != allowedExtensions.end()) ? it->second : "text/plain";
+}
 
+void HTTPResponse::setStandardHeaders()
+{
+	headers["SERVER"] = "Webserv_Didi_Goksu_and_Reinier";
+	headers["CONNECTION"] = "keep-alive";
+	headers["DATE"] = setDate();
+}
 std::string HTTPResponse::setDate()
 {
 	auto now = std::chrono::system_clock::now();
@@ -63,9 +62,7 @@ std::string HTTPResponse::buildErrorResponse(const HTTPRequest& request, HTTPSta
 	body.clear();
 	handleErrorPages(state);
 
-	headers["SERVER"] = "Webserv_Didi_Goksu_and_Reinier";
-	headers["CONNECTION"] = "keep-alive";
-	headers["DATE"] = setDate();
+	setStandardHeaders();
 
 	std::string response =
 		protocolVersionToString(request.protocolVersion) + " " +
@@ -93,9 +90,7 @@ std::string HTTPResponse::buildResponse(HTTPRequest request)
 		body.clear();
 		handleErrorPages(HTTPState::URITooLong);
 		headers["CONTENT-LENGTH"] = std::to_string(body.size());
-		headers["SERVER"] = "Webserv_Didi_Goksu_and_Reinier";
-		headers["CONNECTION"] = "keep-alive";
-		headers["DATE"] = setDate();
+		setStandardHeaders();
 		std::string response =
 			protocolVersionToString(request.protocolVersion) + " " +
 			statusCode + " " + reasonPhrase + "\r\n";
@@ -217,9 +212,7 @@ std::string HTTPResponse::parseResponseStr(const HTTPRequest request, const std:
 	// For HEAD: handleHEAD already set correct CONTENT-LENGTH (file size) and CONTENT-TYPE
 	if (request.method != HTTPMethod::HEAD)
 		headers["CONTENT-LENGTH"] = std::to_string(body.size());
-	headers["SERVER"] = "Webserv_Didi_and_Goksu";
-	headers["CONNECTION"] = "keep-alive";
-	headers["DATE"] = setDate();
+	setStandardHeaders();
 
 	// --- Set content type if not already set or empty ---
 	if (headers.find("CONTENT-TYPE") == headers.end() || headers["CONTENT-TYPE"].empty())
@@ -233,7 +226,10 @@ std::string HTTPResponse::parseResponseStr(const HTTPRequest request, const std:
 	for (const auto &h : headers)
 		response += h.first + ": " + h.second + "\r\n";
 
-	response += "\r\n" + body;
+	if (request.method == HTTPMethod::HEAD)
+		response += "\r\n";
+	else
+		response += "\r\n" + body;
 
 	return response;
 }
