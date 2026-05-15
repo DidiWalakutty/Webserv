@@ -95,6 +95,8 @@ std::string urlDecode(const std::string& str)
 		{
 			std::string hex = str.substr(i + 1, 2);
 			char decodedChar = static_cast<char>(std::stoi(hex, nullptr, 16));
+			if (decodedChar == '\0')
+				return ""; // reject null-byte injection
 			result += decodedChar;
 			i += 2; // Skip the next two hex characters
 		}

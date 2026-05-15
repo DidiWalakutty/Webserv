@@ -131,7 +131,7 @@ class Server
 		std::vector<char> ReadClient(const int &FD);
 	
 	public:
-		static bool running; /**< @brief Describes if the server should close or keep running. */
+		static volatile sig_atomic_t running; /**< @brief Describes if the server should close or keep running. */
 		
 		/**
 		 * @brief Initiates and configures the server.

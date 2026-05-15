@@ -21,7 +21,7 @@ void Interrupt(int sig)
 {
 	if (sig == SIGINT)
 	{
-		Server::running = false;
+		Server::running = 0;
 	}
 }
 
@@ -109,6 +109,10 @@ void Server::CreateSockets()
 		if (setsockopt(socketFD, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0)
 		{
 			throw(std::runtime_error("Failed to set socket option,"));
+		}
+		if (setsockopt(socketFD, SOL_SOCKET, SO_REUSEPORT, &opt, sizeof(opt)) < 0)
+		{
+			throw(std::runtime_error("Failed to set SO_REUSEPORT socket option."));
 		}
 		
 		// --- Make socket non-blocking ---
@@ -415,24 +419,41 @@ std::vector<char> Server::ReadClient(const int &FD)
 	
 	if (headersEnd != std::string::npos)
 	{
-		// Found headers end, check Content-Length
-		size_t contentLengthPos = data_str.find("Content-Length:");
+		// Found headers end, check Content-Length (case-insensitive search in raw buffer)
+		std::string dataLower = data_str.substr(0, headersEnd);
+		std::transform(dataLower.begin(), dataLower.end(), dataLower.begin(), ::tolower);
+		size_t contentLengthPos = dataLower.find("content-length:");
 		if (contentLengthPos != std::string::npos)
 		{
-			contentLengthPos += 15;  // strlen("Content-Length:")
+			contentLengthPos += 15;  // strlen("content-length:")
 			// Skip whitespace
 			while (contentLengthPos < data_str.size() && 
 			       (data_str[contentLengthPos] == ' ' || data_str[contentLengthPos] == '\t'))
 			{
 				contentLengthPos++;
 			}
-			// Extract the number
+			// Extract the number — only digits, then parse safely
 			size_t endPos = contentLengthPos;
 			while (endPos < data_str.size() && std::isdigit(data_str[endPos]))
 			{
 				endPos++;
 			}
-			ssize_t contentLength = std::stoll(data_str.substr(contentLengthPos, endPos - contentLengthPos));
+			if (endPos == contentLengthPos)
+			{
+				// No digits found — malformed header, treat as no body
+				result = std::vector<char>(data_str.begin(), data_str.end());
+				clientBuffers.erase(FD);
+				return result;
+			}
+			ssize_t contentLength;
+			try {
+				contentLength = std::stoll(data_str.substr(contentLengthPos, endPos - contentLengthPos));
+			} catch (...) {
+				// Malformed Content-Length: treat as no body
+				result = std::vector<char>(data_str.begin(), data_str.end());
+				clientBuffers.erase(FD);
+				return result;
+			}
 			// 4 bytes for the "\r\n\r\n" after headers
 			size_t bodyStart = headersEnd + 4;
 			size_t bodySize = data_str.size() - bodyStart;
@@ -477,9 +498,14 @@ std::vector<char> Server::ReadClient(const int &FD)
  */
 void Server::Start()
 {
+	if (epollFD < 0)
+	{
+		std::cerr << "Server failed to initialize. Aborting." << std::endl;
+		return;
+	}
 	std::cout << CYAN << "--- Welcome to Webserv ---" << RESET << std::endl;
 	std::cout << CYAN << "--- Server Side ---" << RESET << std::endl;
-	running = true;
+	running = 1;
 
 	// Buffer for epoll events added by epoll_wait
 	epoll_event events[_maxEvents];
@@ -490,6 +516,8 @@ void Server::Start()
 		int count = epoll_wait(epollFD, events, _maxEvents, -1);
 		if (count < 0) 
 		{
+			if (errno == EINTR)
+				continue; // interrupted by signal (e.g. SIGCHLD) — not an error
 			std::cerr << "epoll_wait failed: " << strerror(errno) << std::endl;
 			break;
 		}
@@ -748,4 +776,4 @@ void Server::Start()
 	Destroy();
 }
 
-bool Server::running = false;
+volatile sig_atomic_t Server::running = 0;

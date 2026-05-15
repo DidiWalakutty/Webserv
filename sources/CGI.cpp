@@ -247,8 +247,8 @@ static std::vector<std::string>	buildEnvP(const HTTPRequest& request, const Serv
 		request.method == HTTPMethod::PUT ||
 		request.method == HTTPMethod::PATCH)
 	{
-		envP_str.push_back("CONTENT_LENGTH=" + (request.headers.count("Content-Length") ? request.headers.at("Content-Length") : "0"));
-		envP_str.push_back("CONTENT_TYPE=" + (request.headers.count("Content-Type") ? request.headers.at("Content-Type") : ""));
+		envP_str.push_back("CONTENT_LENGTH=" + (request.headers.count("CONTENT-LENGTH") ? request.headers.at("CONTENT-LENGTH") : "0"));
+		envP_str.push_back("CONTENT_TYPE=" + (request.headers.count("CONTENT-TYPE") ? request.headers.at("CONTENT-TYPE") : ""));
 	}
 	if (location.cgi_extension == ".php")
 		envP_str.push_back("REDIRECT_STATUS=200");
@@ -452,10 +452,18 @@ void	Server::handleCGIEvent(int fd, uint32_t events)
 		epoll_ctl(epollFD, EPOLL_CTL_DEL, fd, NULL);
 		return;
 	}
-	std::shared_ptr<CGI>				cgi = it->second.cgi;
+	std::shared_ptr<CGI>	cgi = it->second.cgi;
+	bool					pipeIsInput = it->second.pipeIsInput;
 
 	handleCGITimeOut(cgi);
-	if (it->second.pipeIsInput)
+	// handleCGIError (called from timeout) erases entries from cgiProcesses,
+	// invalidating 'it'. Do not access 'it' after this point.
+	if (cgi->error)
+	{
+		handleCGIResponse(cgi);
+		return;
+	}
+	if (pipeIsInput)
 		handleCGIWrite(cgi, events);
 	else
 		handleCGIRead(cgi, events);
@@ -600,7 +608,11 @@ void	Server::handleCGIWait(std::shared_ptr<CGI> cgi)
 
 	if (cgi->error || cgi->cgi_finished)
 		return;
-	result = waitpid(cgi->pid, &status, WNOHANG);
+	// When all I/O is done (both pipes closed), the child should exit immediately.
+	// Use a blocking wait to avoid the race where WNOHANG misses a process that
+	// has not yet been scheduled to exit, leaving cgi_finished permanently false.
+	int flags = (cgi->write_finished && cgi->read_finished) ? 0 : WNOHANG;
+	result = waitpid(cgi->pid, &status, flags);
 	if (result == cgi->pid)
 	{
 		if (WIFEXITED(status) && WEXITSTATUS(status) != 0)
@@ -751,23 +763,4 @@ void	Server::queueCGIResponse(int clientFD, const std::string& response)
 	}
 }
 
-void Server::QueueResponse(int clientFD, const HTTPRequest& request, const std::string& responseStr)
-{
-	auto connIt = request.headers.find("CONNECTION");
-	bool clientWantsClose = (connIt != request.headers.end() &&
-	                         connIt->second.find("close") != std::string::npos);
-	bool http10 = (request.protocolVersion == HTTPProtocolVersion::HTTP_1_0);
-	closeAfterWrite[clientFD] = (clientWantsClose || http10);
 
-	pendingWrites[clientFD] = responseStr;
-	writeOffsets[clientFD] = 0;
-
-	epoll_event writeEv{};
-	writeEv.events = EPOLLOUT;
-	writeEv.data.fd = clientFD;
-	if (epoll_ctl(epollFD, EPOLL_CTL_MOD, clientFD, &writeEv) < 0)
-	{
-		std::cerr << "Failed to register EPOLLOUT for client: " << clientFD << std::endl;
-		RemoveClient(clientFD);
-	}
-}

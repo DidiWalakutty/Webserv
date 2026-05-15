@@ -153,7 +153,12 @@ std::string HTTPResponse::buildResponse(HTTPRequest request)
 	}
 
 	// --- Existence Check ---
-	if (!serverParse.file_exists(filePath))
+	// For GET/HEAD the index file must exist. For POST/DELETE the path itself is
+	// the target; if it's still a directory at this point (no index was appended),
+	// skip the file_exists() test (which returns false for directories).
+	bool skipExistenceCheck = isDir &&
+		(request.method != HTTPMethod::GET && request.method != HTTPMethod::HEAD);
+	if (!skipExistenceCheck && !serverParse.file_exists(filePath))
 	{
 		updateForHTTPState(HTTPState::NotFound);
 		return parseResponseStr(request, filePath);
@@ -198,7 +203,7 @@ std::string HTTPResponse::parseResponseStr(const HTTPRequest request, const std:
 			break;
 		case HTTPMethod::HEAD:
 			handleHEAD(request, filePath);
-			clearBody();
+			// handleHEAD already clears the body and sets correct CONTENT-LENGTH/CONTENT-TYPE
 			break;
 		case HTTPMethod::UNSUPPORTED:
 			handleErrorPages(HTTPState::MethodNotAllowed);
@@ -209,14 +214,15 @@ std::string HTTPResponse::parseResponseStr(const HTTPRequest request, const std:
 	}
 
 	// --- Common Headers ---
-	// shouldnt be updated if done in handle functions
-	headers["CONTENT-LENGTH"] = std::to_string(body.size());
+	// For HEAD: handleHEAD already set correct CONTENT-LENGTH (file size) and CONTENT-TYPE
+	if (request.method != HTTPMethod::HEAD)
+		headers["CONTENT-LENGTH"] = std::to_string(body.size());
 	headers["SERVER"] = "Webserv_Didi_and_Goksu";
 	headers["CONNECTION"] = "keep-alive";
 	headers["DATE"] = setDate();
 
-	// --- Set content type if not already set ---
-	if (headers.find("CONTENT-TYPE") == headers.end())
+	// --- Set content type if not already set or empty ---
+	if (headers.find("CONTENT-TYPE") == headers.end() || headers["CONTENT-TYPE"].empty())
 		headers["CONTENT-TYPE"] = parseContentType(filePath);
 
 	// --- Build HTTP Response String ---
