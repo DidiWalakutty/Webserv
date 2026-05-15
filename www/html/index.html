@@ -160,6 +160,17 @@
         <button type="submit">Upload File</button>
     </form>
 
+    <p style="margin-top: 30px; margin-bottom: 10px; color: #555;">Say Hello via CGI</p>
+    <form action="/cgi-bin/test.py" method="POST">
+        <input type="text" name="name" placeholder="Your name" required
+               style="padding: 12px 16px; border-radius: 12px; border: 2px solid #e0e0e0;
+                      background: #fafafa; font-size: 15px; width: 95%; outline: none;">
+        <input type="text" name="age" placeholder="Your age"
+               style="padding: 12px 16px; border-radius: 12px; border: 2px solid #e0e0e0;
+                      background: #fafafa; font-size: 15px; width: 95%; outline: none;">
+        <button type="submit">Say Hello</button>
+    </form>
+
     <div class="links">
         <a href="/upload"><button>Uploads</button></a>
         <a href="/cgi-bin/test.py"><button>Run CGI</button></a>
