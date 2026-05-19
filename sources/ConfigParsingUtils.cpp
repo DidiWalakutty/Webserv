@@ -98,6 +98,20 @@ bool ConfigParser::stringToHTTPMethod(const std::string& method, HTTPMethod& out
 	return false;
 }
 
+bool ConfigParser::cgiExecutableAllowed(const std::string& executable)
+{
+	if (executable == "/opt/pyenv/shims/python3" || executable == "/usr/bin/bash" || executable == "/usr/bin/php-cgi")
+		return true;
+	return false;
+}
+
+bool ConfigParser::cgiExtensionAllowed(const std::string& extension)
+{
+	if (extension == ".py" || extension == ".sh" || extension == ".php")
+		return true;
+	return false;
+}
+
 std::string method_to_string(HTTPMethod m)
 {
     switch (m)

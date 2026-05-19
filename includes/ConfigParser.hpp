@@ -47,8 +47,10 @@ class ConfigParser {
 		// --- Validation Data ---
 		bool validateServerParse(ServerParse& server);
 		// bool validateLocationParse(const LocationParse& location) const;
-		bool isValidHTTPMethod(const std::string& method) const;
+		// bool isValidHTTPMethod(const std::string& method) const;
 		bool stringToHTTPMethod(const std::string& method, HTTPMethod& outMethod);
+		bool cgiExecutableAllowed(const std::string& executable);
+		bool cgiExtensionAllowed(const std::string& executable);
 
 	public:
 		ConfigParser();
@@ -59,8 +61,8 @@ class ConfigParser {
 		const std::vector<ServerParse>& getServers() const { return _servers; } // Returns the parsed server configurations
 
 		// --- Accessors for best location and error pages ---
-		const LocationParse* getBestLocation(const ServerParse& server, const std::string& path) const;
-		const std::string* getErrorPage(const ServerParse& server, int errorCode) const;
+		// const LocationParse* getBestLocation(const ServerParse& server, const std::string& path) const;
+		// const std::string* getErrorPage(const ServerParse& server, int errorCode) const;
 		const ssize_t getMaxBodySize(const ServerParse& server);
 		// For debugging: print parsed config
 		void print_server(const ServerParse& server) const;

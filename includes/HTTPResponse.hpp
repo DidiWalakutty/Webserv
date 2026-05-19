@@ -29,7 +29,8 @@ static const std::unordered_map<std::string, std::string> allowedExtensions = {
 
 // Set for quick lookup of forbidden extensions (potentially dangerous files)
 static const std::set<std::string> forbiddenExtensions = {
-	".exe", ".php", ".sh", ".bat", ".cmd", ".py"
+	// ".exe", ".php", ".sh", ".bat", ".cmd", ".py"
+	".exe", ".bat", ".cmd"
 };
 
 /**

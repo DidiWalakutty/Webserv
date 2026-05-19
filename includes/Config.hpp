@@ -25,13 +25,13 @@ struct LocationParse
 	bool is_cgi = false;   		/* True if this location executes CGI scripts */
 	bool uploadEnabled = false; /* True if file uploads are allowed in this location */
 	
-	std::string cgi_extension; 	/* If is_cgi is true, the file extension that triggers CGI execution (e.g., .py) */
-	std::string cgi_executable; /* needed???CGI executable name to call for CGI requests */
+	std::vector<std::string> allowedCGIExtension; 	/* If is_cgi is true, the file extension that triggers CGI execution (e.g., .py) */
+	std::vector<std::string> allowedCGIExecutable; /* needed???CGI executable name to call for CGI requests */
 	
 	size_t maxBodySize = 0;		/* Max allowed body size in bytes for this location */
 	Redirect redirect;							/* Optional redirect for this location (status code + target URL)*/
 
-	bool method_allowed(HTTPMethod m) const;	/* Checks if a specific HTTP method is allowed */
+	// bool method_allowed(HTTPMethod m) const;	/* Checks if a specific HTTP method is allowed */
 };
 
 /* Configuration for a server block */

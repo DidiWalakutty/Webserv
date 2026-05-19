@@ -6,7 +6,7 @@
 /*   By: diwalaku <diwalaku@codam.student.nl>         +#+                     */
 /*                                                   +#+                      */
 /*   Created: 2026/04/15 21:27:32 by diwalaku      #+#    #+#                 */
-/*   Updated: 2026/04/25 17:42:44 by rbom          ########   odam.nl         */
+/*   Updated: 2026/05/19 23:03:26 by rbom          ########   odam.nl         */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -66,10 +66,10 @@ bool Server::IsCGIRequest(const HTTPRequest& request, const ServerParse& server,
 		return false;
 
 	std::string ext = filePath.substr(dot);
-	if (ext != location->cgi_extension)
-		return false;
-
-	return true;
+	for (size_t	i = 0; i < location->allowedCGIExtension.size(); i++)
+		if (ext == location->allowedCGIExtension[i])
+			return true;
+	return false;
 }
 
 void Server::QueueResponse(int clientFD, const HTTPRequest& request, const std::string& responseStr)

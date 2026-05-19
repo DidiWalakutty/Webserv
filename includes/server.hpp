@@ -24,21 +24,21 @@
 #define CYAN        "\033[36m"
 #define WHITE       "\033[37m"
 
-/**
- * @file server.hpp
- * @brief Server configuration and creation using sockets and epoll.
- *
- * @details
- * Provides configuration structures for sockets and web servers,
- * as well as the @ref Server class for creating, configuring and managing a web server using Epoll.
- */
+// /**
+//  * @file server.hpp
+//  * @brief Server configuration and creation using sockets and epoll.
+//  *
+//  * @details
+//  * Provides configuration structures for sockets and web servers,
+//  * as well as the @ref Server class for creating, configuring and managing a web server using Epoll.
+//  */
 
-struct CGIInfo
-{
-	std::shared_ptr<CGI> cgi;			// Pointer to CGI struct
-	bool pipeIsInput;					// true if pipeToChild (server -> CGI), false if pipeFromChild (CGI -> server)
-	int clientFD;						// which client this CGI belongs to
-};
+// struct CGIInfo
+// {
+// 	std::shared_ptr<CGI> cgi;			// Pointer to CGI struct
+// 	bool pipeIsInput;					// true if pipeToChild (server -> CGI), false if pipeFromChild (CGI -> server)
+// 	int clientFD;						// which client this CGI belongs to
+// };
 
 /**
  * @brief Web server class.
@@ -57,7 +57,8 @@ class Server
 {
 	private:
 		std::vector<ServerParse> _servers;			/**< @brief Parsed server blocks from config file */
-		std::map<int, CGIInfo> cgiProcesses;		/**< @brief Active CGI pipe FDs mapped to their CGI state and owning client. */
+		// std::map<int, CGIInfo> cgiProcesses;		/**< @brief Active CGI pipe FDs mapped to their CGI state and owning client. */
+		std::map<int, std::shared_ptr<CGI>> cgiProcesses;		/**< @brief Active CGI pipe FDs mapped to their CGI state and owning client. */
 
 		int epollFD = -1;							/**< @brief Epoll instance of the file descriptor */
 		std::vector<int> listeningSockets; 			/**< @brief Listening sockets (one per ServerParse) */
@@ -79,8 +80,8 @@ class Server
 		void handleCGIEvent(int fd, uint32_t events);
 		void handleCGITimeOut(std::shared_ptr<CGI> cgi);
 		void handleCGIError(std::shared_ptr<CGI> cgi);
-		void handleCGIWrite(std::shared_ptr<CGI> cgi, uint32_t events);
-		void handleCGIRead(std::shared_ptr<CGI> cgi, uint32_t events);
+		void handleCGIWrite(std::shared_ptr<CGI> cgi, int fd, uint32_t events);
+		void handleCGIRead(std::shared_ptr<CGI> cgi, int fd, uint32_t events);
 		void handleCGIWait(std::shared_ptr<CGI> cgi);
 		void handleCGIResponse(std::shared_ptr<CGI> cgi);
 		void handleCGIErrorResponse(std::shared_ptr<CGI> cgi);

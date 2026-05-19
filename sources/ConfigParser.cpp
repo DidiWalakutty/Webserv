@@ -368,7 +368,7 @@ LocationParse ConfigParser::parseLocationBlock(const std::vector<std::string>& f
 	location.uploadEnabled = false;
 	location.is_cgi = false;
 	location.maxBodySize = 0;
-	location.cgi_executable = "";
+	// location.cgi_executable = "";
 
 	// --- Validate location header format ---
 	location.path = line.substr(pathStart, bracePos - pathStart);
@@ -515,13 +515,39 @@ LocationParse ConfigParser::parseLocationBlock(const std::vector<std::string>& f
 				}
 	
 			}
-			else if (key == "cgi_executable")
+			else if (key == "allowed_cgi_executable")
 			{
-				location.cgi_executable = value;
+				location.allowedCGIExecutable.clear();
+				std::vector<std::string> tokens = splitByWhitespace(value);
+				for (size_t i = 0; i < tokens.size(); ++i)
+				{
+					if (cgiExecutableAllowed(tokens[i]))
+					{
+						location.allowedCGIExecutable.push_back(tokens[i]);
+					}
+					else
+					{
+						std::cerr << "Warning: Invalid Executable: '" << tokens[i] << "' in location block at line: " << currentLine + 1 << std::endl;					
+						// what do we want to do???
+					}
+				}
 			}
-			else if (key == "cgi_extension")
+			else if (key == "allowed_cgi_extension")
 			{
-				location.cgi_extension = value;
+				location.allowedCGIExtension.clear();
+				std::vector<std::string> tokens = splitByWhitespace(value);
+				for (size_t i = 0; i < tokens.size(); ++i)
+				{
+					if (cgiExtensionAllowed(tokens[i]))
+					{
+						location.allowedCGIExtension.push_back(tokens[i]);
+					}
+					else
+					{
+						std::cerr << "Warning: Invalid Extension: '" << tokens[i] << "' in location block at line: " << currentLine + 1 << std::endl;					
+						// what do we want to do???
+					}
+				}
 			}
 			else if (key == "max_body_size")
 			{
