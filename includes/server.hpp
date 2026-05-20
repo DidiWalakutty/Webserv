@@ -33,13 +33,6 @@
 //  * as well as the @ref Server class for creating, configuring and managing a web server using Epoll.
 //  */
 
-// struct CGIInfo
-// {
-// 	std::shared_ptr<CGI> cgi;			// Pointer to CGI struct
-// 	bool pipeIsInput;					// true if pipeToChild (server -> CGI), false if pipeFromChild (CGI -> server)
-// 	int clientFD;						// which client this CGI belongs to
-// };
-
 /**
  * @brief Web server class.
  *
@@ -57,7 +50,6 @@ class Server
 {
 	private:
 		std::vector<ServerParse> _servers;			/**< @brief Parsed server blocks from config file */
-		// std::map<int, CGIInfo> cgiProcesses;		/**< @brief Active CGI pipe FDs mapped to their CGI state and owning client. */
 		std::map<int, std::shared_ptr<CGI>> cgiProcesses;		/**< @brief Active CGI pipe FDs mapped to their CGI state and owning client. */
 
 		int epollFD = -1;							/**< @brief Epoll instance of the file descriptor */
