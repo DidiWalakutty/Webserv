@@ -1,5 +1,6 @@
 #include "HTTPRequest.hpp"
-#include "server.hpp"
+#include "Server.hpp"
+#include "utilities.hpp"
 
 HTTPRequest::HTTPRequest(Server *server) : server(server) {}
 
