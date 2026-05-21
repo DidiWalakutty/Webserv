@@ -1,4 +1,5 @@
 #include "HTTPCommon.hpp"
+#include "utilities.hpp"
 
 const std::unordered_map<HTTPState, HTTPMessage> HTTPCommon::HTTPStatusMap = {
 	{HTTPState::Continue, {"100", "Continue", "The server has received the request headers, and the client should proceed to send the request body"}},
@@ -120,19 +121,6 @@ std::string HTTPCommon::protocolVersionToString(HTTPProtocolVersion version)
 	}
 };
 
-std::string cleanWhiteSpace(std::string str)
-{
-	str.erase(0, str.find_first_not_of(" \t\r\n"));
-	str.erase(str.find_last_not_of(" \t\r\n") + 1);
-	return str;
-}
-
-bool startsWith(const std::string longStr, const std::string beginningStr)
-{
-	return longStr.size() >= beginningStr.size() &&
-		   longStr.compare(0, beginningStr.size(), beginningStr) == 0;
-}
-
 std::string HTTPCommon::defaultErrorPagePath(const HTTPMessage &statusMessage)
 {
 	return "www/html/errors/" + statusMessage.code + ".html";
@@ -155,4 +143,18 @@ void HTTPCommon::fillErrorPageTemplate(std::string &body, const HTTPMessage &sta
 	replaceAll(body, "{{STATUS_CODE}}", statusMessage.code);
 	replaceAll(body, "{{REASON_PHRASE}}", statusMessage.message);
 	replaceAll(body, "{{DESCRIPTION}}", statusMessage.description);
+}
+
+HTTPState HTTPCommon::getRedirectState(int code)
+{
+	switch (code)
+	{
+		case 301: return HTTPState::MovedPermanently;
+		case 302: return HTTPState::Found;
+		case 303: return HTTPState::SeeOther;
+		case 304: return HTTPState::NotModified;
+		case 307: return HTTPState::TemporaryRedirect;
+		case 308: return HTTPState::PermanentRedirect;
+		default:  return HTTPState::InternalServerError; // should never happen if validated
+	}
 }
