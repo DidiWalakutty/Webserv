@@ -54,6 +54,6 @@ struct ServerParse
 	std::string joinPaths(const std::string& root, const std::string& url) const;
 
 	// --- Check if file exists or if path is a directory ---
-	bool file_exists(const std::string& path) const;
-	bool is_directory(const std::string& path) const;
+	bool fileExists(const std::string& path) const;
+	bool isDirectory(const std::string& path) const;
 };
