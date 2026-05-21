@@ -45,7 +45,7 @@ void	Server::startCGI(int clientFD, const HTTPRequest& request, const ServerPars
 
 		/* ***CHILD*** */
 		else if (cgi->pid == 0)
-			_exit(childCGI(request, server, filePath, location, pipe_p2c, pipe_c2p));
+			exit(childCGI(request, server, filePath, location, pipe_p2c, pipe_c2p));
 
 		/* ***PARENT*** */
 		/* CLOSE PIPES */
@@ -84,8 +84,7 @@ static int	childCGI(const HTTPRequest& request, const ServerParse& server, const
 
 	/* REDIRECT */
 	if (redirectPipe(pipe_p2c[0], STDIN_FILENO) ||
-		redirectPipe(pipe_c2p[1], STDOUT_FILENO) ||
-		redirectPipe(pipe_c2p[1], STDERR_FILENO))
+		redirectPipe(pipe_c2p[1], STDOUT_FILENO))
 		return (removeCGIChild(pipe_p2c, pipe_c2p), 1);
 
 	/* CLOSE PIPES */
@@ -317,13 +316,12 @@ static int	updateStruct(std::shared_ptr<CGI> cgi, int fd_stdin, int fd_stdout, i
 static int	addProcess(std::shared_ptr<CGI> cgi, std::map<int, std::shared_ptr<CGI>>& cgiProcesses)
 {
 	if (cgi->write_finished == false)
-	{
 		if (cgiProcesses.count(cgi->fd_stdin))
 			return (std::cerr << "FD_STDIN already tracked: " << cgi->fd_stdin << std::endl, 1);
-		cgiProcesses[cgi->fd_stdin] = cgi;
-	}
 	if (cgiProcesses.count(cgi->fd_stdout))
 		return (std::cerr << "FD_STDOUT already tracked: " << cgi->fd_stdout << std::endl, 1);
+	if (cgi->write_finished == false)
+		cgiProcesses[cgi->fd_stdin] = cgi;
 	cgiProcesses[cgi->fd_stdout] = cgi;
 	return (0);
 }
