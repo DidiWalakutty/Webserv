@@ -1,5 +1,5 @@
 #include "HTTPResponse.hpp"
-#include "server.hpp"
+#include "Server.hpp"
 #include "CGI.hpp"
 
 
