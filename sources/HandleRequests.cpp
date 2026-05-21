@@ -1,4 +1,5 @@
 #include "HTTPResponse.hpp"
+#include "RequestRouting.hpp"
 
 bool HTTPResponse::serveInjectedPage(const std::string& filePath, const std::string& placeholder, const std::string& inject)
 {
@@ -61,10 +62,7 @@ void HTTPResponse::handleDirectoryRequest(const HTTPRequest& request, const Loca
 			return;
 		}
 
-		// --- Normal Index Serving
-		if (!checkGetAccess(filePath))
-			return;
-		
+		// --- Regular index file handling ---		
 		std::ifstream file(filePath.c_str(), std::ios::binary);
 		if (!file.is_open())
 		{
@@ -111,35 +109,26 @@ void HTTPResponse::handleDirectoryRequest(const HTTPRequest& request, const Loca
  *   - If file → reads and returns the file content.
  * - Sets appropriate headers (Content-Type, Content-Length).
  */
-void HTTPResponse::handleGET(const HTTPRequest& request, const std::string& filePath)
+void HTTPResponse::handleGET(const HTTPRequest& request, const RouteResult& route)
 {
-	std::cout << "Requested file path: " << filePath << std::endl;
+	std::cout << "Requested file path: " << route.filePath << std::endl;
 	std::cout << "Resource path is: " << request.resourcePath << std::endl;
 	
 	// --- Find matching location for request ---
-	const LocationParse* loc = serverParse.get_best_location(request.resourcePath);
+	const LocationParse* loc = route.location;
 		
-	// --- Redirect takes priority over checking method allowance ---
-	if (loc && loc->redirect.statusCode != 0 && !loc->redirect.targetURL.empty())
+	// 1) Redirect takes priority 
+	if (route.hasRedirect)
 	{
 		std::cout << "Redirecting to: " << loc->redirect.targetURL << " with statuscode: " << loc->redirect.statusCode << std::endl;
-		body = "";
-		headers["LOCATION"] = loc->redirect.targetURL;
+		body.clear();
+		headers["LOCATION"] = route.redirectTarget;
 		headers["CONTENT-LENGTH"] = "0";
-		updateForHTTPState(getRedirectState(loc->redirect.statusCode));
+		updateForHTTPState(getRedirectState(route.redirectCode));
 		return;
 	}
 		
-	// --- Check if GET method is allowed ---
-	if (!loc || std::find(loc->allowedMethods.begin(), loc->allowedMethods.end(), 
-				HTTPMethod::GET) == loc->allowedMethods.end())
-	{
-		std::cerr << "GET method not allowed for this location" << std::endl;
-		handleErrorPages(HTTPState::MethodNotAllowed);
-		return;
-	}
-
-	// --- Prevent direct browsing of CGI location itself ---
+	// 2) Prevent direct CGI folder access (/cgi-bin/)
 	if (loc && loc->is_cgi)
 	{
 		if (request.resourcePath == loc->path || request.resourcePath == loc->path + "/")
@@ -149,18 +138,25 @@ void HTTPResponse::handleGET(const HTTPRequest& request, const std::string& file
 		}
 	}
 
-	// --- Handle directory requests separately ---
-	if (request.resourcePath == loc->path || request.resourcePath == loc->path + "/")
+	// 3) CGI Handling
+	if (route.isCGI)
 	{
-		handleDirectoryRequest(request, loc, filePath);
+		// IMPORTANT: do NOT execute CGI here fully
+		// only trigger setup!
+		// startCGI(request, route);		
 		return;
 	}
 
-	// --- Regular file request ---
-	if (!checkGetAccess(filePath))
-	return;
 	
-	std::ifstream file(filePath, std::ios::binary); // Treats the file as binary.
+	// 4) Directory handling
+	if (route.isDirectory)
+	{
+		handleDirectoryRequest(request, loc, route.filePath);
+		return;
+	}
+
+	// 5) Regular file handling	
+	std::ifstream file(route.filePath.c_str(), std::ios::binary); // Treats the file as binary.
 	if (!file.is_open())
 	{
 		handleErrorPages(HTTPState::NotFound);
@@ -169,13 +165,14 @@ void HTTPResponse::handleGET(const HTTPRequest& request, const std::string& file
 
 	std::stringstream buffer;
 	buffer << file.rdbuf();
-	if (!validateSize(buffer.str(), filePath))	
+	if (!validateSize(buffer.str(), route.filePath))	
 		return;
 	body = buffer.str();
 	file.close();
 
-	headers["CONTENT-TYPE"] = parseContentType(filePath);
+	headers["CONTENT-TYPE"] = parseContentType(route.filePath);
 	headers["CONTENT-LENGTH"] = std::to_string(body.size());
+	
 	updateForHTTPState(HTTPState::Ok);
 }
 
