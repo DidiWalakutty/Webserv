@@ -130,25 +130,9 @@ public:
 	static HTTPProtocolVersion stringToProtocolVersion(const std::string version);
 	static std::string methodToString(HTTPMethod method);
 	static std::string protocolVersionToString(HTTPProtocolVersion version);
+	
+	static HTTPState getRedirectState(int code);
 
-	// Error-page helpers used by both normal response flow and parser-error flow.
 	static std::string defaultErrorPagePath(const HTTPMessage &statusMessage);
 	static void fillErrorPageTemplate(std::string &body, const HTTPMessage &statusMessage);
 };
-
-/**
- * @brief Cleans leading and trailing whitespace from a string.
- *
- * @param str
- * @return const std::string
- */
-std::string cleanWhiteSpace(std::string str);
-
-/**
- * @brief Checks if a string starts with a given substring.
- *
- * @param longStr The string to check.
- * @param beginningStr The substring to look for at the start of longStr.
- * @return true if longStr starts with beginningStr, false otherwise.
- */
-bool startsWith(const std::string longStr, const std::string beginningStr);
