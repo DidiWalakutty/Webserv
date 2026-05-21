@@ -1,6 +1,9 @@
+#pragma once
+
 #include "HTTPCommon.hpp"
 #include "HTTPRequest.hpp"
 #include "Config.hpp"
+
 #include <algorithm>
 #include <unistd.h>
 #include <sys/stat.h>
@@ -8,7 +11,7 @@
 #include <sstream>
 #include <set>
 
-#pragma once
+struct RouteResult;
 
 // Unordered map for fast lookup of allowed extensions and their corresponding content-type
 static const std::unordered_map<std::string, std::string> allowedExtensions = {
@@ -58,7 +61,7 @@ public:
 	 * @param request The HTTP request object.
 	 * @return The constructed HTTPResponse string.
 	 */
-	std::string buildResponse(HTTPRequest request);
+	std::string buildResponse(const HTTPRequest& request, const RouteResult& route);
 
 	/**
 	 * @brief Builds
@@ -69,10 +72,11 @@ private:
 
 	// Handler functions
 	ServerParse serverParse;	// field in class
-	void handleGET(const HTTPRequest& request, const std::string& filePath);
-	void handleHEAD(const HTTPRequest& request, const std::string& filePath);
-	void handlePOST(const HTTPRequest& request, const std::string& filePath);
-	void handleDELETE(const HTTPRequest& request, const std::string& filePath);
+	void handleGET(const HTTPRequest& request, const RouteResult& route);
+	void handleHEAD(const HTTPRequest& request, const RouteResult& route);
+	void handlePOST(const HTTPRequest& request, const RouteResult& route);
+	void handleDELETE(const HTTPRequest& request, const RouteResult& route);
+
 	void handleDirectoryRequest(const HTTPRequest& request, const LocationParse* loc, const std::string& filePath);
 	void handleErrorPages(HTTPState state);
 
@@ -89,7 +93,6 @@ private:
 	bool checkDeleteAccess(const std::string& filePath);
 	bool extractMultipartFile(const HTTPRequest& request, std::string& fileName, std::string& fileData, std::string& ext);
 	std::string findExtension(const HTTPRequest& request, const std::string& fileData);
-	HTTPState getRedirectState(int code) const;
 
 	/**
 	 * @brief Validates that the buffer is recieved totally.
@@ -124,7 +127,7 @@ private:
 	 */
 	// std::string parseResponseStr(const HTTPRequest request, HTTPMessage statusMessage, std::string filePath);
 	// checking if update works better, because statusmessage isn't updated correctly
-	std::string parseResponseStr(const HTTPRequest request, const std::string filePath);
+	std::string parseResponseStr(const HTTPRequest request, const RouteResult& route);
 
 	/**
 	 * @brief Clears the response body and resets related headers.
