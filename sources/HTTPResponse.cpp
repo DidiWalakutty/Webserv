@@ -1,4 +1,5 @@
 #include "HTTPResponse.hpp"
+#include "RequestRouting.hpp"
 
 HTTPResponse::HTTPResponse(const ServerParse& server)
 	: serverParse(server)
@@ -61,6 +62,7 @@ std::string HTTPResponse::buildErrorResponse(const HTTPRequest& request, HTTPSta
 	headers.clear();
 	body.clear();
 	handleErrorPages(state);
+	headers["CONTENT-LENGTH"] = std::to_string(body.size());
 
 	setStandardHeaders();
 
@@ -76,128 +78,67 @@ std::string HTTPResponse::buildErrorResponse(const HTTPRequest& request, HTTPSta
 	return response;
 }
 
-// Updated the buildresponse to create the correct path and checking if it exists.
-// We only need to serve the index.html file in case we use a GET / HEAD request.
-std::string HTTPResponse::buildResponse(HTTPRequest request)
+/**
+ * @brief Builds a complete HTTP response from a routed request.
+ * 
+ * This function initializes the response state and delegates method-specific behavior
+ * to the appropriate handlers (GET, POST, DELETE, etc.).
+ * 
+ * RequestRouting::route() already validated the request (location matching, filesystem path,
+ * redirect handling and method permissions).
+ * 
+ * It returns the final formatted HTTP response string to be sent back to the client.
+ */
+std::string HTTPResponse::buildResponse(const HTTPRequest& request, const RouteResult& route)
 {
 	std::cerr << "In buildResponse(), with request: " << methodToString(request.method) << " " << request.resourcePath << std::endl;
 	
 	// --- URI length check (RFC 7230: 414 URI Too Long) ---
-	if (request.resourcePath.size() > 8192)
+	if (request.resourcePath.size() > MAX_HEADER_SIZE)
 	{
-		protocolVersion = request.protocolVersion;
-		headers.clear();
-		body.clear();
-		handleErrorPages(HTTPState::URITooLong);
-		headers["CONTENT-LENGTH"] = std::to_string(body.size());
-		setStandardHeaders();
-		std::string response =
-			protocolVersionToString(request.protocolVersion) + " " +
-			statusCode + " " + reasonPhrase + "\r\n";
-		for (const auto &h : headers)
-			response += h.first + ": " + h.second + "\r\n";
-		response += "\r\n" + body;
-		return response;
+		return buildErrorResponse(request, HTTPState::URITooLong);
 	}
 	
+	// --- Initialize Response ---
 	protocolVersion = request.protocolVersion;
 	headers.clear();
 	body.clear();
-	updateForHTTPState(HTTPState::Ok);
+
+	// In case routing already determined an error state
+	if (route.state != HTTPState::Ok)
+	{
+		handleErrorPages(route.state);
+		return parseResponseStr(request, route);
+	}
 	
-	// --- Get Location info for index ---
-	const LocationParse* location = serverParse.get_best_location(request.resourcePath);
-	
-	if (!location)
-	{
-		updateForHTTPState(HTTPState::NotFound);
-		return parseResponseStr(request, "");
-	}
-
-	// --- Build initial path ---
-	std::string filePath = serverParse.build_filesystem_path(request.resourcePath);
-	// std::cerr << "Initial file path is: " << filePath << std::endl; 
-	
-	if (filePath.empty())
-	{
-		updateForHTTPState(HTTPState::NotFound);
-		return parseResponseStr(request, "");
-	}
-
-	// --- Directory handling (method aware) ---
-	bool isDir = serverParse.is_directory(filePath);
-
-	if (isDir)	
-	{
-		// Only GET / HEAD use index
-		if (request.method == HTTPMethod::GET || request.method == HTTPMethod::HEAD)
-		{
-			if (!location->index.empty())
-			{
-				filePath = serverParse.joinPaths(filePath, location->index);
-				// std::cerr << "Index file found, filepath is: " << filePath << std::endl;
-			}
-			else
-			{
-				// No index -> forbidden
-				updateForHTTPState(HTTPState::Forbidden);
-				return parseResponseStr(request, filePath);
-			}
-		}
-		// If any other method, we keep the original filePath we created with build_filesystem_path().
-	}
-
-	// --- Existence Check ---
-	// For GET/HEAD the index file must exist. For POST/DELETE the path itself is
-	// the target; if it's still a directory at this point (no index was appended),
-	// skip the file_exists() test (which returns false for directories).
-	bool skipExistenceCheck = isDir &&
-		(request.method != HTTPMethod::GET && request.method != HTTPMethod::HEAD);
-	if (!skipExistenceCheck && !serverParse.file_exists(filePath))
-	{
-		updateForHTTPState(HTTPState::NotFound);
-		return parseResponseStr(request, filePath);
-	}
-
-	// --- Only read file for GET / HEAD ---
-	if (request.method == HTTPMethod::GET || request.method == HTTPMethod::HEAD)
-	{
-		std::ifstream file(filePath.c_str(), std::ios::binary);
-		if (!file.is_open())
-		{
-			updateForHTTPState(HTTPState::Forbidden);
-			return parseResponseStr(request, filePath);
-		}
-		
-		std::stringstream buffer;
-		buffer << file.rdbuf();
-		body = buffer.str();
-		file.close();
-		std::cout << "File found and opened successfully" << std::endl;
-	}
-	// For POST / PUT, body handling happens in their handleX functions.
-
-	return parseResponseStr(request, filePath);
+	return parseResponseStr(request, route);
 }
 
-// Perhaps need to check if a file was actually created/updated abd set to state created(201)?
-std::string HTTPResponse::parseResponseStr(const HTTPRequest request, const std::string filePath)
+/**
+ * @brief Dispatches the request to the correct HTTP Method Handler based on the request method.
+ *        Builds the final HTTP response string after handling the request.
+ * 
+ * Also applies common headers and content type logic after method-specific handling.
+ * Assembles the final HTTP response string to include the status line, headers, and body (if applicable).
+ * 
+ * Will update Content-Length of the body after the method handler is called, since some handlers (e.g. POST) may modify the body content.
+ * For HEAD requests, the body is cleared and Content-Length is set to the size of the body that would have been sent if it were a GET request.
+ */
+std::string HTTPResponse::parseResponseStr(const HTTPRequest request, const RouteResult& route)
 {
 	switch (request.method)
 	{
 		case HTTPMethod::GET:
-			handleGET(request, filePath);
+			handleGET(request, route);
 			break;
 		case HTTPMethod::POST:
-			handlePOST(request, filePath);
-			break;
-		case HTTPMethod::PUT:
+			handlePOST(request, route);
 			break;
 		case HTTPMethod::DELETE:
-			handleDELETE(request, filePath);
+			handleDELETE(request, route);
 			break;
 		case HTTPMethod::HEAD:
-			handleHEAD(request, filePath);
+			handleHEAD(request, route);
 			// handleHEAD already clears the body and sets correct CONTENT-LENGTH/CONTENT-TYPE
 			break;
 		case HTTPMethod::UNSUPPORTED:
@@ -208,17 +149,18 @@ std::string HTTPResponse::parseResponseStr(const HTTPRequest request, const std:
 			break;
 	}
 
-	// --- Common Headers ---
-	// For HEAD: handleHEAD already set correct CONTENT-LENGTH (file size) and CONTENT-TYPE
-	if (request.method != HTTPMethod::HEAD)
-		headers["CONTENT-LENGTH"] = std::to_string(body.size());
+	// --- Common Headers for ALL responses ---
 	setStandardHeaders();
 
-	// --- Set content type if not already set or empty ---
-	if (headers.find("CONTENT-TYPE") == headers.end() || headers["CONTENT-TYPE"].empty())
-		headers["CONTENT-TYPE"] = parseContentType(filePath);
+	// --- Set Content-Length ---
+		if (request.method != HTTPMethod::HEAD)
+		headers["CONTENT-LENGTH"] = std::to_string(body.size());
 
-	// --- Build HTTP Response String ---
+	// --- Set content type if handler didn't set it ---
+	if (headers.find("CONTENT-TYPE") == headers.end() || headers["CONTENT-TYPE"].empty())
+		headers["CONTENT-TYPE"] = parseContentType(route.filePath);
+
+	// --- Build raw HTTP Response String ---
 	std::string response =
 		protocolVersionToString(request.protocolVersion) + " " +
 		statusCode + " " + reasonPhrase + "\r\n";
