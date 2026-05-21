@@ -6,11 +6,11 @@
 /*   By: diwalaku <diwalaku@codam.student.nl>         +#+                     */
 /*                                                   +#+                      */
 /*   Created: 2026/04/15 21:27:32 by diwalaku      #+#    #+#                 */
-/*   Updated: 2026/04/25 18:02:43 by diwalaku      ########   odam.nl         */
+/*   Updated: 2026/05/21 17:30:46 by diwalaku      ########   odam.nl         */
 /*                                                                            */
 /* ************************************************************************** */
 
-#include "server.hpp"
+#include "Server.hpp"
 
 HTTPState Server::checkCGIAccess(const std::string& filePath)
 {
@@ -74,25 +74,4 @@ bool Server::IsCGIRequest(const HTTPRequest& request, const ServerParse& server,
 		return false;
 
 	return true;
-}
-
-void Server::QueueResponse(int clientFD, const HTTPRequest& request, const std::string& responseStr)
-{
-	auto connIt = request.headers.find("CONNECTION");
-	bool clientWantsClose = (connIt != request.headers.end() &&
-	                         connIt->second.find("close") != std::string::npos);
-	bool http10 = (request.protocolVersion == HTTPProtocolVersion::HTTP_1_0);
-	closeAfterWrite[clientFD] = (clientWantsClose || http10);
-
-	pendingWrites[clientFD] = responseStr;
-	writeOffsets[clientFD] = 0;
-
-	epoll_event writeEv{};
-	writeEv.events = EPOLLOUT;
-	writeEv.data.fd = clientFD;
-	if (epoll_ctl(epollFD, EPOLL_CTL_MOD, clientFD, &writeEv) < 0)
-	{
-		std::cerr << "Failed to register EPOLLOUT for client: " << clientFD << std::endl;
-		RemoveClient(clientFD);
-	}
 }
