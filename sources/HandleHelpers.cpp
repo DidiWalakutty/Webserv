@@ -457,17 +457,7 @@ bool HTTPResponse::checkDeleteAccess(const std::string& filePath)
 	return true;
 }
 
-HTTPState HTTPResponse::getRedirectState(int code) const
-{
-	switch (code)
-	{
-		case 301: return HTTPState::MovedPermanently;
-		case 302: return HTTPState::Found;
-		case 307: return HTTPState::TemporaryRedirect;
-		case 308: return HTTPState::PermanentRedirect;
-		default:  return HTTPState::InternalServerError; // should never happen if validated
-	}
-}
+
 
 bool HTTPResponse::validateSize(const std::string& buffer, const std::string& filePath)
 {
