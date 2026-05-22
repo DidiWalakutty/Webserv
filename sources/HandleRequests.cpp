@@ -27,7 +27,7 @@ bool HTTPResponse::serveInjectedPage(const std::string& filePath, const std::str
 	return true;
 }
 
-void HTTPResponse::handleDirectoryRequest(const HTTPRequest& request, const LocationParse* loc, const std::string& filePath)
+void HTTPResponse::handleDirectoryRequest(const HTTPRequest& request, const RouteResult& route)
 {
 	std::cout << "in directory handling" << std::endl;
 	// --- Check cgi directory
@@ -113,14 +113,11 @@ void HTTPResponse::handleGET(const HTTPRequest& request, const RouteResult& rout
 {
 	std::cout << "Requested file path: " << route.filePath << std::endl;
 	std::cout << "Resource path is: " << request.resourcePath << std::endl;
-	
-	// --- Find matching location for request ---
-	const LocationParse* loc = route.location;
 		
-	// 1) Redirect takes priority 
+	// --- Redirect takes priority --- 
 	if (route.hasRedirect)
 	{
-		std::cout << "Redirecting to: " << loc->redirect.targetURL << " with statuscode: " << loc->redirect.statusCode << std::endl;
+		std::cout << "Redirecting to: " << route.redirectTarget << " with statuscode: " << route.redirectCode << std::endl;
 		body.clear();
 		headers["LOCATION"] = route.redirectTarget;
 		headers["CONTENT-LENGTH"] = "0";
@@ -128,51 +125,41 @@ void HTTPResponse::handleGET(const HTTPRequest& request, const RouteResult& rout
 		return;
 	}
 		
-	// 2) Prevent direct CGI folder access (/cgi-bin/)
-	if (loc && loc->is_cgi)
+	// --- Prevent browsing CGI directories (/cgi-bin/) ---
+	if (route.location->is_cgi && route.isDirectory)
 	{
-		if (request.resourcePath == loc->path || request.resourcePath == loc->path + "/")
-		{
 			handleErrorPages(HTTPState::Forbidden);
 			return;
-		}
 	}
-
-	// 3) CGI Handling
-	if (route.isCGI)
-	{
-		// IMPORTANT: do NOT execute CGI here fully
-		// only trigger setup!
-		// startCGI(request, route);		
-		return;
-	}
-
 	
-	// 4) Directory handling
+	// --- Directory handling ---
 	if (route.isDirectory)
 	{
-		handleDirectoryRequest(request, loc, route.filePath);
+		handleDirectoryRequest(request, route);
 		return;
 	}
 
-	// 5) Regular file handling	
+	// --- Regular file handling ---
 	std::ifstream file(route.filePath.c_str(), std::ios::binary); // Treats the file as binary.
 	if (!file.is_open())
 	{
-		handleErrorPages(HTTPState::NotFound);
+		handleErrorPages(HTTPState::InternalServerError);
 		return;
 	}
 
+	// --- Read File Content into Body ---
 	std::stringstream buffer;
 	buffer << file.rdbuf();
+
 	if (!validateSize(buffer.str(), route.filePath))	
 		return;
+
 	body = buffer.str();
 	file.close();
 
+	// --- Success Response ---
 	headers["CONTENT-TYPE"] = parseContentType(route.filePath);
 	headers["CONTENT-LENGTH"] = std::to_string(body.size());
-	
 	updateForHTTPState(HTTPState::Ok);
 }
 
@@ -192,7 +179,7 @@ void HTTPResponse::handleGET(const HTTPRequest& request, const RouteResult& rout
  *   forbidden and allowed lists.
  * - Saves the uploaded file to the target directory.
  */
-void HTTPResponse::handlePOST(const HTTPRequest& request, const std::string& filePath)
+void HTTPResponse::handlePOST(const HTTPRequest& request, const RouteResult& route)
 {
 	// --- Find matching location for request ---
 	const LocationParse* location = serverParse.get_best_location(request.resourcePath);
