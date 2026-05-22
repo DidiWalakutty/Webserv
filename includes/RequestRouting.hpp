@@ -4,24 +4,31 @@
 #include "Config.hpp"
 #include "HTTPCommon.hpp"
 #include <string>
+#include <sys/stat.h>
+#include <unistd.h>
 
 struct RouteResult
 {
 	const LocationParse* location;
 
 	std::string		filePath;
-	HTTPMethod		method;
 	HTTPState 		state;
+	HTTPMethod		method;
+	bool			methodAllowed;
 
 	bool 			isDirectory;
-	bool			allowed;
-	
 	bool 			isCGI;
+	bool			autoIndex;
+	
 	bool			hasRedirect;
 	std::string		redirectTarget;
 	int				redirectCode;
 
+	bool			exists;
+	bool			readable;
+	bool			writable;
 
+	RouteResult();
 };
 
 class RequestRouting
