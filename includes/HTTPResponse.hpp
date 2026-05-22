@@ -77,7 +77,7 @@ private:
 	void handlePOST(const HTTPRequest& request, const RouteResult& route);
 	void handleDELETE(const HTTPRequest& request, const RouteResult& route);
 
-	void handleDirectoryRequest(const HTTPRequest& request, const LocationParse* loc, const std::string& filePath);
+	void handleDirectoryRequest(const HTTPRequest& request, const RouteResult& route);
 	void handleErrorPages(HTTPState state);
 
 	// Helper functions
@@ -127,7 +127,7 @@ private:
 	 */
 	// std::string parseResponseStr(const HTTPRequest request, HTTPMessage statusMessage, std::string filePath);
 	// checking if update works better, because statusmessage isn't updated correctly
-	std::string parseResponseStr(const HTTPRequest request, const RouteResult& route);
+	std::string parseResponseStr(const HTTPRequest& request, const RouteResult& route);
 
 	/**
 	 * @brief Clears the response body and resets related headers.
