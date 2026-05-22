@@ -124,7 +124,7 @@ std::string HTTPResponse::buildResponse(const HTTPRequest& request, const RouteR
  * Will update Content-Length of the body after the method handler is called, since some handlers (e.g. POST) may modify the body content.
  * For HEAD requests, the body is cleared and Content-Length is set to the size of the body that would have been sent if it were a GET request.
  */
-std::string HTTPResponse::parseResponseStr(const HTTPRequest request, const RouteResult& route)
+std::string HTTPResponse::parseResponseStr(const HTTPRequest& request, const RouteResult& route)
 {
 	switch (request.method)
 	{
