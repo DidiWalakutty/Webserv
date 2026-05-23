@@ -1,5 +1,6 @@
 #include "HTTPResponse.hpp"
 #include "RequestRouting.hpp"
+#include "utilities.hpp"
 
 bool HTTPResponse::serveInjectedPage(const std::string& filePath, const std::string& placeholder, const std::string& inject)
 {
@@ -9,39 +10,44 @@ bool HTTPResponse::serveInjectedPage(const std::string& filePath, const std::str
 		handleErrorPages(HTTPState::InternalServerError);
 		return false;
 	}
+
+	// --- Read File Content into Body ---
 	std::stringstream buffer;
 	buffer << file.rdbuf();
+
 	if (!validateSize(buffer.str(), filePath))
 		return false;
+
 	std::string html = buffer.str();
 	file.close();
 
+	// --- Inject content into placeholder ---
 	size_t pos = html.find(placeholder);
 	if (pos != std::string::npos)
 		html.replace(pos, placeholder.size(), inject);
 
 	body = html;
 	headers["CONTENT-TYPE"] = "text/html";
-	headers["CONTENT-LENGTH"] = std::to_string(body.size());
 	updateForHTTPState(HTTPState::Ok);
+
 	return true;
 }
 
 void HTTPResponse::handleDirectoryRequest(const HTTPRequest& request, const RouteResult& route)
 {
-	std::cout << "in directory handling" << std::endl;
-	// --- Check cgi directory
-	if (loc->is_cgi)
-	{
-		handleErrorPages(HTTPState::Forbidden);
-		return;
-	}
+	const LocationParse* loc = route.location;
 
-	// --- Check if index file exists ---
-	bool indexExists = !filePath.empty() 
-						&& access(filePath.c_str(), F_OK) == 0
-						&& access(filePath.c_str(), R_OK) == 0;
+	// --- Build full index path---
+	std::string indexPath;
 
+	if (!route.indexFile.empty())
+		indexPath = serverParse.joinPaths(route.filePath, route.indexFile);
+
+	// --- Check if index file exists and is readable ---
+
+	bool indexExists = !indexPath.empty() && pathExists(indexPath) && isReadable(indexPath);
+
+	// --- Serve Index File ---
 	if (indexExists)
 	{
 		// --- Special Case: /upload page ---
@@ -49,21 +55,21 @@ void HTTPResponse::handleDirectoryRequest(const HTTPRequest& request, const Rout
 		{
 			bool allowDelete = std::find(loc->allowedMethods.begin(), loc->allowedMethods.end(),
 										HTTPMethod::DELETE) != loc->allowedMethods.end();
-			serveInjectedPage(filePath, "<div id=\"files\"></div>",
+			serveInjectedPage(indexPath, "<div id=\"files\"></div>",
 							 generateUploadList(loc->root, allowDelete));
 			return;
 		}
 
-		// --- Special Case: /images page ---
+		// --- Special Case: /images gallery ---
 		if (loc->path == "/images")
 		{
-			serveInjectedPage(filePath, "<div class=\"gallery\" id=\"images\">",
+			serveInjectedPage(indexPath, "<div class=\"gallery\" id=\"images\">",
 							 generateImagesGallery(loc->root));
 			return;
 		}
 
 		// --- Regular index file handling ---		
-		std::ifstream file(filePath.c_str(), std::ios::binary);
+		std::ifstream file(indexPath.c_str(), std::ios::binary);
 		if (!file.is_open())
 		{
 			handleErrorPages(HTTPState::InternalServerError);
@@ -72,29 +78,31 @@ void HTTPResponse::handleDirectoryRequest(const HTTPRequest& request, const Rout
 
 		std::stringstream buffer;
 		buffer << file.rdbuf();
-		if (!validateSize(buffer.str(), filePath))
+
+		if (!validateSize(buffer.str(), indexPath))
 			return;
+		
 		body = buffer.str();
 		file.close();
 
-		headers["CONTENT-TYPE"] = parseContentType(filePath);
-		headers["CONTENT-LENGTH"] = std::to_string(body.size());
+		headers["CONTENT-TYPE"] = parseContentType(indexPath);
 		updateForHTTPState(HTTPState::Ok);
+
 		return;
 	}
 
 	// --- No index file, check autoindex ---
-	if (loc && loc->autoIndex)
+	if (route.autoIndex)
 	{
-		body = generateAutoindex(loc->root, request.resourcePath);
+		body = generateAutoindex(route.filePath, request.resourcePath);
 		headers["CONTENT-TYPE"] = "text/html";
 		headers["CONTENT-LENGTH"] = std::to_string(body.size());
 		updateForHTTPState(HTTPState::Ok);
 		return;
 	}
 
-	// --- Directory exists, but no index and autoindex is off ---
-	handleErrorPages(HTTPState::NotFound);
+	// --- No index + no autoindex ---
+	handleErrorPages(HTTPState::Forbidden);
 }
 
 
@@ -113,7 +121,7 @@ void HTTPResponse::handleGET(const HTTPRequest& request, const RouteResult& rout
 {
 	std::cout << "Requested file path: " << route.filePath << std::endl;
 	std::cout << "Resource path is: " << request.resourcePath << std::endl;
-		
+
 	// --- Redirect takes priority --- 
 	if (route.hasRedirect)
 	{
@@ -139,6 +147,12 @@ void HTTPResponse::handleGET(const HTTPRequest& request, const RouteResult& rout
 		return;
 	}
 
+	if (!route.readable)
+	{
+		handleErrorPages(HTTPState::Forbidden);
+		return;
+	}
+
 	// --- Regular file handling ---
 	std::ifstream file(route.filePath.c_str(), std::ios::binary); // Treats the file as binary.
 	if (!file.is_open())
@@ -159,11 +173,8 @@ void HTTPResponse::handleGET(const HTTPRequest& request, const RouteResult& rout
 
 	// --- Success Response ---
 	headers["CONTENT-TYPE"] = parseContentType(route.filePath);
-	headers["CONTENT-LENGTH"] = std::to_string(body.size());
 	updateForHTTPState(HTTPState::Ok);
 }
-
-
 
 /**
  * @brief Handles HTTP POST request for file uploads.
@@ -181,33 +192,23 @@ void HTTPResponse::handleGET(const HTTPRequest& request, const RouteResult& rout
  */
 void HTTPResponse::handlePOST(const HTTPRequest& request, const RouteResult& route)
 {
-	// --- Find matching location for request ---
-	const LocationParse* location = serverParse.get_best_location(request.resourcePath);
-
-	// --- Check if POST is allowed for this location ---
-	if (!location || std::find(location->allowedMethods.begin(), location->allowedMethods.end(), 
-							   HTTPMethod::POST) == location->allowedMethods.end())
-	{
-		std::cerr << "POST method not allowed for this location" << std::endl;
-		handleErrorPages(HTTPState::MethodNotAllowed);
-		return;
-	}
-
-	// --- Validate upload directory, body and size ---
-	if (filePath.empty())
-	{
-		handleErrorPages(HTTPState::NotFound);
-		return;
-	}
+	// --- Body Validation ---
 	if (request.body.empty())
 	{
 		handleErrorPages(HTTPState::BadRequest);
 		return;
 	}
+
 	if (request.body.size() > serverParse.maxBodySize)
 	{
 		handleErrorPages(HTTPState::RequestTooLarge);
 		return ;
+	}
+	
+	if (!route.isDirectory || !route.writable)
+	{
+		handleErrorPages(HTTPState::Forbidden);
+		return;
 	}
 
 	// --- Determine if upload is multipart/form-data (webform) ---
@@ -219,7 +220,7 @@ void HTTPResponse::handlePOST(const HTTPRequest& request, const RouteResult& rou
 			isMultipart = true;
 	}
 
-	// --- Extract filename + file content + extension ---
+	// --- Extract File Data ---
 	std::string fileName = "";
 	std::string fileData = request.body;
 	std::string ext = "";
@@ -253,9 +254,7 @@ void HTTPResponse::handlePOST(const HTTPRequest& request, const RouteResult& rou
 	
 	// --- Generate filename if not present ---
 	if (fileName.empty())
-	{
 		fileName = generateUploadFilename("upload_");
-	}
 	else
 	{
 		// --- Sanitize filename: remove any directory components ---
@@ -282,32 +281,27 @@ void HTTPResponse::handlePOST(const HTTPRequest& request, const RouteResult& rou
 	}
 	fileName += ext;
 
-	// --- Check if upload target directory exists and is writable ---
-	if (!checkPostAccess(filePath))
-		return ;
+	// // --- Check if upload target directory exists and is writable ---
+	// if (!checkPostAccess(filePath))
+	// 	return ;
 
 	// --- Ensure filePath ends with a slash for correct concatenation ---
-	std::string fullPath = filePath;
-	if (!fullPath.empty() && fullPath.back() != '/')
-		fullPath += "/";
-	fullPath += fileName;
-
+	std::string fullPath = serverParse.joinPaths(route.filePath, fileName);
+	
 	std::cout << "Saving uploaded file to: " << fullPath << std::endl;
 	std::cout << "FileName is: " << fileName << std::endl;
 
 	// --- Save/write file ---
 	std::ofstream outFile(fullPath, std::ios::binary);
-	if (!outFile.is_open())
+	if (!outFile.is_open()) // couldn't create file
 	{
-		std::cout << "Couldn't create post" << std::endl;
 		handleErrorPages(HTTPState::InternalServerError);
 		return ;
 	}
 	
 	outFile.write(fileData.c_str(), fileData.size());
-	if (!outFile.good())
+	if (!outFile.good()) // couldn't write to file
 	{
-		std::cout << "couldn't write to file" << std::endl;
 		outFile.close();
 		handleErrorPages(HTTPState::InternalServerError);
 		return ;
@@ -328,47 +322,44 @@ void HTTPResponse::handlePOST(const HTTPRequest& request, const RouteResult& rou
  * - Prevents deletion of protected files (e.g. .html).
  * - Removes the file from the filesystem.
  */
-void HTTPResponse::handleDELETE(const HTTPRequest& request, const std::string& filePath)
+void HTTPResponse::handleDELETE(const HTTPRequest& request, const RouteResult& route)
 {
-	// --- Check if target exists and can be deleted (404 must take priority over 405) ---
-	if (!checkDeleteAccess(filePath))
-		return;
+	(void)request; // Unused parameter, but we may need it later for error handling or logging, so we keep it in the function
 
-	// --- Find the matching location for this request ---
-	const LocationParse* location = serverParse.get_best_location(request.resourcePath);
-
-	// --- Check if DELETE is allowed for this location ---
-	if (!location ||
-		std::find(location->allowedMethods.begin(),
-	          	  location->allowedMethods.end(),
-	          	  HTTPMethod::DELETE) == location->allowedMethods.end())
+	if (!route.exists)
 	{
-		std::cerr << "DELETE method not allowed for this location" << std::endl;
-		handleErrorPages(HTTPState::MethodNotAllowed);
+		handleErrorPages(HTTPState::NotFound);
 		return;
 	}
 
-	// --- Prevent deletion of HTML files ---
-	if (filePath.size() >= 5 && filePath.substr(filePath.size() - 5) == ".html")
+	if (!route.writable || route.isDirectory) // DELETE requires write permissions and cannot delete directories
 	{
-		std::cerr << "Attempted to delete an HTML file, which is forbidden: " << filePath << std::endl;
+		handleErrorPages(HTTPState::Forbidden);
+		return;
+	}
+
+	// --- Check if target exists and can be deleted (404 must take priority over 405) ---
+	if (!checkDeleteAccess(route.filePath))
+	// 	return;
+
+	// --- Prevent deletion of HTML files ---
+	if (route.filePath.size() >= 5 && route.filePath.substr(route.filePath.size() - 5) == ".html")
+	{
 		handleErrorPages(HTTPState::Forbidden);
 		return;
 	}
 
 	// --- Attempt to delete the file ---
-	if (std::remove(filePath.c_str()) != 0)
+	if (std::remove(route.filePath.c_str()) != 0)
 	{
-		std::cerr << "Error deleting file: " << filePath << std::endl;
 		handleErrorPages(HTTPState::Forbidden);
 		return;
 	}
 
 	// --- Successfull deletion ---
-	std::cout << "File deleted successfully: " << filePath << std::endl;
+	std::cout << "File deleted successfully: " << route.filePath << std::endl;
 	body.clear();
 	headers["CONTENT-TYPE"] = "text/plain";
-	headers["CONTENT-LENGTH"] = std::to_string(body.size());
 	updateForHTTPState(HTTPState::NoContent);
 }
 
@@ -380,33 +371,40 @@ void HTTPResponse::handleDELETE(const HTTPRequest& request, const std::string& f
  * - Used to allow clients to check metadata (Content-Length, Content-Type) without downloading the content.
  * - If the file does not exist, serves the appropriate error page headers.
  */
-void HTTPResponse::handleHEAD(const HTTPRequest& request, const std::string& filePath)
+void HTTPResponse::handleHEAD(const HTTPRequest& request, const RouteResult& route)
 {
-	// --- Check if file exists and is accessible ---
-	if (!checkGetAccess(filePath))
-		return;
+	// // --- Check if file exists and is accessible ---
+	// if (!checkGetAccess(route.filePath))
+	// 	return;
 
-	// --- Set headers if file exists ---
-	std::ifstream file(filePath, std::ios::binary);
-	if (!file.is_open())
-	{
-		handleErrorPages(HTTPState::InternalServerError); // Already checked in checkGetAccess, so should now be an unexpected error.
-		return;
-	}
+	// // --- Set headers if file exists ---
+	// std::ifstream file(route.filePath, std::ios::binary);
+	// if (!file.is_open())
+	// {
+	// 	handleErrorPages(HTTPState::InternalServerError); // Already checked in checkGetAccess, so should now be an unexpected error.
+	// 	return;
+	// }
 
-	std::cout << "File opened successfully for HEAD request" << std::endl;
+	// std::cout << "File opened successfully for HEAD request" << std::endl;
 
-	// --- Get file size for Content-Length header ---
-	file.seekg(0, std::ios::end);			// Move the read pointer to end of the file
-	std::streampos fileSize = file.tellg();	// Get current pos -> this is the byte sized file
-	file.close();
+	// // --- Get file size for Content-Length header ---
+	// file.seekg(0, std::ios::end);			// Move the read pointer to end of the file
+	// std::streampos fileSize = file.tellg();	// Get current pos -> this is the byte sized file
+	// file.close();
 
-	body.clear(); // No body for HEAD response
-	headers["CONTENT-TYPE"] = parseContentType(filePath);
-	headers["CONTENT-LENGTH"] = std::to_string(fileSize);
-	request.printRequest();
-	std::cout << "HEAD request headers set with Content-Length: " << fileSize << std::endl;
-	updateForHTTPState(HTTPState::Ok);
+	// body.clear(); // No body for HEAD response
+	// headers["CONTENT-TYPE"] = parseContentType(route.filePath);
+	// request.printRequest();
+	// // std::cout << "HEAD request headers set with Content-Length: " << fileSize << std::endl;
+	// updateForHTTPState(HTTPState::Ok);
+
+
+	// OR
+	// head should be identically to GET, but without body!
+	handleGET(request, route);
+	// remove body for head
+	headers["CONTENT-LENGTH"] = std::to_string(body.size());
+	body.clear();
 }
 
 /**
