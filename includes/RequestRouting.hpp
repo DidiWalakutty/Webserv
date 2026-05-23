@@ -4,8 +4,6 @@
 #include "Config.hpp"
 #include "HTTPCommon.hpp"
 #include <string>
-#include <sys/stat.h>
-#include <unistd.h>
 
 struct RouteResult
 {
@@ -17,9 +15,10 @@ struct RouteResult
 	bool			methodAllowed;
 
 	bool 			isDirectory;
-	bool 			isCGI;
+	std::string		indexFile;
 	bool			autoIndex;
 	
+	bool 			possibleCGI;
 	bool			hasRedirect;
 	std::string		redirectTarget;
 	int				redirectCode;
