@@ -18,3 +18,19 @@ bool startsWith(const std::string longStr, const std::string beginningStr)
 	return longStr.size() >= beginningStr.size() &&
 		   longStr.compare(0, beginningStr.size(), beginningStr) == 0;
 }
+
+bool pathExists(const std::string& path)
+{
+	struct stat buffer;
+	return (stat(path.c_str(), &buffer) == 0);
+}
+
+bool isReadable(const std::string& path)
+{
+	return (access(path.c_str(), R_OK) == 0);
+}
+
+bool isWritable(const std::string& path)
+{
+	return (access(path.c_str(), W_OK) == 0);
+}
