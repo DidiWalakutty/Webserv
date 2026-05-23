@@ -6,14 +6,14 @@ Updates:
 1.	Server::Server(): 
 	Webserv constructor now receives all parsed + validated .conf info in ServerParse and LocationParse blocks.
 	In the constructor, you can now also see which server is running on which sockets.
-2.	CreateSockets():
+2.	createSockets():
 	Now uses the parsed .conf information via ServerParse.
 	Each server block has one port and host.
 	Now support multipe servers vigita _servers vector.
 	Able to print to see which IP is bound to which socket.
-3.	AddClient():
+3.	addClient():
 	Able to print and see which client FD was accepted from which IP + Port
-4.	ReadClient():
+4.	readClient():
 	Resized buffer at end to size to actual received data (not too much if only a little bit)
 5.	Start():
 	Select the appropriate server based on host header -> NEEDS TESTING, so connect to server we want to use and check
@@ -122,7 +122,7 @@ Questions:
 2.	What headers are required for HTTP Requests?
 	- Host
 	- Content Lenght
-3.	In Start(), I added a RemoveClient() when we couldn't parse the HTTP Request. Good? Because it's an issue when we even get in that statement?
+3.	In Start(), I added a removeClient() when we couldn't parse the HTTP Request. Good? Because it's an issue when we even get in that statement?
 4. Is there a way to add a '\n' for the client side when it says the request has been fulfilled?	
 
 

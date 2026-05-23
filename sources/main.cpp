@@ -16,7 +16,7 @@ int main(int argc, char **argv)
 		
 		if (!parser.parseConfigFile(filepath))
 		{
-			std::cout << "Error while parsing config file" << std::endl;
+			std::cerr<< "Error while parsing config file" << std::endl;
 			return 1;
 		}
 
@@ -31,7 +31,7 @@ int main(int argc, char **argv)
 		// Fill constructor and Start webserv
 		Server webserv(servers);
 		webserv.setMaxRequestSize(parser.getMaxBodySize(servers[0]));	// using first server's max body size as reference for reading
-		webserv.Start();
+		webserv.start();
 	}
 
 	return (0);
