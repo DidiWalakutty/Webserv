@@ -1,4 +1,5 @@
 #include "RequestRouting.hpp"
+#include "utilities.hpp"
 
 RouteResult::RouteResult() 
 	:	location(NULL),
@@ -6,30 +7,15 @@ RouteResult::RouteResult()
 		method(HTTPMethod::GET),
 		methodAllowed(false),
 		isDirectory(false),
-		isCGI(false),
+		possibleCGI(false),
 		autoIndex(false),
 		hasRedirect(false),
 		redirectCode(0),
 		exists(false),
-		readable(false),
-		writable(false)
+		isReadable(false),
+		isWritable(false),
+		canDelete(false)
 {
-}
-
-static bool pathExists(const std::string& path)
-{
-	struct stat buffer;
-	return (stat(path.c_str(), &buffer) == 0);
-}
-
-static bool isReadable(const std::string& path)
-{
-	return (access(path.c_str(), R_OK) == 0);
-}
-
-static bool isWritable(const std::string& path)
-{
-	return (access(path.c_str(), W_OK) == 0);
 }
 
 bool RequestRouting::checkMethodAllowed(const LocationParse* loc, HTTPMethod method)
@@ -57,7 +43,12 @@ RouteResult RequestRouting::route(const HTTPRequest& request)
 		return result;
 	}
 
-	// 2) Copy autoIndex setting
+	// 2) Copy IndexFile and autoIndex settings
+	if (result.location->index.empty())
+		result.indexFile = _server.index;
+	else
+		result.indexFile = result.location->index;
+
 	result.autoIndex = result.location->autoIndex;
 
 	// 3) Check Redirect (if true, no need to check anything else))
@@ -97,7 +88,7 @@ RouteResult RequestRouting::route(const HTTPRequest& request)
 		result.isDirectory = _server.isDirectory(result.filePath);
 	}
 
-	// 7) Request-specic checks 
+	// 7) Request-specific checks 
 	// --- GET / HEAD ---
 	if (request.method == HTTPMethod::GET || request.method == HTTPMethod::HEAD)
 	{
@@ -121,7 +112,7 @@ RouteResult RequestRouting::route(const HTTPRequest& request)
 			result.state = HTTPState::NotFound;
 			return result;
 		}
-		if (!result.writable)
+		if (result.writable)
 		{
 			result.state = HTTPState::Forbidden;
 			return result;
@@ -129,9 +120,11 @@ RouteResult RequestRouting::route(const HTTPRequest& request)
 	}
 
 
-	// --- CGI --- 
-	result.isCGI = result.location->is_cgi && result.exists && !result.isDirectory && \
-					(request.method == HTTPMethod::GET || request.method == HTTPMethod::POST);
+	// --- CGI Candidate --- 
+	result.possibleCGI = result.location->is_cgi &&
+						 result.exists &&
+						 !result.isDirectory &&
+						 (request.method == HTTPMethod::GET || request.method == HTTPMethod::POST);
 
 	result.state = HTTPState::Ok;
 
