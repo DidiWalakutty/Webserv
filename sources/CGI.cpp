@@ -1,5 +1,5 @@
 #include "HTTPResponse.hpp"
-#include "server.hpp"
+#include "Server.hpp"
 #include "CGI.hpp"
 
 
@@ -73,7 +73,7 @@ void	Server::startCGI(int clientFD, const HTTPRequest& request, const ServerPars
 		return;
 	}
 	removeCGIParent(cgi, pipe_p2c, pipe_c2p, cgiProcesses, epollFD);
-	RemoveClient(clientFD);
+	removeClient(clientFD);
 }
 
 
@@ -759,7 +759,7 @@ void	Server::queueCGIResponse(int clientFD, const std::string& response)
 	if (epoll_ctl(epollFD, EPOLL_CTL_MOD, clientFD, &ev) == -1)
 	{
 		std::cerr << "CGI: epoll_ctl(MOD clientFD " << clientFD << "): " << strerror(errno) << std::endl;
-		RemoveClient(clientFD);
+		removeClient(clientFD);
 	}
 }
 

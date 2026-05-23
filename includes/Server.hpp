@@ -71,10 +71,16 @@ class Server
 		ssize_t maxRequestSize = 1;					/**< @brief Maximum allowed size for incoming HTTP requests. */
 		std::vector<HTTPMethod> allowedMethods; 	/**< @brief Default allowed HTTP methods for the server */
 		
-		void QueueResponse(int clientFD, const HTTPRequest& request, const std::string& responseStr);
+		void queueResponse(int clientFD, const HTTPRequest& request, const std::string& responseStr);
+		void queueCloseResponse(int clientFD, const std::string& response);
+		const ServerParse* findServerForClient(int clientFD) const;
+		bool setClientReadEvents(int clientFD);
+		bool handleRequestParseError(int clientFD, const HTTPRequest::HTTPRequestException& exc);
+		void handleClientReadEvent(int clientFD);
+		void handleClientWriteEvent(int clientFD);
 		
 		// --- Run CGI ---
-		bool IsCGIRequest(const HTTPRequest& request, const ServerParse& server, std::string& filePath, const LocationParse*& location);
+		bool isCGIRequest(const HTTPRequest& request, const ServerParse& server, std::string& filePath, const LocationParse*& location);
 		void startCGI(int clientFD, const HTTPRequest& request, const ServerParse& server, const std::string& filePath, const LocationParse& location);
 		void handleCGIEvent(int fd, uint32_t events);
 		void handleCGITimeOut(std::shared_ptr<CGI> cgi);
@@ -91,18 +97,18 @@ class Server
 		std::vector<HTTPMethod> getAllowedMethods() const { return allowedMethods; } /**< @brief Getter for allowed HTTP methods. */
 
 	private:
-		void CreateSockets();	/**< @brief Creates and configures the server's sockets. */
-		void CreateEpoll();		/**< @brief Creates and configures the server's Epoll instance. */
+		void createSockets();	/**< @brief Creates and configures the server's sockets. */
+		void createEpoll();		/**< @brief Creates and configures the server's Epoll instance. */
 
-		void DestroySockets();	/**< @brief Destroys and closes the server's sockets. */
-		void DestroyEpoll();	/**< @brief Destroys and closes the server's Epoll instance. */
+		void destroySockets();	/**< @brief Destroys and closes the server's sockets. */
+		void destroyEpoll();	/**< @brief Destroys and closes the server's Epoll instance. */
 
 
 		/**
 		 * @brief Configures the file descriptor to be non blocking.
 		 * @param FD The file descriptor to configure.
 		 */
-		void SetNonBlocking(const int &FD);
+		void setNonBlocking(const int &FD);
 
 		/**
 		 * @brief Checks if the file descriptor is a server socket.
@@ -115,20 +121,20 @@ class Server
 		 * @brief Adds and configures a new client to the server.
 		 * @param event The Epoll request event.
 		 */
-		void AddClient(const epoll_event &event);
+		void addClient(const epoll_event &event);
 
 		/**
 		 * @brief Removes an existing client from the server.
 		 * @param clientFD The file descriptor of the client.
 		 */
-		void RemoveClient(const int &clientFD);
+		void removeClient(const int &clientFD);
 
 		/**
 		 * @brief Reads data from a client.
 		 * @param FD The file descriptor of the client to read from.
 		 * @return A buffer containing the data read from the client.
 		 */
-		std::vector<char> ReadClient(const int &FD);
+		std::vector<char> readClient(const int &FD);
 	
 	public:
 		static volatile sig_atomic_t running; /**< @brief Describes if the server should close or keep running. */
@@ -142,7 +148,7 @@ class Server
 		
 		~Server();
 		
-		void Destroy(); /**< @brief Destroys and closes the server. All server and associated resources are cleaned up. */
+		void destroy(); /**< @brief Destroys and closes the server. All server and associated resources are cleaned up. */
 		void setMaxRequestSize(size_t size);
 
 		/**
@@ -150,5 +156,5 @@ class Server
 		 * @note This will block the rest of the program until the server is closed again.
 		 * @warning Should not be called after the server is destroyed.
 		 */
-		void Start();
+		void start();
 };

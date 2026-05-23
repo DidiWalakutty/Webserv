@@ -1,5 +1,5 @@
 #include "HTTPRequest.hpp"
-#include "server.hpp"
+#include "Server.hpp"
 
 HTTPRequest::HTTPRequest(Server *server) : server(server) {}
 

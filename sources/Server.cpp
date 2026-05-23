@@ -1,4 +1,4 @@
-#include "server.hpp"
+#include "Server.hpp"
 #include "Config.hpp"
 #include "ConfigParser.hpp"
 
@@ -16,6 +16,31 @@
 
 const int MAX_CLIENTS = 1024;
 const size_t READ_BUFFER_SIZE = 65536;  // 64KB per read
+const int INDEFINITE_BLOCKING = -1;
+std::ostream& ERR = std::cerr;
+
+namespace
+{
+	bool strContains(const std::string& text, const char* needle)
+	{
+		return text.find(needle) != std::string::npos;
+	}
+
+	void logColored(std::ostream& out, const std::string& msg, const char* color = NULL)
+	{
+		if (color && color[0] != '\0')
+			out << color;
+		out << msg;
+		if (color && color[0] != '\0')
+			out << RESET;
+		out << std::endl;
+	}
+
+	void logColored(const std::string& msg, const char* color = NULL)
+	{
+		logColored(std::cout, msg, color);
+	}
+}
 
 void Interrupt(int sig)
 {
@@ -34,8 +59,8 @@ void Interrupt(int sig)
  * @details
  * - Stores all parsed server configurations in '_server',
  * - Registers the SIGINT handler so server can shut down cleanly (Ctrl+C).
- * - CreateSockets: listening sockets for each server configuration (one socket per ServerParse).
- * - CreateEpoll: the epoll instance and registers the listening sockets in it.
+ * - createSockets: listening sockets for each server configuration (one socket per ServerParse).
+ * - createEpoll: the epoll instance and registers the listening sockets in it.
  * - If it fails, throw exception.
  */
 Server::Server(const std::vector<ServerParse>& serverConfigs)
@@ -46,22 +71,21 @@ Server::Server(const std::vector<ServerParse>& serverConfigs)
 
 	try
 	{
-		CreateSockets();	// like a door for clients to connect to
-		CreateEpoll();		// like a notification mechanism
+		createSockets();	// like a door for clients to connect to
+		createEpoll();		// like a notification mechanism
 	}
 	catch (const std::exception& e)
 	{
-		std::cerr << "Failed to create server: " << e.what() << std::endl;
-		Destroy();
+		logColored(ERR, "Failed to create server: " + std::string(e.what()), RED);
+		destroy();
 	}
 }
 
 Server::~Server()
 {
-	std::cout << std::endl
-			  << "Closing server." << std::endl;
+	logColored("Closing server.", CYAN);
 
-	Destroy();
+	destroy();
 }
 
 /**
@@ -83,9 +107,9 @@ Server::~Server()
  *  - All listening sockets are stored in listeningSockets.
  *  - These sockets wlil be monitored by epoll.
  */
-void Server::CreateSockets()
+void Server::createSockets()
 {
-	DestroySockets();
+	destroySockets();
 
 	if (!listeningSockets.empty())
 	{
@@ -116,7 +140,7 @@ void Server::CreateSockets()
 		}
 		
 		// --- Make socket non-blocking ---
-		SetNonBlocking(socketFD);
+		setNonBlocking(socketFD);
 
 		// --- Bind socket to configured host and port ---
 		sockaddr_in address{};							// struct that holds IP + port for the socket
@@ -147,7 +171,7 @@ void Server::setMaxRequestSize(size_t size)
 	maxRequestSize = size;
 }
 
-void Server::CreateEpoll()
+void Server::createEpoll()
 {
 	if (epollFD >= 0)
 	{
@@ -174,7 +198,7 @@ void Server::CreateEpoll()
 	}
 }
 
-void Server::DestroySockets()
+void Server::destroySockets()
 {
 	for (int &socketFD : listeningSockets)
 	{
@@ -185,7 +209,7 @@ void Server::DestroySockets()
 
 		if (close(socketFD) < 0)
 		{
-			std::cerr << "Failed to close server socket." << std::endl;
+			logColored(ERR, "Failed to close server socket.", RED);
 		}
 
 		socketFD = -1;
@@ -194,7 +218,7 @@ void Server::DestroySockets()
 	listeningSockets.clear();
 }
 
-void Server::DestroyEpoll()
+void Server::destroyEpoll()
 {
 	for (size_t i = 0; i < clients.size(); i++)
 	{
@@ -202,7 +226,7 @@ void Server::DestroyEpoll()
 		{
 			if (close(clients[i]) < 0)
 			{
-				std::cerr << "Failed to close client FD: " << clients[i] << "." << std::endl;
+				logColored(ERR, "Failed to close client FD: " + std::to_string(clients[i]) + ".", RED);
 			}
 		}
 	}
@@ -216,16 +240,16 @@ void Server::DestroyEpoll()
 
 	if (close(epollFD) < 0)
 	{
-		std::cerr << "Failed to close epoll instance." << std::endl;
+		logColored(ERR, "Failed to close epoll instance.", RED);
 	}
 
 	epollFD = -1;
 }
 
-void Server::Destroy()
+void Server::destroy()
 {
-	DestroySockets();
-	DestroyEpoll();
+	destroySockets();
+	destroyEpoll();
 }
 
 /**
@@ -233,7 +257,7 @@ void Server::Destroy()
  * 
  * @param FD 
  */
-void Server::SetNonBlocking(const int &FD)
+void Server::setNonBlocking(const int &FD)
 {
 	int flags = fcntl(FD, F_GETFL, 0);
 
@@ -276,7 +300,7 @@ bool Server::isListeningSocket(const int &FD)
  *  Because the listening socket is non-blocking, accept() must be called until it returns EAGAIN/EWOULDBLOCK
  *  which means the kernel has no more pending connections to accept.
  */
-void Server::AddClient(const epoll_event &event)
+void Server::addClient(const epoll_event &event)
 {
 	while (true)
 	{
@@ -299,7 +323,7 @@ void Server::AddClient(const epoll_event &event)
         //           << ":" << ntohs(address.sin_port) << std::endl;
 		
 		clients.push_back(clientFD);
-		SetNonBlocking(clientFD);
+		setNonBlocking(clientFD);
 
 		// Map/remember which server this client is connected to
 		for (size_t i = 0; i < listeningSockets.size(); i++)
@@ -322,7 +346,7 @@ void Server::AddClient(const epoll_event &event)
 	}
 }
 
-void Server::RemoveClient(const int &clientFD)
+void Server::removeClient(const int &clientFD)
 {
 	if (clientFD < 0)
 	{
@@ -346,7 +370,7 @@ void Server::RemoveClient(const int &clientFD)
 
 	if (close(clientFD) < 0)
 	{
-		std::cerr << "Failed to close client FD: " << clientFD << "." << std::endl;
+		logColored(ERR, "Failed to close client FD: " + std::to_string(clientFD) + ".", RED);
 	}
 
 	clients.erase(clients.begin() + index);
@@ -356,13 +380,232 @@ void Server::RemoveClient(const int &clientFD)
 	writeOffsets.erase(clientFD);
 	closeAfterWrite.erase(clientFD);
 
-	std::cout << std::endl
-			  << "Removed FD: " << clientFD << std::endl;
+	logColored("Removed FD: " + std::to_string(clientFD), CYAN);
+}
+
+const ServerParse* Server::findServerForClient(int clientFD) const
+{
+	std::map<int, size_t>::const_iterator it = clientToServer.find(clientFD);
+	if (it == clientToServer.end())
+		return NULL;
+	return &_servers[it->second];
+}
+
+bool Server::setClientReadEvents(int clientFD)
+{
+	epoll_event modEv{};
+	modEv.events = EPOLLIN;
+	modEv.data.fd = clientFD;
+	if (epoll_ctl(epollFD, EPOLL_CTL_MOD, clientFD, &modEv) < 0)
+	{
+		logColored(ERR, "Failed to re-register EPOLLIN for client: " + std::to_string(clientFD), RED);
+		return false;
+	}
+	return true;
+}
+
+bool Server::handleRequestParseError(int clientFD, const HTTPRequest::HTTPRequestException& exc)
+{
+	// Map parser errors to the most appropriate HTTP status.
+	std::string excMsg = exc.what();
+	bool isPayloadTooLarge =
+		strContains(excMsg, "Content-Length exceeds maximum allowed size") ||
+		strContains(excMsg, "Body size exceeds maximum limit");
+	bool isLengthRequired =
+		strContains(excMsg, "Missing required Content-Length header for method") ||
+		strContains(excMsg, "Invalid Content-Length header value");
+	HTTPState errorState = HTTPState::BadRequest;
+	if (isPayloadTooLarge)
+		errorState = HTTPState::RequestTooLarge;
+	else if (isLengthRequired)
+		errorState = HTTPState::LengthRequired;
+	HTTPMessage statusMessage = HTTPCommon::HTTPStatusMap.at(errorState);
+	int statusCodeInt = static_cast<int>(errorState);
+
+	// Find server config for client-specific custom error pages.
+	const ServerParse* parserErrorServer = findServerForClient(clientFD);
+
+	// Skip noisy logging for common disconnect/malformed formatting paths.
+	if (!strContains(excMsg, "Empty (raw) request string") &&
+	    !strContains(excMsg, "Invalid request format"))
+	{
+		logColored(ERR, "Failed to parse HTTP request: " + excMsg, RED);
+	}
+
+	// Build parser error response body from configured error page if available.
+	std::string body;
+	std::string contentType = "text/plain";
+	std::string errorPagePath = HTTPCommon::defaultErrorPagePath(statusMessage);
+	if (parserErrorServer)
+	{
+		const std::string* customErrorPath = parserErrorServer->get_error_page(statusCodeInt);
+		if (customErrorPath)
+			errorPagePath = *customErrorPath;
+	}
+
+	std::ifstream errorFile(errorPagePath.c_str(), std::ios::binary);
+	if (errorFile.is_open())
+	{
+		std::ostringstream buf;
+		buf << errorFile.rdbuf();
+		body = buf.str();
+		contentType = "text/html";
+		HTTPCommon::fillErrorPageTemplate(body, statusMessage);
+	}
+	else
+	{
+		body = statusMessage.code + ": " + statusMessage.message;
+	}
+
+	// Queue a close-delimited parser error response so non-blocking writes can finish safely.
+	std::string response =
+		"HTTP/1.1 " + statusMessage.code + " " + statusMessage.message + "\r\nContent-Type: " + contentType +
+		"\r\nContent-Length: " + std::to_string(body.size()) +
+		"\r\nConnection: close\r\n\r\n" + body;
+	queueCloseResponse(clientFD, response);
+	return true;
+}
+
+void Server::handleClientReadEvent(int clientFD)
+{
+	// 4.1) --- Read Request ---
+	std::vector<char> data = readClient(clientFD);
+	if (data.size() == 0)
+	{
+		// Empty data means: incomplete request, EOF, or already removed.
+		return;
+	}
+
+	std::string rawRequest(data.data(), data.size());
+	if (rawRequest.empty())
+	{
+		// Safety check: skip if request is empty (closed during keep-alive).
+		return;
+	}
+
+	logColored(
+		"Read FD: " + std::to_string(clientFD) +
+		" (data size: " + std::to_string(data.size()) + " bytes)",
+		BOLDYELLOW);
+
+	// 4.2) --- Parse Request ---
+	HTTPRequest request(this);
+	try
+	{
+		request.parseRequest(rawRequest);
+		request.printRequest();
+		std::cout << RESET << std::endl;
+	}
+	catch (const HTTPRequest::HTTPRequestException &exc)
+	{
+		handleRequestParseError(clientFD, exc);
+		return;
+	}
+
+	// 4.3) --- Find corresponding server config for this client FD ---
+	const ServerParse* serverPtr = findServerForClient(clientFD);
+	if (!serverPtr)
+	{
+		logColored(ERR, "Failed to find server for client FD: " + std::to_string(clientFD), RED);
+		removeClient(clientFD);
+		return;
+	}
+
+	// 4.4) --- CGI routing ---
+	std::string filePath;
+	const LocationParse* loc = NULL;
+	if (isCGIRequest(request, *serverPtr, filePath, loc))
+	{
+		HTTPState cgiAccessState = checkCGIAccess(filePath);
+		// Access wasn't good, return error page.
+		if (cgiAccessState != HTTPState::Ok)
+		{
+			HTTPResponse response(*serverPtr);
+			std::string responseStr = response.buildErrorResponse(request, cgiAccessState);
+			queueResponse(clientFD, request, responseStr);
+			return;
+		}
+
+		// Access was OK, handle CGI.
+		logColored("Handling CGI request for: " + filePath, CYAN);
+		startCGI(clientFD, request, *serverPtr, filePath, *loc);
+		return;
+	}
+
+	// 4.5) --- Normal non-CGI Response ---
+	HTTPResponse response(*serverPtr);
+	std::string responseStr = response.buildResponse(request);
+	queueResponse(clientFD, request, responseStr);
+
+	// 4.6) --- If client wants to close, mark close-after-write ---
+	if (request.headers.count("Connection") && request.headers["Connection"] == "close")
+	{
+		closeAfterWrite[clientFD] = true;
+		logColored("Client requested Connection: close. Will close after response is sent.", CYAN);
+	}
+}
+
+void Server::handleClientWriteEvent(int clientFD)
+{
+	if (!pendingWrites.count(clientFD))
+	{
+		// Nothing to send: switch this fd back to read monitoring.
+		if (!setClientReadEvents(clientFD))
+			removeClient(clientFD);
+		return;
+	}
+
+	const std::string& data = pendingWrites[clientFD];
+	size_t& offset = writeOffsets[clientFD];
+	bool writeError = false;
+
+	while (offset < data.size())
+	{
+		ssize_t sent = write(clientFD, data.c_str() + offset, data.size() - offset);
+		if (sent < 0)
+		{
+			if (errno == EAGAIN || errno == EWOULDBLOCK)
+				// Kernel buffer full — EPOLLOUT will fire again.
+				break;
+			logColored(ERR,
+				"Write error for client FD: " + std::to_string(clientFD) +
+				" | errno: " + std::to_string(errno) +
+				" (" + std::string(std::strerror(errno)) + ")",
+				RED);
+			removeClient(clientFD);
+			writeError = true;
+			break;
+		}
+		offset += static_cast<size_t>(sent);
+		logColored(
+			"Bytes written: " + std::to_string(sent) +
+			" | Total sent: " + std::to_string(offset) +
+			" / " + std::to_string(data.size()),
+			GREEN);
+	}
+
+	if (!writeError && offset >= data.size())
+	{
+		// All data sent — clean up and decide whether to keep alive.
+		bool shouldClose = closeAfterWrite.count(clientFD) && closeAfterWrite[clientFD];
+		pendingWrites.erase(clientFD);
+		writeOffsets.erase(clientFD);
+		closeAfterWrite.erase(clientFD);
+
+		if (shouldClose)
+		{
+			removeClient(clientFD);
+		}
+		else if (!setClientReadEvents(clientFD))
+		{
+			removeClient(clientFD);
+		}
+	}
 }
 
 // Accumulates request data from a client until a complete request is available.
 // Returns empty vector if incomplete, full request vector if complete.
-std::vector<char> Server::ReadClient(const int &FD)
+std::vector<char> Server::readClient(const int &FD)
 {
 	std::vector<char> tempBuffer(READ_BUFFER_SIZE);
 	std::vector<char> result;
@@ -377,9 +620,11 @@ std::vector<char> Server::ReadClient(const int &FD)
 		else
 		{
 			// Read error - remove this client instead of crashing the server
-			std::cerr << "Read error on FD " << FD << ": " << strerror(errno) << std::endl;
+			logColored(ERR,
+				"Read error on FD " + std::to_string(FD) + ": " + std::string(strerror(errno)),
+				RED);
 			clientBuffers.erase(FD);
-			RemoveClient(FD);
+			removeClient(FD);
 			return result;
 		}
 	}
@@ -387,7 +632,7 @@ std::vector<char> Server::ReadClient(const int &FD)
 	{
 		// EOF - client closed connection
 		clientBuffers.erase(FD);
-		RemoveClient(FD);
+		removeClient(FD);
 		return result;
 	}
 	
@@ -483,15 +728,15 @@ std::vector<char> Server::ReadClient(const int &FD)
  *
  * - Uses non-blocking sockets, so responses may be sent in parts.
  */
-void Server::Start()
+void Server::start()
 {
 	if (epollFD < 0)
 	{
-		std::cerr << "Server failed to initialize. Aborting." << std::endl;
+		logColored(ERR, "Server failed to initialize. Aborting.", RED);
 		return;
 	}
-	std::cout << CYAN << "--- Welcome to Webserv ---" << RESET << std::endl;
-	std::cout << CYAN << "--- Server Side ---" << RESET << std::endl;
+	logColored("--- Welcome to Webserv ---", CYAN);
+	logColored("--- Server Side ---", CYAN);
 	running = 1;
 
 	// Buffer for epoll events added by epoll_wait
@@ -500,12 +745,16 @@ void Server::Start()
 	while (running)
 	{
 		/// --- Wait for events on registered FDs ---
-		int count = epoll_wait(epollFD, events, _maxEvents, -1);
+		// epoll_wait() will block and not return until 
+		// at least one file descriptor is ready, or an error occurs. 
+		// This is useful when we want the program to be event-driven and only proceed 
+		// when there is actual activity, without polling or using a fixed timeout.
+		int count = epoll_wait(epollFD, events, _maxEvents, INDEFINITE_BLOCKING);
 		if (count < 0) 
 		{
 			if (errno == EINTR)
 				continue; // interrupted by signal (e.g. SIGCHLD) — not an error
-			std::cerr << "epoll_wait failed: " << strerror(errno) << std::endl;
+			logColored(ERR, "epoll_wait failed: " + std::string(strerror(errno)), RED);
 			break;
 		}
 		
@@ -513,13 +762,14 @@ void Server::Start()
 		for (int i = 0; i < count; i++)
 		{
 			int fd = events[i].data.fd;
+			uint32_t ev = events[i].events;
 
 			// 1) --- New Client Connection ---
 			if (isListeningSocket(fd))	// Accept new connection + add client
 			{
 				if (clients.size() < MAX_CLIENTS)
 				{
-					AddClient(events[i]);
+					addClient(events[i]);
 				}
 				else
 				{
@@ -528,240 +778,40 @@ void Server::Start()
 					int tempFD = accept(events[i].data.fd, NULL, NULL);
 					if (tempFD >= 0)
 						close(tempFD);
-					std::cerr << "Too many clients connected. Rejected new connection." << std::endl;
+					logColored(ERR, "Too many clients connected. Rejected new connection.", RED);
 				}
 			}
 
 			// 2) --- CGI Pipe Events ---
 			else if (cgiProcesses.count(fd))
-				handleCGIEvent(fd, events[i].events);
+			{
+				handleCGIEvent(fd, ev);
+			}
 
 			// 3)--- Socket Error or Disconnect ---
-			else if (events[i].events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP))	// If it's an error, remove Client
+			else if (ev & (EPOLLERR | EPOLLHUP | EPOLLRDHUP))	// If it's an error, remove Client
 			{
-				std::cout << "Remove client" << std::endl;
-				RemoveClient(events[i].data.fd);
+				removeClient(events[i].data.fd);
 			}
 
-			// 4) --- Drain Pending Write ---
-			else if (events[i].events & EPOLLOUT)
+			// 4) --- Regular Client Request ---
+			else if (ev & EPOLLIN)
 			{
-				if (!pendingWrites.count(fd))
-				{
-					// Nothing to send — switch back to reading
-					epoll_event modEv{};
-					modEv.events = EPOLLIN;
-					modEv.data.fd = fd;
-					epoll_ctl(epollFD, EPOLL_CTL_MOD, fd, &modEv);
-					continue;
-				}
-
-				const std::string& data = pendingWrites[fd];
-				size_t& offset = writeOffsets[fd];
-				bool writeError = false;
-
-				while (offset < data.size())
-				{
-					ssize_t sent = write(fd, data.c_str() + offset, data.size() - offset);
-					if (sent < 0)
-					{
-						if (errno == EAGAIN || errno == EWOULDBLOCK)
-							break; // Kernel buffer full — EPOLLOUT will fire again
-						std::cerr << "Write error for client FD: " << fd 
-								  << " | errno: " << errno
-								  << " (" <<std::strerror(errno) << ")" << std::endl;
-						RemoveClient(fd);
-						writeError = true;
-						break;
-					}
-					offset += static_cast<size_t>(sent);
-					std::cout << "Bytes written: " << sent << " | Total sent: " << offset
-					          << " / " << data.size() << std::endl;
-				}
-
-				if (!writeError && offset >= data.size())
-				{
-					// All data sent — clean up and decide whether to keep alive
-					bool shouldClose = closeAfterWrite.count(fd) && closeAfterWrite[fd];
-					pendingWrites.erase(fd);
-					writeOffsets.erase(fd);
-					closeAfterWrite.erase(fd);
-
-					if (shouldClose)
-					{
-						RemoveClient(fd);
-					}
-					else
-					{
-						// Go back to waiting for next request
-						epoll_event modEv{};
-						modEv.events = EPOLLIN;
-						modEv.data.fd = fd;
-						if (epoll_ctl(epollFD, EPOLL_CTL_MOD, fd, &modEv) < 0)
-						{
-							std::cerr << "Failed to re-register EPOLLIN for client: " << fd << std::endl;
-							RemoveClient(fd);
-						}
-					}
-				}
+				handleClientReadEvent(fd);
 			}
 
-			// 5) --- Regular Client Request ---
-			else if (events[i].events & EPOLLIN)
+			// 5) --- Drain Pending Write ---
+			else if (ev & EPOLLOUT)
 			{
-				// 5.1) --- Read Request ---
-				std::vector<char> data = ReadClient(fd);
-				if (data.size() == 0)
-				{
-					// Empty data, client closed connection or already removed
-					continue;
-				}
-				
-				std::string rawRequest(data.data(), data.size());
-				// Safety check: skip if request is empty (closed connection during keep-alive)
-				if (rawRequest.empty())
-				{
-					continue;
-				}
-				
-				if (data.size() > 0)
-					std::cout << std::endl
-							  << BOLDYELLOW << "Read FD: " << events[i].data.fd 
-							  << " (data size: " << data.size() << " bytes)" << std::endl;
-
-				// 5.2)--- Parse Request ---
-				HTTPRequest request(this);
-				try
-				{
-					if (!request.parseRequest(rawRequest))
-						continue;
-					request.printRequest();
-					std::cout << RESET << std::endl;
-				}
-				// Treat malformed requests as graceful disconnect, not an error
-				catch (const HTTPRequest::HTTPRequestException &exc)
-				{
-					std::string excMsg = exc.what();
-					bool isPayloadTooLarge =
-						excMsg == "Content-Length exceeds maximum allowed size" ||
-						excMsg == "Body size exceeds maximum limit";
-					bool isLengthRequired =
-						excMsg.find("Missing required Content-Length header for method") != std::string::npos ||
-						excMsg.find("Invalid Content-Length header value") != std::string::npos;
-					HTTPState errorState = HTTPState::BadRequest;
-					if (isPayloadTooLarge)
-						errorState = HTTPState::RequestTooLarge;
-					else if (isLengthRequired)
-						errorState = HTTPState::LengthRequired;
-					HTTPMessage statusMessage = HTTPCommon::HTTPStatusMap.at(errorState);
-					int statusCodeInt = static_cast<int>(errorState);
-
-					const ServerParse* parserErrorServer = nullptr;
-					// std::map<int, size_t>::iterator mapIt = clientToServer.find(events[i].data.fd);
-					auto it = clientToServer.find(fd);
-					if (it != clientToServer.end())
-						parserErrorServer = &_servers[it->second];
-
-					// Skip error logging for common disconnect/malformed request cases
-					if (excMsg != "Empty (raw) request string" && 
-					    excMsg.find("Invalid request format") == std::string::npos)
-					{
-						std::cerr << "Failed to parse HTTP request: " << excMsg << std::endl;
-					}
-
-					// Send parser error response with configured error page path if available.
-					std::string body;
-					std::string contentType = "text/plain";
-					std::string errorPagePath = HTTPCommon::defaultErrorPagePath(statusMessage);
-					if (parserErrorServer)
-					{
-						const std::string* customErrorPath = parserErrorServer->get_error_page(statusCodeInt);
-						if (customErrorPath)
-							errorPagePath = *customErrorPath;
-					}
-
-					std::ifstream errorFile(errorPagePath.c_str(), std::ios::binary);
-					if (errorFile.is_open())
-					{
-						std::ostringstream buf;
-						buf << errorFile.rdbuf();
-						body = buf.str();
-						contentType = "text/html";
-						HTTPCommon::fillErrorPageTemplate(body, statusMessage);
-					}
-					else
-					{
-						body = statusMessage.code + ": " + statusMessage.message;
-					}
-					std::string response =
-						"HTTP/1.1 " + statusMessage.code + " " + statusMessage.message + "\r\nContent-Type: " + contentType +
-						"\r\nContent-Length: " + std::to_string(body.size()) +
-						"\r\nConnection: close\r\n\r\n" + body;
-					ssize_t bw = write(events[i].data.fd, response.c_str(), response.size());
-					(void)bw;
-					RemoveClient(fd);
-					continue;
-				}
-
-				// 6) --- Find corresponding server config for this client FD ---
-				const ServerParse* serverPtr = nullptr;
-				
-				// Find which server this client is connected to using the clientToServer map
-				std::map<int, size_t>::iterator it = clientToServer.find(fd);
-				// If found, get the corresponding ServerParse pointer
-				if (it != clientToServer.end())
-				{
-					serverPtr = &_servers[it->second]; // it->second = server index in _servers vector
-				}
-				// If no server found, failed to find server of client FD.
-				if (!serverPtr)
-				{
-					std::cerr << "Failed to find server for client FD: " << events[i].data.fd << std::endl;
-					RemoveClient(events[i].data.fd);
-					continue;
-				}
-
-				// 7) --- CGI routing
-				std::string filePath;
-				const LocationParse* loc = nullptr;
-
-				if (IsCGIRequest(request, *serverPtr, filePath, loc))
-				{
-					HTTPState cgiAccessState = checkCGIAccess(filePath);
-					// access wasn't good, return error page
-					if (cgiAccessState != HTTPState::Ok)
-					{
-						HTTPResponse response(*serverPtr);
-						std::string responseStr = response.buildErrorResponse(request, cgiAccessState);
-						QueueResponse(fd, request, responseStr);
-						continue;
-					}
-
-					// access was OK, handle CGI
-					std::cout <<  "Handling CGI request for: " << filePath  << std::endl;
-					startCGI(fd, request, *serverPtr, filePath, *loc);
-					continue;
-				}
-
-				// 8) --- Normal non-CGI Response ---
-				HTTPResponse response(*serverPtr);
-				std::string responseStr = response.buildResponse(request);
-				
-				QueueResponse(fd, request, responseStr);
-
-				// 9) --- If client wants to close connection, mark it for closing after write ---
-				if (request.headers.count("Connection") && request.headers["Connection"] == "close")
-				{
-					closeAfterWrite[fd] = true;
-					std::cout << "Client requested Connection: close. Will close after response is sent." << std::endl;
-				}
+				handleClientWriteEvent(fd);
 			}
+
 		}
 	}
 
 	running = false;
 
-	Destroy();
+	destroy();
 }
 
 volatile sig_atomic_t Server::running = 0;

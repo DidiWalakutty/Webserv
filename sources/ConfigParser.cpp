@@ -4,6 +4,11 @@ ConfigParser::ConfigParser() {}
 
 ConfigParser::~ConfigParser() {}
 
+const std::vector<ServerParse>& ConfigParser::getServers() const
+{
+	return _servers;
+}
+
 // Verifies that no two servers share the same host and port.
 // Logs an error message and returns true if a duplicate is detected.
 static bool duplicatesAcrossServers(const std::vector<ServerParse>& servers)

@@ -6,11 +6,11 @@
 /*   By: diwalaku <diwalaku@codam.student.nl>         +#+                     */
 /*                                                   +#+                      */
 /*   Created: 2026/04/15 21:27:32 by diwalaku      #+#    #+#                 */
-/*   Updated: 2026/04/25 18:02:43 by diwalaku      ########   odam.nl         */
+/*   Updated: 2026/05/23 22:01:28 by akaya-oz      ########   odam.nl         */
 /*                                                                            */
 /* ************************************************************************** */
 
-#include "server.hpp"
+#include "Server.hpp"
 
 HTTPState Server::checkCGIAccess(const std::string& filePath)
 {
@@ -43,7 +43,7 @@ HTTPState Server::checkCGIAccess(const std::string& filePath)
 	return HTTPState::Ok;
 }
 
-bool Server::IsCGIRequest(const HTTPRequest& request, const ServerParse& server,
+bool Server::isCGIRequest(const HTTPRequest& request, const ServerParse& server,
                           std::string& filePath, const LocationParse*& location)
 {
 	// --- Only GET and POST are considered CGI requests ---
@@ -76,7 +76,7 @@ bool Server::IsCGIRequest(const HTTPRequest& request, const ServerParse& server,
 	return true;
 }
 
-void Server::QueueResponse(int clientFD, const HTTPRequest& request, const std::string& responseStr)
+void Server::queueResponse(int clientFD, const HTTPRequest& request, const std::string& responseStr)
 {
 	auto connIt = request.headers.find("CONNECTION");
 	bool clientWantsClose = (connIt != request.headers.end() &&
@@ -93,6 +93,22 @@ void Server::QueueResponse(int clientFD, const HTTPRequest& request, const std::
 	if (epoll_ctl(epollFD, EPOLL_CTL_MOD, clientFD, &writeEv) < 0)
 	{
 		std::cerr << "Failed to register EPOLLOUT for client: " << clientFD << std::endl;
-		RemoveClient(clientFD);
+		removeClient(clientFD);
+	}
+}
+
+void Server::queueCloseResponse(int clientFD, const std::string& response)
+{
+	epoll_event writeEv{};
+
+	pendingWrites[clientFD] = response;
+	writeOffsets[clientFD] = 0;
+	closeAfterWrite[clientFD] = true;
+	writeEv.events = EPOLLOUT;
+	writeEv.data.fd = clientFD;
+	if (epoll_ctl(epollFD, EPOLL_CTL_MOD, clientFD, &writeEv) < 0)
+	{
+		std::cerr << "Failed to register EPOLLOUT for client: " << clientFD << std::endl;
+		removeClient(clientFD);
 	}
 }
