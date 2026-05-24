@@ -542,65 +542,51 @@ void Server::handleClientReadEvent(int clientFD)
 }
 
 void Server::handleClientWriteEvent(int clientFD)
-{
-	if (!pendingWrites.count(clientFD))
-	{
-		// Nothing to send: switch this fd back to read monitoring.
-		if (!setClientReadEvents(clientFD))
-			removeClient(clientFD);
-		return;
-	}
-
-	const std::string& data = pendingWrites[clientFD];
-	size_t& offset = writeOffsets[clientFD];
-	bool writeError = false;
-
-	while (offset < data.size())
-	{
-		ssize_t sent = write(clientFD, data.c_str() + offset, data.size() - offset);
-		if (sent == 0)
-		{
-			logColored(ERR, "Write returned 0 for client FD: " + std::to_string(clientFD), RED);
-			removeClient(clientFD);
-			writeError = true;
-			break;
-		}
-		else if (sent < 0)
-		{
-			logColored(ERR,
-				"Write error for client FD: " + std::to_string(clientFD) +
-				" | errno: " + std::to_string(errno) +
-				" (" + std::string(std::strerror(errno)) + ")",
-				RED);
-			removeClient(clientFD);
-			writeError = true;
-			break;
-		}
-		offset += static_cast<size_t>(sent);
-		logColored(
-			"Bytes written: " + std::to_string(sent) +
-			" | Total sent: " + std::to_string(offset) +
-			" / " + std::to_string(data.size()),
-			GREEN);
-	}
-
-	if (!writeError && offset >= data.size())
-	{
-		// All data sent — clean up and decide whether to keep alive.
-		bool shouldClose = closeAfterWrite.count(clientFD) && closeAfterWrite[clientFD];
-		pendingWrites.erase(clientFD);
-		writeOffsets.erase(clientFD);
-		closeAfterWrite.erase(clientFD);
-
-		if (shouldClose)
+{ 
+	if (!pendingWrites.count(clientFD)) 
+	{ 
+		if (!setClientReadEvents(clientFD)) 
 		{
 			removeClient(clientFD);
+			return;
 		}
-		else if (!setClientReadEvents(clientFD))
-		{
-			removeClient(clientFD);
-		}
-	}
+	} 
+	const std::string& data = pendingWrites[clientFD]; 
+	size_t& offset = writeOffsets[clientFD]; 
+
+	// 🚨 ONLY ONE WRITE PER EPOLLOUT EVENT 
+	ssize_t sent = write(clientFD, data.c_str() + offset, data.size() - offset); 
+	if (sent < 0) 
+	{ 
+		return; 
+	} 
+	if (sent == 0) 
+	{ 
+		removeClient(clientFD); 
+		return; 
+	} 
+	offset += static_cast<size_t>(sent); 
+
+	// Optional debug 
+	logColored( "Bytes written: " + std::to_string(sent) + " | Total: " + std::to_string(offset) + " / " + std::to_string(data.size()), GREEN); 
+	
+	// Finished sending response 
+	if (offset >= data.size()) 
+	{ 
+		bool shouldClose = closeAfterWrite.count(clientFD) && closeAfterWrite[clientFD]; 
+		pendingWrites.erase(clientFD); 
+		writeOffsets.erase(clientFD); 
+		closeAfterWrite.erase(clientFD); 
+		if (shouldClose) 
+		{ 
+			removeClient(clientFD); 
+		} 
+		else 
+		{ 
+			if (!setClientReadEvents(clientFD)) 
+				removeClient(clientFD); 
+		} 
+	} 
 }
 
 // Returns -1 if Content-Length is absent, -2 if malformed, otherwise the parsed value.
