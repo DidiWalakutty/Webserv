@@ -3,7 +3,7 @@
 
 HTTPRequest::HTTPRequest(Server *server) : server(server) {}
 
-bool HTTPRequest::parseRequest(const std::string raw)
+bool HTTPRequest::parseRequest(const std::string& raw)
 {
 	if (raw.empty())
 		throw HTTPRequestException("Empty (raw) request string");
@@ -124,24 +124,25 @@ bool HTTPRequest::parseRequest(const std::string raw)
 		throw HTTPRequestException("Missing required Content-Length header for method: " + methodStr);
 	}
 	// If request has no body, we end here.
-	if (stream.eof())
+	std::streampos bodyPos = stream.tellg();
+	if (bodyPos == std::streampos(-1))
 		return true;
 
-	// --- Validate body ---
+	// --- Validate body from the already-buffered raw request ---
 	std::cout << "Reading body..." << std::endl;
 	std::string bodyRaw;
+	size_t bodyOffset = static_cast<size_t>(bodyPos);
 	if (headers.find("CONTENT-LENGTH") != headers.end())
 	{
 		size_t contentLength = std::stoul(headers["CONTENT-LENGTH"]);
-		bodyRaw.resize(contentLength);
-		stream.read(&bodyRaw[0], static_cast<std::streamsize>(contentLength));
-		std::streamsize readCount = stream.gcount();
+		size_t available = raw.size() - bodyOffset;
+		size_t readCount = std::min(contentLength, available);
+		bodyRaw = raw.substr(bodyOffset, readCount);
 		std::cout << "Read " << readCount << " bytes of body." << std::endl;
-		if (static_cast<size_t>(readCount) != contentLength)
+		if (readCount != contentLength)
 		{
-			if (stream.eof())
+			if (available < contentLength)
 			{
-				bodyRaw.resize(static_cast<size_t>(readCount));
 				if (readCount > 0)
 				{
 					std::cerr << "Warning: Content-Length larger than available data. Provided: " << headers["CONTENT-LENGTH"]

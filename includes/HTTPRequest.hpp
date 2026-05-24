@@ -34,7 +34,7 @@ public:
 	 * @param raw The raw HTTP request string.
 	 * @return True if parsing is successful, otherwise throws exception or returns false.
 	 */
-	bool parseRequest(const std::string raw);
+	bool parseRequest(const std::string& raw);
 
 	/**
 	 * @brief Prints the HTTP request details to the standard output.
