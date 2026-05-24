@@ -541,8 +541,6 @@ void Server::handleClientReadEvent(int clientFD)
 	}
 }
 
-// We only check errno after a failed write() (sent < 0) to classify the error (EAGAIN/EINTR vs fatal). 
-// We do not use errno to drive normal server logic or success paths — only to handle syscall failure cases.
 void Server::handleClientWriteEvent(int clientFD)
 { 
 	if (!pendingWrites.count(clientFD)) 
@@ -560,14 +558,6 @@ void Server::handleClientWriteEvent(int clientFD)
 	ssize_t sent = write(clientFD, data.c_str() + offset, data.size() - offset); 
 	if (sent < 0) 
 	{ 
-		// EAGAIN + EWOULDBLOCK means the socket buffer is full, so wait for the next EPOLLOUT event to try again.
-		if (errno == EAGAIN || errno == EWOULDBLOCK) 
-			return; 
-		// EINTR means the write was interrupted by a signal (e.g., SIGCHLD), so we can safely ignore and try again on the next EPOLLOUT event.
-		if (errno == EINTR) 
-			return; 
-		// For other errors, log and close the client connection.
-		removeClient(clientFD); 
 		return; 
 	} 
 	if (sent == 0) 
