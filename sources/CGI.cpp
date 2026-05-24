@@ -597,13 +597,16 @@ void	Server::handleCGIRead(std::shared_ptr<CGI> cgi, uint32_t events)
 			cgi->read_finished = true;
 			return;
 		}
-		if (errno == EAGAIN || errno == EWOULDBLOCK)
+		// if (errno == EAGAIN || errno == EWOULDBLOCK)
+		// 	return;
+		// if (errno == EINTR)
+		// 	continue;
+		// std::cerr << "CGI read(): " << strerror(errno) << std::endl;
+		// handleCGIError(cgi);
+		// return;
+		// For non-blocking pipes, defer and retry on the next epoll notification.
+		if (ret < 0)
 			return;
-		if (errno == EINTR)
-			continue;
-		std::cerr << "CGI read(): " << strerror(errno) << std::endl;
-		handleCGIError(cgi);
-		return;
 	}
 }
 

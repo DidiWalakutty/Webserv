@@ -579,18 +579,15 @@ void Server::handleClientWriteEvent(int clientFD)
 	while (offset < data.size())
 	{
 		ssize_t sent = write(clientFD, data.c_str() + offset, data.size() - offset);
-		if (sent <= 0)
+		if (sent == 0)
 		{
-			if (sent == 0)
-			{
-				logColored(ERR, "Write returned 0 for client FD: " + std::to_string(clientFD), RED);
-				removeClient(clientFD);
-				writeError = true;
-				break;
-			}
-			if (errno == EAGAIN || errno == EWOULDBLOCK)
-				// Kernel buffer full — EPOLLOUT will fire again.
-				break;
+			logColored(ERR, "Write returned 0 for client FD: " + std::to_string(clientFD), RED);
+			removeClient(clientFD);
+			writeError = true;
+			break;
+		}
+		else if (sent < 0)
+		{
 			logColored(ERR,
 				"Write error for client FD: " + std::to_string(clientFD) +
 				" | errno: " + std::to_string(errno) +
@@ -667,9 +664,7 @@ std::vector<char> Server::readClient(const int &FD)
 	ssize_t bytesRead = read(FD, tempBuffer.data(), READ_BUFFER_SIZE);
 	if (bytesRead < 0)
 	{
-		if (errno == EAGAIN || errno == EWOULDBLOCK)
-			return result; // nothing available right now, try again later
-		logColored(ERR, "Read error on FD " + std::to_string(FD) + ": " + std::string(strerror(errno)), RED);
+		logColored(ERR, "Read error on FD " + std::to_string(FD), RED);
 		_clientBuffers.erase(FD);
 		removeClient(FD);
 		return result;
