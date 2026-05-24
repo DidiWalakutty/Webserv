@@ -558,8 +558,15 @@ void Server::handleClientWriteEvent(int clientFD)
 	while (offset < data.size())
 	{
 		ssize_t sent = write(clientFD, data.c_str() + offset, data.size() - offset);
-		if (sent < 0)
+		if (sent <= 0)
 		{
+			if (sent == 0)
+			{
+				logColored(ERR, "Write returned 0 for client FD: " + std::to_string(clientFD), RED);
+				removeClient(clientFD);
+				writeError = true;
+				break;
+			}
 			if (errno == EAGAIN || errno == EWOULDBLOCK)
 				// Kernel buffer full — EPOLLOUT will fire again.
 				break;
