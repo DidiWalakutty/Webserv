@@ -1,6 +1,7 @@
 #include "Server.hpp"
 #include "Config.hpp"
 #include "ConfigParser.hpp"
+#include "Utils.hpp"
 
 #include <iostream>
 #include <stdexcept>
@@ -19,36 +20,9 @@ const int MAX_CLIENTS = 1024;
 const size_t READ_BUFFER_SIZE = 65536;  // 64KB per read
 const int INDEFINITE_BLOCKING = -1;
 std::ostream& ERR = std::cerr;
-namespace
-{
-	bool strContains(const std::string& text, const char* needle)
-	{
-		return text.find(needle) != std::string::npos;
-	}
 
-	void logColored(std::ostream& out, const std::string& msg, const char* color = NULL)
-	{
-		if (color && color[0] != '\0')
-			out << color;
-		out << msg;
-		if (color && color[0] != '\0')
-		out << RESET;
-		out << std::endl;
-	}
-	
-	void logColored(const std::string& msg, const char* color = NULL)
-	{
-		logColored(std::cout, msg, color);
-	}
-
-	void Interrupt(int sig)
-	{
-		if (sig == SIGINT)
-		{
-			Server::running = 0;
-		}
-	}
-}
+using Utils::logColored;
+using Utils::strContains;
 
 /**
  * @brief Construct the server engine with parsed configs.
@@ -56,7 +30,7 @@ namespace
 Server::Server(const std::vector<ServerParse>& parsedServerConfigInfos)
 	: _servers(parsedServerConfigInfos), epollFD(-1)
 {
-	signal(SIGINT, Interrupt);
+	signal(SIGINT, Utils::interruptHandler);
 	signal(SIGPIPE, SIG_IGN);
 
 	try
