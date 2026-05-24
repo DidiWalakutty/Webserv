@@ -24,14 +24,18 @@ int main(int argc, char **argv)
 		const std::vector<ServerParse>& servers = parser.getServers();
 		
 		// Print Servers
-		// for (size_t i = 0; i < servers.size(); ++i)
-		// 	parser.print_server(servers[i]);
-
+		for (size_t i = 0; i < servers.size(); ++i)
+			parser.print_server(servers[i]);
 
 		// Fill constructor and Start webserv
 		Server webserv(servers);
 		webserv.setMaxRequestSize(parser.getMaxBodySize(servers[0]));	// using first server's max body size as reference for reading
 		webserv.start();
+	}
+	else
+	{
+		std::cerr << "Usage: ./webserv [config_file]" << std::endl;
+		return 1;
 	}
 
 	return (0);
