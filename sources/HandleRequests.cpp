@@ -320,7 +320,7 @@ void HTTPResponse::handlePOST(const HTTPRequest& request, const std::string& fil
 		return ;
 	}
 	
-	outFile.write(fileData.c_str(), fileData.size());
+	outFile << fileData;
 	if (!outFile.good())
 	{
 		std::cout << "couldn't write to file" << std::endl;

@@ -550,7 +550,7 @@ LocationParse ConfigParser::parseLocationBlock(const std::vector<std::string>& f
 	return location;
 }
 
-const ssize_t ConfigParser::getMaxBodySize(const ServerParse& server)
+ssize_t ConfigParser::getMaxBodySize(const ServerParse& server)
 {
 	if (server.maxBodySize > 0)
 		return server.maxBodySize;

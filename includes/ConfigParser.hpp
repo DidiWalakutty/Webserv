@@ -56,7 +56,7 @@ class ConfigParser {
 		const std::vector<ServerParse>& getServers() const; // Returns the parsed server configurations
 
 		// --- Accessors for best location and error pages ---
-		const ssize_t getMaxBodySize(const ServerParse& server);
+		ssize_t getMaxBodySize(const ServerParse& server);
 		// For debugging: print parsed config
 		void print_server(const ServerParse& server) const;
 };

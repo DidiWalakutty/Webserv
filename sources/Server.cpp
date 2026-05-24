@@ -532,9 +532,9 @@ void Server::handleClientWriteEvent(int clientFD)
 	ssize_t sent = write(clientFD, data.c_str() + offset, data.size() - offset); 
 	if (sent < 0) 
 	{ 
-		return; 
+		return;
 	} 
-	if (sent == 0) 
+	if (sent == 0)
 	{ 
 		removeClient(clientFD); 
 		return; 

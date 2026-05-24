@@ -550,10 +550,10 @@ void	Server::handleCGIWrite(std::shared_ptr<CGI> cgi, uint32_t events)
 			handleCGIError(cgi);
 			return;
 		}
-		if (ret < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
-			return;
-		if (ret < 0 && errno == EINTR)
-			continue;
+		// if (ret < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
+		// 	return;
+		// if (ret < 0 && errno == EINTR)
+		// 	continue;
 		std::cerr << "CGI write(): " << strerror(errno) << std::endl;
 		handleCGIError(cgi);
 		return;

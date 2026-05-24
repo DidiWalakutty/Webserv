@@ -13,6 +13,7 @@ import sys
 import socket
 import time
 import os
+import subprocess
 import threading
 import http.client
 import random
@@ -571,6 +572,55 @@ def test_file_upload():
     else:
         skipped("Retrieve uploaded file via GET",
                 f"status {get_status} — path may differ by config")
+
+
+def test_big_bin_download():
+    section("7b. Download big binary file with curl")
+
+    source_path = os.path.join(os.path.dirname(__file__), "www", "upload", "big.bin")
+    output_path = os.path.join(os.path.dirname(__file__), "out.bin")
+
+    if not os.path.exists(source_path):
+        skipped("curl download of /upload/big.bin", "fixture www/upload/big.bin not found")
+        return
+
+    if os.path.exists(output_path):
+        try:
+            os.remove(output_path)
+        except OSError:
+            pass
+
+    curl_cmd = [
+        "curl",
+        "-fsS",
+        f"{BASE_URL}/upload/big.bin",
+        "-o",
+        output_path,
+    ]
+
+    result = subprocess.run(curl_cmd, capture_output=True, text=True, timeout=TIMEOUT + 5)
+    if result.returncode != 0:
+        failed("curl http://localhost:8080/upload/big.bin -o out.bin", result.stderr.strip() or result.stdout.strip() or f"exit {result.returncode}")
+        return
+
+    if not os.path.exists(output_path):
+        failed("curl http://localhost:8080/upload/big.bin -o out.bin", "out.bin was not created")
+        return
+
+    with open(source_path, "rb") as source_file:
+        source_bytes = source_file.read()
+    with open(output_path, "rb") as output_file:
+        output_bytes = output_file.read()
+
+    if output_bytes == source_bytes:
+        passed("curl download of /upload/big.bin saves the expected file to out.bin")
+    else:
+        failed("curl download of /upload/big.bin saves the expected file to out.bin", "downloaded file differs from fixture")
+
+    try:
+        os.remove(output_path)
+    except OSError:
+        pass
 
 
 # ─── 8. DELETE on existing resource ──────────────────────────────────────────
@@ -1220,6 +1270,7 @@ def main():
     test_error_pages()             # §IV.1: default error pages, 400/404/405
     test_static_files()            # §IV.1: serve fully static website
     test_file_upload()             # §IV.1: clients must be able to upload files
+    test_big_bin_download()        # curl download of /upload/big.bin to out.bin
     test_delete()                  # §IV.1: DELETE method lifecycle
     test_body_size_limit()         # §IV.3: max client body size
     test_non_blocking()            # §IV.1: non-blocking, single poll()
