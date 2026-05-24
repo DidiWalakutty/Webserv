@@ -541,6 +541,8 @@ void Server::handleClientReadEvent(int clientFD)
 	}
 }
 
+// We only check errno after a failed write() (sent < 0) to classify the error (EAGAIN/EINTR vs fatal). 
+// We do not use errno to drive normal server logic or success paths — only to handle syscall failure cases.
 void Server::handleClientWriteEvent(int clientFD)
 { 
 	if (!pendingWrites.count(clientFD)) 
