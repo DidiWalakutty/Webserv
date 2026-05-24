@@ -168,8 +168,10 @@ static std::vector<std::string>	buildArgV(const std::string& filePath, const Loc
 {
 	std::vector<std::string>	argV_str;
 
-	if (location.cgi_extension == ".py")
-		argV_str.push_back("/opt/pyenv/shims/python3");
+	if (!location.cgi_executable.empty())
+		argV_str.push_back(location.cgi_executable);
+	else if (location.cgi_extension == ".py")
+		argV_str.push_back("/usr/bin/python3");
 	else if (location.cgi_extension == ".sh")
 		argV_str.push_back("/usr/bin/bash");
 	else if (location.cgi_extension == ".php")

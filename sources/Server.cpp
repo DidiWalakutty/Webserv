@@ -14,11 +14,11 @@
 #include <cctype>
 #include <cerrno>
 
+volatile sig_atomic_t Server::running = 0;
 const int MAX_CLIENTS = 1024;
 const size_t READ_BUFFER_SIZE = 65536;  // 64KB per read
 const int INDEFINITE_BLOCKING = -1;
 std::ostream& ERR = std::cerr;
-
 namespace
 {
 	bool strContains(const std::string& text, const char* needle)
@@ -32,39 +32,29 @@ namespace
 			out << color;
 		out << msg;
 		if (color && color[0] != '\0')
-			out << RESET;
+		out << RESET;
 		out << std::endl;
 	}
-
+	
 	void logColored(const std::string& msg, const char* color = NULL)
 	{
 		logColored(std::cout, msg, color);
 	}
-}
 
-void Interrupt(int sig)
-{
-	if (sig == SIGINT)
+	void Interrupt(int sig)
 	{
-		Server::running = 0;
+		if (sig == SIGINT)
+		{
+			Server::running = 0;
+		}
 	}
 }
 
 /**
  * @brief Construct the server engine with parsed configs.
- *
- * @param serverConfigs A list of parsed ServerParse structures,
- *        each representing a server block from the .conf file.
- *
- * @details
- * - Stores all parsed server configurations in '_server',
- * - Registers the SIGINT handler so server can shut down cleanly (Ctrl+C).
- * - createSockets: listening sockets for each server configuration (one socket per ServerParse).
- * - createEpoll: the epoll instance and registers the listening sockets in it.
- * - If it fails, throw exception.
  */
-Server::Server(const std::vector<ServerParse>& serverConfigs)
-	: _servers(serverConfigs), epollFD(-1)
+Server::Server(const std::vector<ServerParse>& parsedServerConfigInfos)
+	: _servers(parsedServerConfigInfos), epollFD(-1)
 {
 	signal(SIGINT, Interrupt);
 	signal(SIGPIPE, SIG_IGN);
@@ -77,43 +67,32 @@ Server::Server(const std::vector<ServerParse>& serverConfigs)
 	catch (const std::exception& e)
 	{
 		logColored(ERR, "Failed to create server: " + std::string(e.what()), RED);
-		destroy();
+		shutDown();
 	}
 }
 
+/**
+ * @brief Destroy the server and release all owned resources.
+ */
 Server::~Server()
 {
 	logColored("Closing server.", CYAN);
 
-	destroy();
+	shutDown();
 }
 
+
+
 /**
- * @brief Creates listening sockets for all servers.
- *
- * @details
- * A listening socket waits for incoming client connections.
- * It only accepts new connections and does not send/receive HTTP data itself.
- * Each accepted client gets its own separate client socket.
- * 
- * For each ServerParse in _servers:
- *  - Creates a non-blocking TCP socket.
- * 	- Set socket options (SO_REUSEADDR) to allow quick restart.
- * 	- Bind the socket to the configured host and port.
- *  - Start listening for incoming connections.
- * 
- *  Summarized:
- *  - One listening socket per server block (ServerParse).
- *  - All listening sockets are stored in listeningSockets.
- *  - These sockets wlil be monitored by epoll.
+ * @brief Creates and configures the server's listening sockets.
  */
 void Server::createSockets()
 {
-	destroySockets();
+	cleanSockets();
 
-	if (!listeningSockets.empty())
+	if (!_listeningSockets.empty())
 	{
-		throw(std::runtime_error("Server sockets already exists."));
+		throw(std::runtime_error("Server sockets still exists."));
 	}
 
 	for (size_t i = 0; i < _servers.size(); ++i)
@@ -127,6 +106,7 @@ void Server::createSockets()
 		{
 			throw(std::runtime_error("Failed to create server socket."));
 		}
+		logColored("Created socket fd " + std::to_string(socketFD) + " for server " + server.host + ":" + std::to_string(server.port), GREEN);
 
 		// --- Allow quick reuse of address/port after server restart ---
 		int opt = 1;	// turns on option to reuse address/port -> prevents "Address already in use"
@@ -162,15 +142,21 @@ void Server::createSockets()
 			throw(std::runtime_error("Failed to listen on server socket."));
 		}
 
-		listeningSockets.push_back(socketFD);
+		_listeningSockets.push_back(socketFD);
 	}
 }
 
+/**
+ * @brief Set the maximum allowed request size.
+ */
 void Server::setMaxRequestSize(size_t size)
 {
-	maxRequestSize = size;
+	_maxRequestSize = size;
 }
 
+/**
+ * @brief Create the epoll instance and register listening sockets.
+ */
 void Server::createEpoll()
 {
 	if (epollFD >= 0)
@@ -185,7 +171,7 @@ void Server::createEpoll()
 		throw(std::runtime_error("Failed to create epoll instance."));
 	}
 
-	for (const int &socketFD : listeningSockets)
+	for (const int &socketFD : _listeningSockets)
 	{
 		epoll_event event{};
 		event.events = EPOLLIN;
@@ -195,12 +181,24 @@ void Server::createEpoll()
 		{
 			throw(std::runtime_error("Failed to add server socket to epoll."));
 		}
+		logColored("Socket fd " + std::to_string(socketFD) + " is added inside the epoll interface " + std::to_string(epollFD), GREEN);
 	}
 }
 
-void Server::destroySockets()
+/**
+ * @brief Return the server's allowed HTTP methods.
+ */
+std::vector<HTTPMethod> Server::getAllowedMethods() const
 {
-	for (int &socketFD : listeningSockets)
+	return _allowedMethods;
+}
+
+/**
+ * @brief Close and clear all listening sockets.
+ */
+void Server::cleanSockets()
+{
+	for (int &socketFD : _listeningSockets)
 	{
 		if (socketFD < 0)
 		{
@@ -215,23 +213,26 @@ void Server::destroySockets()
 		socketFD = -1;
 	}
 
-	listeningSockets.clear();
+	_listeningSockets.clear();
 }
 
-void Server::destroyEpoll()
+/**
+ * @brief Close the epoll instance and any tracked client sockets.
+ */
+void Server::cleanEpoll()
 {
-	for (size_t i = 0; i < clients.size(); i++)
+	for (size_t i = 0; i < _clients.size(); i++)
 	{
-		if (clients[i] >= 0)
+		if (_clients[i] >= 0)
 		{
-			if (close(clients[i]) < 0)
+			if (close(_clients[i]) < 0)
 			{
-				logColored(ERR, "Failed to close client FD: " + std::to_string(clients[i]) + ".", RED);
+				logColored(ERR, "Failed to close client FD: " + std::to_string(_clients[i]) + ".", RED);
 			}
 		}
 	}
 
-	clients.clear();
+	_clients.clear();
 
 	if (epollFD < 0)
 	{
@@ -246,16 +247,17 @@ void Server::destroyEpoll()
 	epollFD = -1;
 }
 
-void Server::destroy()
+/**
+ * @brief Shut down the server and release all owned file descriptors.
+ */
+void Server::shutDown()
 {
-	destroySockets();
-	destroyEpoll();
+	cleanSockets();
+	cleanEpoll();
 }
 
 /**
- * @brief Sets 
- * 
- * @param FD 
+ * @brief Configure a file descriptor for non-blocking I/O.
  */
 void Server::setNonBlocking(const int &FD)
 {
@@ -272,10 +274,12 @@ void Server::setNonBlocking(const int &FD)
 	}
 }
 
-// Check if this FD is a listening socket (means a new client is connecting)
+/**
+ * @brief Check whether the file descriptor belongs to a listening socket.
+ */
 bool Server::isListeningSocket(const int &FD)
 {
-	for (const int &socketFD : listeningSockets)
+	for (const int &socketFD : _listeningSockets)
 	{
 		if (socketFD == FD && socketFD >= 0)
 		{
@@ -286,19 +290,7 @@ bool Server::isListeningSocket(const int &FD)
 }
 
 /**
- * @brief Accepts new client connections on a listening socket + adds them to epoll for monitoring.
- * 
- * @param event The epoll event triggered on a server socket indicating a new incoming connection.
- * @details
- * Calls accept() in a loop to handle all pending connections.
- * For each accepted client:
- * 	- Sets the client socket to non-blocking mode.
- *  - Stores the client FD in the server's clients list.
- *  - Maps which server accepted the client in clientToServer map for later reference when processing requests.
- *  - Registers the client socket in epoll for EPOLLIN events to read incoming requests.
- * 
- *  Because the listening socket is non-blocking, accept() must be called until it returns EAGAIN/EWOULDBLOCK
- *  which means the kernel has no more pending connections to accept.
+ * @brief Accept new client connections and register them in epoll.
  */
 void Server::addClient(const epoll_event &event)
 {
@@ -307,45 +299,49 @@ void Server::addClient(const epoll_event &event)
 		sockaddr_in address{};
 		socklen_t length = sizeof(address);
 
+		// The event here is for what epoll told us happened.
 		int clientFD = accept(event.data.fd, (sockaddr *)&address, &length);
 		if (clientFD < 0)
 		{
 			if (errno == EAGAIN || errno == EWOULDBLOCK)
 			{
+				// There are no more pending connections to accept, we have accepted them all.
 				break;
 			}
 			throw(std::runtime_error("Failed to accept client connection."));
 		}
 
-		// Check to see if client was added
-		// std::cout << "Accepted client FD: " << clientFD 
-        //           << " from " << inet_ntoa(address.sin_addr)
-        //           << ":" << ntohs(address.sin_port) << std::endl;
+		logColored("Accepted client FD: " + std::to_string(clientFD) + " from " + inet_ntoa(address.sin_addr) + ":" + std::to_string(ntohs(address.sin_port)), GREEN);
 		
-		clients.push_back(clientFD);
+		_clients.push_back(clientFD);
 		setNonBlocking(clientFD);
 
 		// Map/remember which server this client is connected to
-		for (size_t i = 0; i < listeningSockets.size(); i++)
+		for (size_t i = 0; i < _listeningSockets.size(); i++)
 		{
-			if (listeningSockets[i] == event.data.fd)
+			if (_listeningSockets[i] == event.data.fd)
 			{
-				clientToServer[clientFD] = i;
+				_clientToServer[clientFD] = i;
 				break;
 			}
 		}
 
-		epoll_event event{};
-		event.events = EPOLLIN;
-		event.data.fd = clientFD;
+		// The new event for what we want epoll to watch for this new client.
+		epoll_event newClientEvent{};
+		newClientEvent.events = EPOLLIN;
+		newClientEvent.data.fd = clientFD;
 
-		if (epoll_ctl(epollFD, EPOLL_CTL_ADD, clientFD, &event) < 0)
+		if (epoll_ctl(epollFD, EPOLL_CTL_ADD, clientFD, &newClientEvent) < 0)
 		{
 			throw(std::runtime_error("Failed to add client socket to epoll."));
 		}
+		logColored("Client FD " + std::to_string(clientFD) + " is added inside the epoll interface " + std::to_string(epollFD), GREEN);
 	}
 }
 
+/**
+ * @brief Remove a client and clean up all per-client state.
+ */
 void Server::removeClient(const int &clientFD)
 {
 	if (clientFD < 0)
@@ -354,9 +350,9 @@ void Server::removeClient(const int &clientFD)
 	}
 
 	int index = -1;
-	for (size_t i = 0; i < clients.size(); i++)
+	for (size_t i = 0; i < _clients.size(); i++)
 	{
-		if (clients[i] == clientFD)
+		if (_clients[i] == clientFD)
 		{
 			index = (int)i;
 			break;
@@ -373,9 +369,9 @@ void Server::removeClient(const int &clientFD)
 		logColored(ERR, "Failed to close client FD: " + std::to_string(clientFD) + ".", RED);
 	}
 
-	clients.erase(clients.begin() + index);
-	clientBuffers.erase(clientFD);  // Clean up incomplete request buffer
-	clientToServer.erase(clientFD); // Remove stored mapping of client to server
+	_clients.erase(_clients.begin() + index);
+	_clientBuffers.erase(clientFD);  // Clean up incomplete request buffer
+	_clientToServer.erase(clientFD); // Remove stored mapping of client to server
 	pendingWrites.erase(clientFD);  // Clean up any unsent response data
 	writeOffsets.erase(clientFD);
 	closeAfterWrite.erase(clientFD);
@@ -385,8 +381,8 @@ void Server::removeClient(const int &clientFD)
 
 const ServerParse* Server::findServerForClient(int clientFD) const
 {
-	std::map<int, size_t>::const_iterator it = clientToServer.find(clientFD);
-	if (it == clientToServer.end())
+	std::map<int, size_t>::const_iterator it = _clientToServer.find(clientFD);
+	if (it == _clientToServer.end())
 		return NULL;
 	return &_servers[it->second];
 }
@@ -603,130 +599,94 @@ void Server::handleClientWriteEvent(int clientFD)
 	}
 }
 
-// Accumulates request data from a client until a complete request is available.
-// Returns empty vector if incomplete, full request vector if complete.
+// Returns -1 if Content-Length is absent, -2 if malformed, otherwise the parsed value.
+static ssize_t parseContentLength(const std::string& raw, size_t headersEnd)
+{
+	std::string headerBlock = raw.substr(0, headersEnd);
+	std::transform(headerBlock.begin(), headerBlock.end(), headerBlock.begin(), ::tolower);
+
+	size_t pos = headerBlock.find("content-length:");
+	if (pos == std::string::npos)
+		return -1; // not present
+
+	pos += 15; // skip "content-length:"
+	while (pos < raw.size() && (raw[pos] == ' ' || raw[pos] == '\t'))
+		pos++;
+
+	size_t end = pos;
+	while (end < raw.size() && std::isdigit(raw[end]))
+		end++;
+
+	if (end == pos)
+		return -2; // no digits — malformed
+
+	try {
+		return std::stoll(raw.substr(pos, end - pos));
+	} catch (...) {
+		return -2; // overflow or garbage — malformed
+	}
+}
+
+/**
+ * @brief Accumulate request bytes until a complete HTTP request is available.
+ */
 std::vector<char> Server::readClient(const int &FD)
 {
 	std::vector<char> tempBuffer(READ_BUFFER_SIZE);
 	std::vector<char> result;
-	
-	// Read new data from socket
+
+	// --- 1. Read raw bytes from the socket ---
 	ssize_t bytesRead = read(FD, tempBuffer.data(), READ_BUFFER_SIZE);
-	
 	if (bytesRead < 0)
 	{
 		if (errno == EAGAIN || errno == EWOULDBLOCK)
-			return result;
-		else
-		{
-			// Read error - remove this client instead of crashing the server
-			logColored(ERR,
-				"Read error on FD " + std::to_string(FD) + ": " + std::string(strerror(errno)),
-				RED);
-			clientBuffers.erase(FD);
-			removeClient(FD);
-			return result;
-		}
-	}
-	else if (bytesRead == 0)
-	{
-		// EOF - client closed connection
-		clientBuffers.erase(FD);
+			return result; // nothing available right now, try again later
+		logColored(ERR, "Read error on FD " + std::to_string(FD) + ": " + std::string(strerror(errno)), RED);
+		_clientBuffers.erase(FD);
 		removeClient(FD);
 		return result;
 	}
-	
-	// this client was not previously buffered, so we create a new entry for it.
-	if (clientBuffers.find(FD) == clientBuffers.end())
+	if (bytesRead == 0)
 	{
-		clientBuffers[FD] = std::string();
+		// EOF — client closed the connection
+		_clientBuffers.erase(FD);
+		removeClient(FD);
+		return result;
 	}
 
-	// add new data to client's buffer
-	clientBuffers[FD].append(tempBuffer.data(), bytesRead);
-	
-	// Check if we have a complete HTTP request (headers + full body)
-	std::string& data_str = clientBuffers[FD];
-	size_t headersEnd = data_str.find("\r\n\r\n");
-	
-	if (headersEnd != std::string::npos)
+	// --- 2. Append to the per-client accumulation buffer ---
+	_clientBuffers[FD].append(tempBuffer.data(), bytesRead);
+	std::string& buffer = _clientBuffers[FD];
+
+	// --- 3. Wait until we have a complete header block ---
+	size_t headersEnd = buffer.find("\r\n\r\n");
+	if (headersEnd == std::string::npos)
+		return result; // headers still incomplete, keep accumulating
+
+	// --- 4. If there is a body, wait until it is fully buffered ---
+	ssize_t contentLength = parseContentLength(buffer, headersEnd);
+	if (contentLength == -2)
 	{
-		// Found headers end, check Content-Length (case-insensitive search in raw buffer)
-		std::string dataLower = data_str.substr(0, headersEnd);
-		std::transform(dataLower.begin(), dataLower.end(), dataLower.begin(), ::tolower);
-		size_t contentLengthPos = dataLower.find("content-length:");
-		if (contentLengthPos != std::string::npos)
-		{
-			contentLengthPos += 15;  // strlen("content-length:")
-			// Skip whitespace
-			while (contentLengthPos < data_str.size() && 
-			       (data_str[contentLengthPos] == ' ' || data_str[contentLengthPos] == '\t'))
-			{
-				contentLengthPos++;
-			}
-			// Extract the number — only digits, then parse safely
-			size_t endPos = contentLengthPos;
-			while (endPos < data_str.size() && std::isdigit(data_str[endPos]))
-			{
-				endPos++;
-			}
-			if (endPos == contentLengthPos)
-			{
-				// No digits found — malformed header, treat as no body
-				result = std::vector<char>(data_str.begin(), data_str.end());
-				clientBuffers.erase(FD);
-				return result;
-			}
-			ssize_t contentLength;
-			try {
-				contentLength = std::stoll(data_str.substr(contentLengthPos, endPos - contentLengthPos));
-			} catch (...) {
-				// Malformed Content-Length: treat as no body
-				result = std::vector<char>(data_str.begin(), data_str.end());
-				clientBuffers.erase(FD);
-				return result;
-			}
-			// 4 bytes for the "\r\n\r\n" after headers
-			size_t bodyStart = headersEnd + 4;
-			size_t bodySize = data_str.size() - bodyStart;
-			
-			// Check if we have all the body data
-			if (bodySize >= static_cast<size_t>(contentLength))
-			{
-				// Complete request! Convert to vector and clear buffer
-				result = std::vector<char>(data_str.begin(), data_str.end());
-				clientBuffers.erase(FD);
-				return result;
-			}
-			// Incomplete - keep accumulating, return empty vector
-			return result;
-		}
-		else
-		{
-			// No Content-Length (GET/HEAD/etc), just headers is enough
-			result = std::vector<char>(data_str.begin(), data_str.end());
-			clientBuffers.erase(FD);
-			return result;
-		}
+		// Malformed Content-Length — pass the data upstream and let the parser error
+		result.assign(buffer.begin(), buffer.end());
+		_clientBuffers.erase(FD);
+		return result;
 	}
-	
-	// Headers not complete yet - keep waiting
+	if (contentLength > 0)
+	{
+		size_t bodyReceived = buffer.size() - (headersEnd + 4);
+		if (bodyReceived < static_cast<size_t>(contentLength))
+			return result; // body still incomplete, keep accumulating
+	}
+
+	// --- 5. Complete request — hand it off and clear the buffer ---
+	result.assign(buffer.begin(), buffer.end());
+	_clientBuffers.erase(FD);
 	return result;
 }
 
 /**
- * @brief Main event loop of the server.
- *
- * @details
- * - Uses epoll to wait for activity on any FD.
- *     → Listening socket → accept new clients
- *     → Client socket:
- *         - EPOLLIN  → read request, parse it, build response
- *         - EPOLLOUT → send response (may require multiple writes)
- *     → CGI pipe → read CGI output
- *     → Error → remove client
- *
- * - Uses non-blocking sockets, so responses may be sent in parts.
+ * @brief Main event loop for the server.
  */
 void Server::start()
 {
@@ -767,7 +727,7 @@ void Server::start()
 			// 1) --- New Client Connection ---
 			if (isListeningSocket(fd))	// Accept new connection + add client
 			{
-				if (clients.size() < MAX_CLIENTS)
+				if (_clients.size() < MAX_CLIENTS)
 				{
 					addClient(events[i]);
 				}
@@ -811,7 +771,107 @@ void Server::start()
 
 	running = false;
 
-	destroy();
+	shutDown();
 }
 
-volatile sig_atomic_t Server::running = 0;
+
+HTTPState Server::checkCGIAccess(const std::string& filePath)
+{
+	struct stat st;
+
+	// --- 1. Check if file exists ---
+	if (access(filePath.c_str(), F_OK) != 0)
+		return HTTPState::NotFound;
+
+	// --- 2. Get file info ---
+	if (stat(filePath.c_str(), &st) != 0)
+		return HTTPState::InternalServerError;
+
+	// --- 3. Reject directories ---
+	if (S_ISDIR(st.st_mode))
+		return HTTPState::Forbidden;
+		
+	// --- 4. Check read permission ---
+	if (access(filePath.c_str(), R_OK) != 0)
+		return HTTPState::Forbidden;
+
+	// --- 5. Check execute permission ---
+	if (access(filePath.c_str(), X_OK) != 0)
+		return HTTPState::Forbidden;
+
+	// Needed??? --- 6. Prevents checking sockets, pipes etc
+	if (!S_ISREG(st.st_mode))
+		return HTTPState::Forbidden;
+		
+	return HTTPState::Ok;
+}
+
+bool Server::isCGIRequest(const HTTPRequest& request, const ServerParse& server,
+                          std::string& filePath, const LocationParse*& location)
+{
+	// --- Only GET and POST are considered CGI requests ---
+	if (HTTPMethod::GET != request.method && HTTPMethod::POST != request.method)
+		return false;
+		
+	// --- 1. Find matching location ---
+	location = server.get_best_location(request.resourcePath);
+	if (!location)
+		return false;
+
+	// --- 2. Must be marked as CGI ---
+	if (!location->is_cgi)
+		return false;
+
+	// --- 3. Build filesystem path ---
+	filePath = server.build_filesystem_path(request.resourcePath);
+	if (filePath.empty())
+		return false;
+
+	// --- 4. Check extension ---
+	size_t dot = filePath.find_last_of('.');
+	if (dot == std::string::npos)
+		return false;
+
+	std::string ext = filePath.substr(dot);
+	if (ext != location->cgi_extension)
+		return false;
+
+	return true;
+}
+
+void Server::queueResponse(int clientFD, const HTTPRequest& request, const std::string& responseStr)
+{
+	auto connIt = request.headers.find("CONNECTION");
+	bool clientWantsClose = (connIt != request.headers.end() &&
+	                         connIt->second.find("close") != std::string::npos);
+	bool http10 = (request.protocolVersion == HTTPProtocolVersion::HTTP_1_0);
+	closeAfterWrite[clientFD] = (clientWantsClose || http10);
+
+	pendingWrites[clientFD] = responseStr;
+	writeOffsets[clientFD] = 0;
+
+	epoll_event writeEv{};
+	writeEv.events = EPOLLOUT;
+	writeEv.data.fd = clientFD;
+	if (epoll_ctl(epollFD, EPOLL_CTL_MOD, clientFD, &writeEv) < 0)
+	{
+		std::cerr << "Failed to register EPOLLOUT for client: " << clientFD << std::endl;
+		removeClient(clientFD);
+	}
+}
+
+void Server::queueCloseResponse(int clientFD, const std::string& response)
+{
+	epoll_event writeEv{};
+
+	pendingWrites[clientFD] = response;
+	writeOffsets[clientFD] = 0;
+	closeAfterWrite[clientFD] = true;
+	writeEv.events = EPOLLOUT;
+	writeEv.data.fd = clientFD;
+	if (epoll_ctl(epollFD, EPOLL_CTL_MOD, clientFD, &writeEv) < 0)
+	{
+		std::cerr << "Failed to register EPOLLOUT for client: " << clientFD << std::endl;
+		removeClient(clientFD);
+	}
+}
