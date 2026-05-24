@@ -12,7 +12,7 @@ static int						closeFd(int& fd);
 static std::vector<std::string>	buildArgV(const std::string& filePath, const LocationParse& location);
 static std::string				method2Str(HTTPMethod method);
 static std::string				protocol2Str(HTTPProtocolVersion version);
-static std::vector<std::string>	buildEnvP(const HTTPRequest& request, const ServerParse& server, const std::string& filePath, const LocationParse& location);
+static std::vector<std::string>	buildEnvP(const HTTPRequest& request, const ServerParse& server, const std::string& filePath);
 static std::vector<char*>		str2Ptr(std::vector<std::string>& str);
 static int						executeCGI(std::vector<std::string>& argV_str, std::vector<std::string>& envP_str);
 static int						nonblockFd(int fd);
@@ -100,7 +100,7 @@ static int	childCGI(const HTTPRequest& request, const ServerParse& server, const
 		return (3);
 
 	/* BUILD ENVP */
-	envP_str = buildEnvP(request, server, filePath, location);
+	envP_str = buildEnvP(request, server, filePath);
 	if (envP_str.empty())
 		return (4);
 
@@ -212,7 +212,7 @@ static std::string	protocol2Str(HTTPProtocolVersion version)
 
 
 
-static std::vector<std::string>	buildEnvP(const HTTPRequest& request, const ServerParse& server, const std::string& filePath, const LocationParse& location)
+static std::vector<std::string>	buildEnvP(const HTTPRequest& request, const ServerParse& server, const std::string& filePath)
 {
 	std::vector<std::string>	envP_str = {};
 	size_t						dot = filePath.find_last_of('.');
@@ -469,13 +469,8 @@ void	Server::handleCGIWrite(std::shared_ptr<CGI> cgi, int fd, uint32_t events)
 			cgi->body_written += ret;
 			continue;
 		}
-		if (ret < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
+		if (ret < 0)
 			return;
-		if (ret < 0 && errno == EINTR)
-			continue;
-		std::cerr << "CGI write(): " << strerror(errno) << std::endl;
-		handleCGIError(cgi);
-		return;
 	}
 	epoll_ctl(epollFD, EPOLL_CTL_DEL, cgi->fd_stdin, NULL);
 	cgiProcesses.erase(cgi->fd_stdin);
@@ -512,13 +507,8 @@ void	Server::handleCGIRead(std::shared_ptr<CGI> cgi, int fd, uint32_t events)
 			cgi->read_finished = true;
 			return;
 		}
-		if (errno == EAGAIN || errno == EWOULDBLOCK)
+		if (ret < 0)
 			return;
-		if (errno == EINTR)
-			continue;
-		std::cerr << "CGI read(): " << strerror(errno) << std::endl;
-		handleCGIError(cgi);
-		return;
 	}
 }
 
