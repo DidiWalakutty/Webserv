@@ -24,6 +24,7 @@ run: $(NAME)
 
 clean:
 	rm -rf $(OBJDIR)
+	rm -rf www/upload/upload_2026*
 
 fclean: clean
 	rm -f $(NAME)

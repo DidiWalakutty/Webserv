@@ -544,6 +544,12 @@ void	Server::handleCGIWrite(std::shared_ptr<CGI> cgi, uint32_t events)
 			cgi->body_written += ret;
 			continue;
 		}
+		if (ret == 0)
+		{
+			std::cerr << "CGI write() returned 0" << std::endl;
+			handleCGIError(cgi);
+			return;
+		}
 		if (ret < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
 			return;
 		if (ret < 0 && errno == EINTR)
