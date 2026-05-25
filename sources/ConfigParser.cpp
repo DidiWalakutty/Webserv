@@ -86,14 +86,12 @@ bool ConfigParser::parseConfigFile(const std::string& file)
 		{
 			++serverCount;
 			ServerParse server = parseServerBlock(processedLines, currentLine, parsing_error);
-			if (validateServerParse(server) && !parsing_error)
+			if (!parsing_error && validateServerParse(server))
 			{
 				_servers.push_back(server);
 			}
 			else
 			{
-				if (!parsing_error)
-					std::cerr << "Error: Invalid server block starting at line: " << currentLine + 1 << std::endl;
 				return false;
 			}
 		}
@@ -195,7 +193,7 @@ ServerParse ConfigParser::parseServerBlock(const std::vector<std::string>& fileL
 				value.pop_back();
 			else
 			{
-				std::cerr << "Error: Invalid string format. Missing closing ';' after value: " << value << " in Serverblock" << std::endl;
+				std::cerr << "Error: Invalid string format. Missing closing ';' after value: '" << value << "' in Serverblock" << std::endl;
 				parsing_error = true;
 			}
 
