@@ -166,8 +166,9 @@ curl -X POST -d "hello world" http://localhost:8080/upload
 ```
 
 ## 📤 POST file
+``` bash
 curl -i -X POST -F "file=@test.txt" http://localhost:8080/upload
-
+```
 
 ## Delete request (existing file)
 ``` bash
@@ -250,6 +251,6 @@ Examples hereof include:
 - Improving documentation and readability
 
 # 👥 Team
-- @DidiWalakutty
-- @goksuko
-- @ReinierBom
+- [Didi Walakutty](https://github.com/DidiWalakutty) 
+- [Goksu Ozsan](https://github.com/goksuko)
+- [Reinier Bom](https://github.com/ReinierBom)
