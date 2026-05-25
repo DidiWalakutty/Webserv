@@ -285,7 +285,7 @@ void Server::addClient(const epoll_event &event)
 			throw(std::runtime_error("Failed to accept client connection."));
 		}
 
-		logColored("Accepted client FD: " + std::to_string(clientFD) + " from " + inet_ntoa(address.sin_addr) + ":" + std::to_string(ntohs(address.sin_port)), GREEN);
+		logColored("Accepted client FD: " + std::to_string(clientFD) + " from " + inet_ntoa(address.sin_addr), GREEN);
 		
 		_clients.push_back(clientFD);
 		setNonBlocking(clientFD);
@@ -528,13 +528,8 @@ void Server::handleClientWriteEvent(int clientFD)
 	const std::string& data = pendingWrites[clientFD]; 
 	size_t& offset = writeOffsets[clientFD]; 
 
-	// 🚨 ONLY ONE WRITE PER EPOLLOUT EVENT 
 	ssize_t sent = write(clientFD, data.c_str() + offset, data.size() - offset); 
-	if (sent < 0) 
-	{ 
-		return;
-	} 
-	if (sent == 0)
+	if (sent <= 0)
 	{ 
 		removeClient(clientFD); 
 		return; 

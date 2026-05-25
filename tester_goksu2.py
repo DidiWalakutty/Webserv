@@ -14,6 +14,7 @@ import socket
 import time
 import os
 import subprocess
+import shutil
 import threading
 import http.client
 import random
@@ -1223,6 +1224,47 @@ def test_stress():
                f"only {mix_success[0]}/{total_mix} succeeded")
 
 
+# ─── 21. Siege stress suite ─────────────────────────────────────────────────
+
+def test_siege_suite():
+    section("21. Siege stress suite")
+
+    if shutil.which("siege") is None:
+        skipped("Siege tests", "siege is not installed")
+        return
+
+    scenarios = [
+        ("Siege 404 path (c25 t10s)", ["siege", "-c25", "-t10s", f"{BASE_URL}/nope"]),
+        ("Siege root (c25 t10s)", ["siege", "-c25", "-t10s", f"{BASE_URL}"]),
+        ("Siege upload route (c25 t10s)", ["siege", "-c25", "-t10s", f"{BASE_URL}/upload"]),
+        ("Siege upload route heavy (c250 t10s)", ["siege", "-c250", "-t10s", f"{BASE_URL}/upload"]),
+        ("Siege root heavy (c250 t10s)", ["siege", "-c250", "-t10s", f"{BASE_URL}"]),
+        ("Siege CGI route (c25 t10s)", ["siege", "-c25", "-t10s", f"{BASE_URL}/cgi-bin/test.py"]),
+    ]
+
+    for label, cmd in scenarios:
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=20)
+        except subprocess.TimeoutExpired:
+            failed(label, "timed out")
+            continue
+        except Exception as e:
+            failed(label, str(e))
+            continue
+
+        if result.returncode == 0:
+            passed(label)
+        else:
+            details = (result.stderr or result.stdout or f"exit {result.returncode}").strip()
+            failed(label, details[:180])
+
+    status, _, _ = http_get("/")
+    if status is not None:
+        passed(f"Server still responds after siege suite (status {status})")
+    else:
+        failed("Server still responds after siege suite")
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # MAIN
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1284,6 +1326,7 @@ def main():
     test_chunked()                 # §IV.3: chunked encoding for CGI
     test_edge_cases()              # robustness / malformed input
     test_stress()                  # §IV.1: stress test, always available
+    test_siege_suite()             # siege-based route load scenarios
 
     print_summary()
 
