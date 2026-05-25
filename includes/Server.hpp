@@ -81,8 +81,8 @@ class Server
 		void handleCGIEvent(int fd, uint32_t events);
 		void handleCGITimeOut(std::shared_ptr<CGI> cgi);
 		void handleCGIError(std::shared_ptr<CGI> cgi);
-		void handleCGIWrite(std::shared_ptr<CGI> cgi, uint32_t events);
-		void handleCGIRead(std::shared_ptr<CGI> cgi, uint32_t events);
+		void handleCGIWrite(std::shared_ptr<CGI> cgi, int fd, uint32_t events);
+		void handleCGIRead(std::shared_ptr<CGI> cgi, int fd, uint32_t events);
 		void handleCGIWait(std::shared_ptr<CGI> cgi);
 		void handleCGIResponse(std::shared_ptr<CGI> cgi);
 		void handleCGIErrorResponse(std::shared_ptr<CGI> cgi);

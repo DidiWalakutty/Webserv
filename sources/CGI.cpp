@@ -466,9 +466,9 @@ void	Server::handleCGIEvent(int fd, uint32_t events)
 		return;
 	}
 	if (pipeIsInput)
-		handleCGIWrite(cgi, events);
+		handleCGIWrite(cgi, fd, events);
 	else
-		handleCGIRead(cgi, events);
+		handleCGIRead(cgi, fd, events);
 	handleCGIWait(cgi);
 	handleCGIResponse(cgi);
 }
@@ -523,11 +523,11 @@ void	Server::handleCGIError(std::shared_ptr<CGI> cgi)
 
 
 
-void	Server::handleCGIWrite(std::shared_ptr<CGI> cgi, uint32_t events)
+void	Server::handleCGIWrite(std::shared_ptr<CGI> cgi, int fd, uint32_t events)
 {
 	ssize_t	ret;
 
-	if (cgi->error || cgi->write_finished)
+	if (fd != cgi->fd_stdin || cgi->error || cgi->write_finished)
 		return;
 	if (events & (EPOLLERR | EPOLLHUP))
 	{
@@ -536,43 +536,35 @@ void	Server::handleCGIWrite(std::shared_ptr<CGI> cgi, uint32_t events)
 	}
 	if (!(events & EPOLLOUT))
 		return;
-	while (cgi->body_written < cgi->body_size)
+	if (cgi->body_written < cgi->body_size)
 	{
 		ret = write(cgi->fd_stdin, cgi->body.c_str() + cgi->body_written, cgi->body_size - cgi->body_written);
 		if (ret > 0)
 		{
 			cgi->body_written += ret;
-			continue;
 		}
-		if (ret == 0)
+		else
 		{
-			std::cerr << "CGI write() returned 0" << std::endl;
 			handleCGIError(cgi);
 			return;
 		}
-		// if (ret < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
-		// 	return;
-		// if (ret < 0 && errno == EINTR)
-		// 	continue;
-		std::cerr << "CGI write(): " << strerror(errno) << std::endl;
-		handleCGIError(cgi);
-		return;
 	}
-	epoll_ctl(epollFD, EPOLL_CTL_DEL, cgi->fd_stdin, NULL);
-	cgiProcesses.erase(cgi->fd_stdin);
-	closeFd(cgi->fd_stdin);
-	cgi->write_finished = true;
+	// Body fully written (or empty body) — send EOF to CGI process
+	if (cgi->body_written >= cgi->body_size)
+	{
+		epoll_ctl(epollFD, EPOLL_CTL_DEL, cgi->fd_stdin, NULL);
+		cgiProcesses.erase(cgi->fd_stdin);
+		closeFd(cgi->fd_stdin);
+		cgi->write_finished = true;
+	}
 }
 
-
-
-
-void	Server::handleCGIRead(std::shared_ptr<CGI> cgi, uint32_t events)
+void	Server::handleCGIRead(std::shared_ptr<CGI> cgi, int fd, uint32_t events)
 {
 	char	buf[65536];
 	ssize_t	ret;
 
-	if (cgi->error || cgi->read_finished)
+	if (fd != cgi->fd_stdout || cgi->error || cgi->read_finished)
 		return;
 	if (events & EPOLLERR)
 	{
@@ -581,36 +573,23 @@ void	Server::handleCGIRead(std::shared_ptr<CGI> cgi, uint32_t events)
 	}
 	if (!(events & (EPOLLIN | EPOLLHUP)))
 		return;
-	while (true)
+	ret = read(cgi->fd_stdout, buf, sizeof(buf));
+	if (ret > 0)
 	{
-		ret = read(cgi->fd_stdout, buf, sizeof(buf));
-		if (ret > 0)
-		{
-			cgi->output.append(buf, static_cast<size_t>(ret));
-			continue;
-		}
-		if (ret == 0)
-		{
-			epoll_ctl(epollFD, EPOLL_CTL_DEL, cgi->fd_stdout, NULL);
-			cgiProcesses.erase(cgi->fd_stdout);
-			closeFd(cgi->fd_stdout);
-			cgi->read_finished = true;
-			return;
-		}
-		// if (errno == EAGAIN || errno == EWOULDBLOCK)
-		// 	return;
-		// if (errno == EINTR)
-		// 	continue;
-		// std::cerr << "CGI read(): " << strerror(errno) << std::endl;
-		// handleCGIError(cgi);
-		// return;
-		// For non-blocking pipes, defer and retry on the next epoll notification.
-		if (ret < 0)
-			return;
+		cgi->output.append(buf, static_cast<size_t>(ret));
+	}
+	else if (ret == 0)
+	{
+		epoll_ctl(epollFD, EPOLL_CTL_DEL, cgi->fd_stdout, NULL);
+		cgiProcesses.erase(cgi->fd_stdout);
+		closeFd(cgi->fd_stdout);
+		cgi->read_finished = true;
+	}
+	else
+	{
+		handleCGIError(cgi);
 	}
 }
-
-
 
 void	Server::handleCGIWait(std::shared_ptr<CGI> cgi)
 {
