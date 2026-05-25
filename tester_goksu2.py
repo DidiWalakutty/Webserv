@@ -1243,8 +1243,11 @@ def test_siege_suite():
     ]
 
     for label, cmd in scenarios:
+        # siege -tNs needs N seconds to run + startup + report; use generous buffer
+        concurrent = int(next((a.lstrip("-c") for a in cmd if a.startswith("-c")), "25"))
+        t_budget = 40 if concurrent >= 100 else 30
         try:
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=20)
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=t_budget)
         except subprocess.TimeoutExpired:
             failed(label, "timed out")
             continue
@@ -1252,11 +1255,22 @@ def test_siege_suite():
             failed(label, str(e))
             continue
 
-        if result.returncode == 0:
-            passed(label)
-        else:
+        if result.returncode != 0:
             details = (result.stderr or result.stdout or f"exit {result.returncode}").strip()
             failed(label, details[:180])
+            continue
+
+        # Parse availability from siege's stderr report
+        import re
+        m = re.search(r"Availability:\s+([\d.]+)\s*%", result.stderr)
+        if m:
+            avail = float(m.group(1))
+            if avail < 99.0:
+                failed(label, f"availability {avail:.2f}% < 99%")
+            else:
+                passed(label)
+        else:
+            passed(label + " (availability line not found in siege output)")
 
     status, _, _ = http_get("/")
     if status is not None:
