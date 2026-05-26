@@ -766,6 +766,15 @@ void	Server::queueCGIResponse(int clientFD, const std::string& response)
 {
 	epoll_event	ev{};
 
+	// Safety: if the client disconnected while the CGI was running, discard the response.
+	bool alive = false;
+	for (size_t i = 0; i < _clients.size(); i++)
+	{
+		if (_clients[i] == clientFD) { alive = true; break; }
+	}
+	if (!alive)
+		return;
+
 	pendingWrites[clientFD] = response;
 	writeOffsets[clientFD] = 0;
 	closeAfterWrite[clientFD] = true;
@@ -776,6 +785,50 @@ void	Server::queueCGIResponse(int clientFD, const std::string& response)
 		std::cerr << "CGI: epoll_ctl(MOD clientFD " << clientFD << "): " << strerror(errno) << std::endl;
 		removeClient(clientFD);
 	}
+}
+
+
+/**
+ * @brief Cancels and cleans up any in-flight CGI process associated with a client FD.
+ *
+ * @details
+ * Called from removeClient() before closing the FD.  Without this, a CGI that
+ * completes after its client disconnects would call queueCGIResponse() on a
+ * closed (and possibly reused) FD, corrupting an unrelated new connection.
+ */
+void	Server::cancelCGIForClient(int clientFD)
+{
+	std::vector<int>	toErase;
+
+	for (std::map<int, CGIInfo>::iterator it = cgiProcesses.begin(); it != cgiProcesses.end(); ++it)
+	{
+		if (it->second.clientFD == clientFD)
+			toErase.push_back(it->first);
+	}
+	if (toErase.empty())
+		return;
+
+	// All entries for the same client share one CGI object — grab it from the first entry.
+	std::shared_ptr<CGI> cgi = cgiProcesses[toErase[0]].cgi;
+
+	// Kill the child process.
+	if (cgi->pid > 0)
+	{
+		kill(cgi->pid, SIGKILL);
+		waitpid(cgi->pid, NULL, WNOHANG);
+		cgi->pid = -1;
+	}
+
+	// Remove pipe FDs from epoll and close them.
+	for (size_t i = 0; i < toErase.size(); i++)
+	{
+		epoll_ctl(epollFD, EPOLL_CTL_DEL, toErase[i], NULL);
+		cgiProcesses.erase(toErase[i]);
+		close(toErase[i]);
+	}
+	cgi->fd_stdin  = -1;
+	cgi->fd_stdout = -1;
+	cgi->error     = true;
 }
 
 

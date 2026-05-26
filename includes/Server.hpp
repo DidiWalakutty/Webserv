@@ -87,6 +87,7 @@ class Server
 		void handleCGIResponse(std::shared_ptr<CGI> cgi);
 		void handleCGIErrorResponse(std::shared_ptr<CGI> cgi);
 		void queueCGIResponse(int clientFD, const std::string& response);
+		void cancelCGIForClient(int clientFD);
 		HTTPState checkCGIAccess(const std::string& filePath);
 		
 	public:

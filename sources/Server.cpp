@@ -351,6 +351,11 @@ void Server::removeClient(const int &clientFD)
 		return;
 	}
 
+	// Cancel any in-flight CGI for this client before closing the FD.
+	// Without this, the CGI would later try to queue a response on a
+	// closed (and potentially reused) FD, corrupting another connection.
+	cancelCGIForClient(clientFD);
+
 	if (close(clientFD) < 0)
 	{
 		logColored(ERR, "Failed to close client FD: " + std::to_string(clientFD) + ".", RED);
