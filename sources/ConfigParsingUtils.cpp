@@ -45,7 +45,6 @@ void ConfigParser::removeComments(std::string& line)
 		line.erase(commentPos);
 }
 
-
 // Finds first and last non-whitespace characters and trims the line accordingly
 void ConfigParser::trimWhitespace(std::string& line)
 {
@@ -71,7 +70,7 @@ std::vector<std::string> ConfigParser::splitByWhitespace(const std::string& str)
 {
     std::vector<std::string> tokens;
     std::string token;
-	// --- Create a stringstream (which is)
+	// --- Create a stringstream ---
     std::istringstream iss(str);
     while (iss >> token)
         tokens.push_back(token);
