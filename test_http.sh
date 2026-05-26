@@ -53,8 +53,8 @@ check "POST on GET-only /" "405" "$RES"
 
 echo ""
 echo "=== POST exceeding max body size (413) ==="
-RES=$(curl -sv -X POST http://localhost:8080/post_body -d "$(python3 -c 'print("x"*20000)')" 2>&1) # 20KB body
-check "POST /post_body body too large" "413" "$RES"
+RES=$(curl -sv -X POST http://localhost:8080/upload -F "file=@netpractice.pdf" 2>&1) # 20 MB of data
+check "POST /upload body too large" "413" "$RES"
 
 echo ""
 echo "=== Redirect (301) ==="

@@ -108,6 +108,22 @@ def http_get(path: str, headers: dict = None) -> tuple:
     finally:
         conn.close()
 
+def http_delete(path: str, headers: dict = None) -> tuple:
+    """Returns (status_code, headers_dict, body_str) or (None, {}, error_str)."""
+    try:
+        conn = http.client.HTTPConnection(HOST, PORT, timeout=TIMEOUT)
+        h = {"Host": f"{HOST}:{PORT}"}
+        if headers:
+            h.update(headers)
+        conn.request("DELETE", path, headers=h)
+        resp = conn.getresponse()
+        body = resp.read().decode(errors="replace")
+        return resp.status, dict(resp.getheaders()), body
+    except Exception as e:
+        return None, {}, str(e)
+    finally:
+        conn.close()
+
 
 def http_method(method: str, path: str, body: bytes = b"",
                 headers: dict = None) -> tuple:
@@ -271,11 +287,11 @@ def test_http_methods():
         failed("HEAD method handled", raw[:80] if raw else "no response")
 
     # POST — upload endpoint
-    post_body = b"field=value&test=1"
+    upload = b"field=value&test=1"
     status, _, _ = http_method(
-        "POST", "/upload", body=post_body,
+        "POST", "/upload", body=upload,
         headers={"Content-Type": "application/x-www-form-urlencoded",
-                 "Content-Length": str(len(post_body))})
+                 "Content-Length": str(len(upload))})
     if status in (200, 201, 204):
         passed(f"POST /upload returns {status}")
     elif status is not None:
@@ -898,10 +914,7 @@ def test_cgi():
     cgi_paths  = [
         ("/cgi-bin/test.py",  "python"),
         ("/cgi-bin/test.php", "php"),
-        ("/cgi/test.py",      "python"),
-        ("/cgi/test.php",     "php"),
-        ("/test.py",          "python"),
-        ("/test.php",         "php"),
+        ("/cgi-bin/test.sh",  "sh"),
     ]
 
     for path, lang in cgi_paths:
@@ -932,12 +945,12 @@ def test_cgi():
                 "no CGI found — place a test.py or test.php in your cgi-bin/ directory")
 
     # CGI via POST — environment variables CONTENT_TYPE and CONTENT_LENGTH must reach CGI
-    post_body = b"name=tester&score=42"
+    upload = b"name=tester&score=42"
     for path, _ in cgi_paths:
         status, _, body = http_method(
-            "POST", path, body=post_body,
+            "POST", path, body=upload,
             headers={"Content-Type": "application/x-www-form-urlencoded",
-                     "Content-Length": str(len(post_body))})
+                     "Content-Length": str(len(upload))})
         if status == 200:
             passed(f"CGI POST request handled at {path} (status 200)")
             break
@@ -1029,14 +1042,14 @@ def test_directory_listing():
 def test_route_method_restrictions():
     section("17. Route method restrictions (subject: list of accepted HTTP methods per route)")
 
-    # /post_body only allows POST — GET should return 405
-    get_status, _, _ = http_get("/post_body")
+    # /cgi-bin only allows POST and GET. DELETE should return 405
+    get_status, _, _ = http_delete("/cgi-bin")
     if get_status == 405:
-        passed("GET on POST-only /post_body returns 405 (method restriction working)")
+        passed("DELETE on /cgi-bin returns 405 (method restriction working)")
     elif get_status == 404:
-        skipped("Method restriction test", "/post_body not found — configure the route")
+        skipped("Method restriction test", "/cgi-binnot found — configure the route")
     else:
-        skipped("Method restriction on /post_body", f"got {get_status}")
+        skipped("Method restriction on /cgi-bin", f"got {get_status}")
 
 
 # ─── 18. Chunked Transfer Encoding ───────────────────────────────────────────
@@ -1255,22 +1268,35 @@ def test_siege_suite():
             failed(label, str(e))
             continue
 
-        if result.returncode != 0:
-            details = (result.stderr or result.stdout or f"exit {result.returncode}").strip()
-            failed(label, details[:180])
-            continue
-
-        # Parse availability from siege's stderr report
-        import re
-        m = re.search(r"Availability:\s+([\d.]+)\s*%", result.stderr)
-        if m:
-            avail = float(m.group(1))
+        # Parse availability from siege's combined output (may appear in stderr or stdout)
+        import re, json
+        siege_output = result.stderr + "\n" + result.stdout
+        # Try to parse as JSON (default for recent Siege)
+        avail = None
+        try:
+            json_start = siege_output.find('{')
+            json_end = siege_output.rfind('}')
+            if json_start != -1 and json_end != -1 and json_end > json_start:
+                siege_json = json.loads(siege_output[json_start:json_end+1])
+                if "availability" in siege_json:
+                    avail = float(siege_json["availability"])
+        except Exception:
+            pass
+        if avail is None:
+            # Fallback to regex for old text output
+            m = re.search(r"availability\s*[:=]\s*([\d.]+)", siege_output, re.IGNORECASE)
+            if m:
+                avail = float(m.group(1))
+        if avail is not None:
             if avail < 99.0:
                 failed(label, f"availability {avail:.2f}% < 99%")
             else:
                 passed(label)
+        elif result.returncode != 0:
+            details = (result.stderr or result.stdout or f"exit {result.returncode}").strip()
+            failed(label, details[:180])
         else:
-            passed(label + " (availability line not found in siege output)")
+            skipped(label, "availability line not found in siege output")
 
     status, _, _ = http_get("/")
     if status is not None:

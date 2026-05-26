@@ -200,7 +200,7 @@ First, change the `max_body_size` in the configuration file to 1 (1 byte), and u
 a file that's bigger than 1 ASCII character (= 1 byte).
 Make sure you restart the web server.
 ``` bash
-curl -X POST --data "1234567890" http://127.0.0.1:8080/post_body
+curl -X POST --data "1234567890" http://127.0.0.1:8080/upload
 ```
 
 ---

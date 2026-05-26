@@ -116,6 +116,53 @@ echo "=== [12] Server still responds after all CGI errors ==="
 RES=$(curl -sv http://localhost:8080/ 2>&1)
 check "Server alive — GET / returns 200" "200" "$RES"
 
+# ─── POST tests for all CGI scripts ─────────────────────────────────────────
+
+echo ""
+echo "=== [13] POST test.py — reads name & age from body ==="
+RES=$(curl -sv -X POST "${BASE}/test.py" \
+	-H "Content-Type: application/x-www-form-urlencoded" \
+	-d "name=Bob&age=25" 2>&1)
+check "POST /cgi-bin/test.py" "200" "$RES"
+check_body "Body contains 'Bob'" "Bob" "$RES"
+check_body "Body contains 'age 25'" "age 25" "$RES"
+
+echo ""
+echo "=== [14] POST test.php — outputs HTML (name & age from body) ==="
+RES=$(curl -sv -X POST "${BASE}/test.php" \
+	-H "Content-Type: application/x-www-form-urlencoded" \
+	-d "name=Bob&age=25" 2>&1)
+check "POST /cgi-bin/test.php" "200" "$RES"
+check_body "Body contains 'PHP CGI works!'" "PHP CGI works!" "$RES"
+
+echo ""
+echo "=== [15] POST test.sh — outputs static HTML ==="
+RES=$(curl -sv -X POST "${BASE}/test.sh" \
+	-H "Content-Type: application/x-www-form-urlencoded" \
+	-d "name=Bob&age=25" 2>&1)
+check "POST /cgi-bin/test.sh" "200" "$RES"
+check_body "Body contains 'Bash CGI works'" "Bash CGI works" "$RES"
+
+# GET versions for test.py, test.php, test.sh
+echo ""
+echo "=== [16] GET test.py — reads name & age from query ==="
+RES=$(curl -sv "${BASE}/test.py?name=Bob&age=25" 2>&1)
+check "GET /cgi-bin/test.py?name=Bob&age=25" "200" "$RES"
+check_body "Body contains 'Bob'" "Bob" "$RES"
+check_body "Body contains 'age 25'" "age 25" "$RES"
+
+echo ""
+echo "=== [17] GET test.php — outputs HTML (name & age from query) ==="
+RES=$(curl -sv "${BASE}/test.php?name=Bob&age=25" 2>&1)
+check "GET /cgi-bin/test.php?name=Bob&age=25" "200" "$RES"
+check_body "Body contains 'PHP CGI works!'" "PHP CGI works!" "$RES"
+
+echo ""
+echo "=== [18] GET test.sh — outputs static HTML ==="
+RES=$(curl -sv "${BASE}/test.sh?name=Bob&age=25" 2>&1)
+check "GET /cgi-bin/test.sh?name=Bob&age=25" "200" "$RES"
+check_body "Body contains 'Bash CGI works'" "Bash CGI works" "$RES"
+
 echo ""
 echo "================================"
 echo "Results: $PASS passed, $FAIL failed"
