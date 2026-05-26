@@ -96,19 +96,37 @@ static int	childCGI(const HTTPRequest& request, const ServerParse& server, const
 		closeFd(pipe_c2p[1]))
 		return (removeCGIChild(pipe_p2c, pipe_c2p), 2);
 
+	/* RESOLVE ABSOLUTE SCRIPT PATH (must happen before chdir) */
+	std::string absFilePath = filePath;
+	char cwdBuf[4096];
+	if (filePath[0] != '/' && getcwd(cwdBuf, sizeof(cwdBuf)) != NULL)
+		absFilePath = std::string(cwdBuf) + "/" + filePath;
+
 	/* BUILD ARGV */
-	argV_str = buildArgV(filePath, location);
+	argV_str = buildArgV(absFilePath, location);
 	if (argV_str.empty())
 		return (3);
 
 	/* BUILD ENVP */
-	envP_str = buildEnvP(request, server, filePath, location);
+	envP_str = buildEnvP(request, server, absFilePath, location);
 	if (envP_str.empty())
 		return (4);
 
+	/* CHANGE WORKING DIRECTORY to the script's directory */
+	std::string::size_type lastSlash = absFilePath.rfind('/');
+	if (lastSlash != std::string::npos)
+	{
+		std::string scriptDir = absFilePath.substr(0, lastSlash);
+		if (chdir(scriptDir.c_str()) == -1)
+		{
+			std::cerr << "chdir(" << scriptDir << "): " << strerror(errno) << std::endl;
+			return (5);
+		}
+	}
+
 	/* EXECUTE */
 	if (executeCGI(argV_str, envP_str))
-		return (5);
+		return (6);
 	return (0);
 }
 
@@ -712,18 +730,25 @@ void	Server::handleCGIResponse(std::shared_ptr<CGI> cgi)
 
 	if (cgi->error || !cgi->write_finished || !cgi->read_finished || !cgi->cgi_finished)
 		return;
+	if (cgi->output.empty())
+	{
+		std::cerr << "CGI produced no output — sending 502." << std::endl;
+		handleCGIErrorResponse(cgi);
+		return;
+	}
 	if (split == std::string::npos)
 	{
 		split = cgi->output.find("\n\n");
 		boundaryLen = 2;
 	}
 	if (split == std::string::npos)
-		cgiBody = cgi->output;
-	else
 	{
-		cgiHeaders = cgi->output.substr(0, split);
-		cgiBody = cgi->output.substr(split + boundaryLen);
+		std::cerr << "CGI produced no valid header block — sending 502." << std::endl;
+		handleCGIErrorResponse(cgi);
+		return;
 	}
+	cgiHeaders = cgi->output.substr(0, split);
+	cgiBody = cgi->output.substr(split + boundaryLen);
 	std::string	statusLine = "200 OK";
 	std::string	headers = parseCGIHeaders(cgiHeaders, statusLine);
 	std::string	response =

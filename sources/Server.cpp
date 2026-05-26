@@ -19,6 +19,7 @@ volatile sig_atomic_t Server::running = 0;
 const int MAX_CLIENTS = 1024;			// max connected clients allowed
 const size_t READ_BUFFER_SIZE = 65536;  // 64KB per read socket buffer
 const int INDEFINITE_BLOCKING = -1;		// epoll_wait blocking mode (wait indefinitely for events)
+const int CGI_POLL_INTERVAL_MS = 1000;	// epoll_wait timeout for periodic CGI timeout checks
 std::ostream& ERR = std::cerr;
 
 using Utils::logColored;
@@ -310,9 +311,9 @@ void Server::addClient(const epoll_event &event)
 			}
 		}
 
-		// register client in epoll for reading
+		// register client in epoll for reading + half-close detection
 		epoll_event newClientEvent{};
-		newClientEvent.events = EPOLLIN;
+		newClientEvent.events = EPOLLIN | EPOLLRDHUP;
 		newClientEvent.data.fd = clientFD;
 
 		if (epoll_ctl(epollFD, EPOLL_CTL_ADD, clientFD, &newClientEvent) < 0)
@@ -390,7 +391,7 @@ const ServerParse* Server::findServerForClient(int clientFD) const
 bool Server::setClientReadEvents(int clientFD)
 {
 	epoll_event modEv{};
-	modEv.events = EPOLLIN;
+	modEv.events = EPOLLIN | EPOLLRDHUP;
 	modEv.data.fd = clientFD;
 	if (epoll_ctl(epollFD, EPOLL_CTL_MOD, clientFD, &modEv) < 0)
 	{
@@ -747,7 +748,8 @@ void Server::start()
 		// at least one file descriptor is ready, or an error occurs. 
 		// This is useful when we want the program to be event-driven and only proceed 
 		// when there is actual activity, without polling or using a fixed timeout.
-		int count = epoll_wait(epollFD, events, _maxEvents, INDEFINITE_BLOCKING);
+		int count = epoll_wait(epollFD, events, _maxEvents,
+			cgiProcesses.empty() ? INDEFINITE_BLOCKING : CGI_POLL_INTERVAL_MS);
 		if (count < 0) 
 		{
 			if (errno == EINTR)
@@ -756,6 +758,15 @@ void Server::start()
 			break;
 		}
 		
+		// --- Periodic CGI timeout check (runs even when epoll_wait times out) ---
+		{
+			std::vector<std::shared_ptr<CGI>> snapshot;
+			for (auto& kv : cgiProcesses)
+				snapshot.push_back(kv.second.cgi);
+			for (auto& cgi : snapshot)
+				handleCGITimeOut(cgi);
+		}
+
 		// --- Loop through all triggered events ---
 		for (int i = 0; i < count; i++)
 		{

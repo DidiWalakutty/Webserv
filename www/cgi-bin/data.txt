@@ -1,0 +1,1 @@
+cgi_test_data: hello from relative path
