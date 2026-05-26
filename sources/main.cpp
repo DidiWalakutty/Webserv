@@ -24,8 +24,8 @@ int main(int argc, char **argv)
 		const std::vector<ServerParse>& servers = parser.getServers();
 		
 		// Print Servers
-		for (size_t i = 0; i < servers.size(); ++i)
-			parser.print_server(servers[i]);
+		// for (size_t i = 0; i < servers.size(); ++i)
+		// 	parser.print_server(servers[i]);
 
 		// Fill constructor and Start webserv
 		Server webserv(servers);
