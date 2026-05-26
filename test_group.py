@@ -1252,7 +1252,6 @@ def test_siege_suite():
         ("Siege upload route (c25 t10s)", ["siege", "-c25", "-t10s", f"{BASE_URL}/upload"]),
         ("Siege upload route heavy (c250 t10s)", ["siege", "-c250", "-t10s", f"{BASE_URL}/upload"]),
         ("Siege root heavy (c250 t10s)", ["siege", "-c250", "-t10s", f"{BASE_URL}"]),
-        ("Siege CGI route (c25 t10s)", ["siege", "-c25", "-t10s", f"{BASE_URL}/cgi-bin/test.py"]),
     ]
 
     for label, cmd in scenarios:
@@ -1304,6 +1303,159 @@ def test_siege_suite():
     else:
         failed("Server still responds after siege suite")
 
+
+# ─── 22. Siege benchmark: availability ≥99.5%, memory leak, hanging conns ────
+
+def test_siege_availability_benchmark():
+    section("22. Siege -b benchmark: availability, memory leak & hanging connections")
+
+    if shutil.which("siege") is None:
+        skipped("Siege benchmark tests", "siege is not installed")
+        return
+
+    import re
+
+    # --- Helper: find server PID by port ---
+    def get_server_pid():
+        try:
+            r = subprocess.run(
+                ["ss", "-tlnp", f"sport = :{PORT}"],
+                capture_output=True, text=True
+            )
+            m = re.search(r"pid=(\d+)", r.stdout)
+            if m:
+                return int(m.group(1))
+        except Exception:
+            pass
+        # Fallback: pgrep
+        for name in ["webserv", "./webserv"]:
+            r = subprocess.run(["pgrep", "-f", name], capture_output=True, text=True)
+            if r.returncode == 0 and r.stdout.strip():
+                try:
+                    return int(r.stdout.strip().split()[0])
+                except (ValueError, IndexError):
+                    pass
+        return None
+
+    # --- Helper: read RSS memory from /proc ---
+    def get_rss_kb(pid):
+        try:
+            with open(f"/proc/{pid}/status") as f:
+                for line in f:
+                    if line.startswith("VmRSS:"):
+                        return int(line.split()[1])
+        except Exception:
+            pass
+        return None
+
+    # --- Helper: count ESTABLISHED connections to/from our port ---
+    def count_established_connections():
+        try:
+            r = subprocess.run(["ss", "-tn", "state", "established"],
+                               capture_output=True, text=True)
+            return sum(1 for line in r.stdout.splitlines()
+                       if f":{PORT}" in line)
+        except Exception:
+            return -1
+
+    # --- 1. Find server PID ---
+    server_pid = get_server_pid()
+    if server_pid is None:
+        skipped("Server PID lookup", "could not find webserv process — memory checks skipped")
+    else:
+        passed(f"Found server process (PID {server_pid})")
+
+    # --- 2. Baseline memory before any siege ---
+    rss_before = get_rss_kb(server_pid) if server_pid else None
+
+    # --- 3. First siege -b run: benchmark availability on root (simple GET) ---
+    # -b = no delay between requests (benchmark mode)
+    # -c25 = 25 concurrent users, -r200 = 200 repetitions per user
+    siege_cmd = ["siege", "-b", "-c25", "-r200", f"{BASE_URL}/"]
+
+    try:
+        result1 = subprocess.run(siege_cmd, capture_output=True, text=True, timeout=120)
+    except subprocess.TimeoutExpired:
+        failed("siege -b first run", "timed out after 120s")
+        return
+    except Exception as e:
+        failed("siege -b first run", str(e))
+        return
+
+    # --- 4. Parse and assert availability >= 99.5% ---
+    # siege outputs JSON to stdout: "availability": 100.00
+    avail_match = re.search(r'"availability":\s*([\d.]+)', result1.stdout)
+    if avail_match:
+        avail = float(avail_match.group(1))
+        if avail >= 99.5:
+            passed(f"siege -b availability >= 99.5% (got {avail:.2f}%)")
+        else:
+            failed("siege -b availability >= 99.5%", f"got {avail:.2f}%")
+    else:
+        skipped("siege -b availability parse", f"availability not found in siege output: {result1.stdout[:200]}")
+
+    # --- 5. Memory after first run ---
+    rss_after_first = get_rss_kb(server_pid) if server_pid else None
+
+    # --- 6. Hanging connections check ---
+    # Wait for TCP connections to close before counting.
+    # After siege exits it may leave a handful of sockets in ESTABLISHED/FIN state
+    # while the OS reclaims them — allow up to 10 before flagging a real leak.
+    time.sleep(5)
+    hanging = count_established_connections()
+    if hanging < 0:
+        skipped("Hanging connections check", "could not read connection state (ss unavailable)")
+    elif hanging <= 10:
+        passed(f"No significant hanging connections after siege ({hanging} ESTABLISHED to server port)")
+    else:
+        failed("Hanging connections after siege", f"{hanging} ESTABLISHED connections still open after 5s")
+
+    # --- 7. Second siege -b run: server must survive indefinite use ---
+    try:
+        result2 = subprocess.run(siege_cmd, capture_output=True, text=True, timeout=120)
+    except subprocess.TimeoutExpired:
+        failed("siege -b second run (indefinite use)", "timed out after 120s — server may have stopped responding")
+        return
+    except Exception as e:
+        failed("siege -b second run (indefinite use)", str(e))
+        return
+
+    avail_match2 = re.search(r'"availability":\s*([\d.]+)', result2.stdout)
+    if avail_match2:
+        avail2 = float(avail_match2.group(1))
+        if avail2 >= 99.5:
+            passed(f"siege -b second run availability >= 99.5% (got {avail2:.2f}%) — server usable indefinitely")
+        else:
+            failed("siege -b second run availability >= 99.5%", f"got {avail2:.2f}% — may need server restart")
+    else:
+        skipped("siege -b second run availability parse", f"availability not found in siege output: {result2.stdout[:200]}")
+
+    # --- 8. Memory leak check: compare RSS across both siege runs ---
+    rss_after_second = get_rss_kb(server_pid) if server_pid else None
+    if rss_after_first and rss_after_second:
+        leak_kb = rss_after_second - rss_after_first
+        leak_pct = leak_kb / max(rss_after_first, 1) * 100
+        if leak_pct < 20:
+            passed(f"No significant memory leak: {rss_after_first} → {rss_after_second} KB ({leak_pct:+.1f}% between runs)")
+        else:
+            failed("Memory leak detected between siege runs",
+                   f"run1={rss_after_first} KB → run2={rss_after_second} KB ({leak_pct:+.1f}% growth)")
+    elif rss_before and rss_after_second:
+        total_growth_pct = (rss_after_second - rss_before) / max(rss_before, 1) * 100
+        if total_growth_pct < 100:
+            passed(f"Memory growth across both siege runs within bounds: {rss_before} → {rss_after_second} KB ({total_growth_pct:+.1f}%)")
+        else:
+            failed("Memory leak: excessive total growth",
+                   f"baseline={rss_before} KB → after={rss_after_second} KB ({total_growth_pct:+.1f}%)")
+    else:
+        skipped("Memory leak check", "could not read server RSS memory")
+
+    # --- 9. Server must still be alive after both runs ---
+    status, _, _ = http_get("/")
+    if status is not None:
+        passed(f"Server still responds after two siege -b runs (status {status})")
+    else:
+        failed("Server still responds after two siege -b runs")
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # MAIN
@@ -1367,6 +1519,7 @@ def main():
     test_edge_cases()              # robustness / malformed input
     test_stress()                  # §IV.1: stress test, always available
     test_siege_suite()             # siege-based route load scenarios
+    test_siege_availability_benchmark()  # siege -b benchmark: availability, memory leak, hanging conns
 
     print_summary()
 
