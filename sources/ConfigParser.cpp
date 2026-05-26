@@ -31,12 +31,14 @@ static bool duplicatesAcrossServers(const std::vector<ServerParse>& servers)
 }
 
 /**
- * @brief Parses the configuration file and fills the _servers vector.
+ * @brief Parses the full configuration file and builds servers objects.
  *
- * Clears any previously stored servers, validates the file, preprocesses its
- * contents, parses all server blocks, and checks for duplicate host/port entries.
+ * @details
+ * - Validates file type and accessibility.
+ * - Preprocesses input (removes comments, trims whitespace, skips empty lines).
+ * - Parses all server blocks and their nested location blocks, extracting directives and values.
+ * - Validates each server configuration and checks for duplicate host/port combinations across servers.
  *
- * @param file Path to the configuration file.
  * @return true if parsing succeeds and all server blocks are valid, false otherwise.
  */
 bool ConfigParser::parseConfigFile(const std::string& file)
@@ -101,7 +103,7 @@ bool ConfigParser::parseConfigFile(const std::string& file)
 			return false;
 		}
 	}
-	// Check duplicates across servers.
+	
 	if (duplicatesAcrossServers(_servers))
 		return false;
 	return true;
@@ -110,17 +112,15 @@ bool ConfigParser::parseConfigFile(const std::string& file)
 /**
  * @brief Parses a single server block, including its nested location blocks.
  * 
- * @details Starts parsing immediately after the opening "server {" line (++currentLine).
- * Keeps advancing until finding the matching closing "}". Tracks opening and closing braces
- * to ensure proper block structure. For each line, it checks if it's a location block header (calls parseLocationBlock).
+ * @details 
+ * - Reads key/value pairs inside the server block
+ * - Detects and parses nested location blocks
+ * - Validates syntax
+ * - Handles server directives (server_name, host, port, root, index, autoindex etc)
+ * - Collects LocationParse objects for each location block and assigns them to the server.
+ * - Tracks opening and closing braces to ensure proper block structure and updates currentLine accordingly.
  * 
- * Extracts key-value pairs for server directives (server_name, host, port etc).
- * Updates currentLine to the line after the closing "}" of the server blocks.
- * 
- * @param fileLines Preprocessed configuration lines
- * @param currentLine Index of the current line being parsed
- * @param parsing_error Flag set to true if a parsing error occurs within the block
- * @return ServerParse object containing the parsed server configuration
+ * @return Parsed server configuration (may be invalid if parsing_error is true) 
  */
 ServerParse ConfigParser::parseServerBlock(const std::vector<std::string>& fileLines, size_t& currentLine, bool& parsing_error)
 {
@@ -129,7 +129,6 @@ ServerParse ConfigParser::parseServerBlock(const std::vector<std::string>& fileL
 	std::vector<LocationParse> locations;
 	bool location_error = false;
 
-	// -> loc. and serv. handle their own brackets 
 	int brackOpen = 1;
 	int brackclose = 0;
 	++currentLine;
@@ -255,7 +254,6 @@ ServerParse ConfigParser::parseServerBlock(const std::vector<std::string>& fileL
 					else
 					{
 						std::cerr << "Warning: Invalid HTTP method: '" << tokens[i] << "' in server block at line: " << currentLine + 1 << std::endl;
-					// !!!check what we want to do if invalid http method
 					}
 				}
 			}
@@ -340,12 +338,14 @@ ServerParse ConfigParser::parseServerBlock(const std::vector<std::string>& fileL
 }
 
 /**
- * @brief Parses a single location block inside a server block.
+ * @brief Parses a location block inside a server configuration.
  *
- * @details  * Starts parsing at the line containing the location header
- * ("location /path {"), extracts the location path, initializes
- * default values, and processes all directives inside the block.
- *
+ * @details  
+ * - Extract location path and initialize default values.
+ * - Parses directives within the location block (root, index, autoindex, allowed_methods etc).
+ * - Validates syntax and tracks opening/closing braces to ensure proper block structure.
+ * - Detects  invalid syntax and unsupported directives.
+ * 
  * Tracks opening and closing braces to ensure the location block is
  * properly structured. Updates currentLine while parsing and advances it
  * to the line after the closing '}' of the location block.
