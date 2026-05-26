@@ -459,6 +459,8 @@ HTTPState HTTPResponse::getRedirectState(int code) const
 	}
 }
 
+// Validates if the buffer size matches the expected file size on disk.
+// This ensures we received the entire file before attempting to save it, preventing incomplete uploads from being saved.
 bool HTTPResponse::validateSize(const std::string& buffer, const std::string& filePath)
 {
 	std::ifstream file(filePath.c_str(), std::ios::binary | std::ios::ate);
