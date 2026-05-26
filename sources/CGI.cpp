@@ -111,7 +111,7 @@ static int	childCGI(const HTTPRequest& request, const ServerParse& server, const
 	// 	return (3);
 
 	/* BUILD ENVP */
-	envP_str = buildEnvP(request, server, filePath);
+	envP_str = buildEnvP(request, server, absFilePath);
 	if (envP_str.empty())
 		return (4);
 
@@ -257,8 +257,8 @@ static std::vector<std::string>	buildEnvP(const HTTPRequest& request, const Serv
 		request.method == HTTPMethod::PUT ||
 		request.method == HTTPMethod::PATCH)
 	{
-		envP_str.push_back("CONTENT_LENGTH=" + (request.headers.count("Content-Length") ? request.headers.at("Content-Length") : "0"));
-		envP_str.push_back("CONTENT_TYPE=" + (request.headers.count("Content-Type") ? request.headers.at("Content-Type") : ""));
+		envP_str.push_back("CONTENT_LENGTH=" + (request.headers.count("CONTENT-LENGTH") ? request.headers.at("CONTENT-LENGTH") : "0"));
+		envP_str.push_back("CONTENT_TYPE=" + (request.headers.count("CONTENT-TYPE") ? request.headers.at("CONTENT-TYPE") : ""));
 	}
 	if (ext == ".php")
 		envP_str.push_back("REDIRECT_STATUS=200");
