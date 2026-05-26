@@ -1,21 +1,29 @@
 #include "ConfigParser.hpp"
 
-// Checks if anything exists at that path and if a normal file (not directory)
+// Checks if a path exists and is a regular file (not a directory)
 bool ServerParse::file_exists(const std::string& path) const
 {
 	struct stat buffer;
 	return (stat(path.c_str(), &buffer) == 0 && S_ISREG(buffer.st_mode));
 }
 
+// Checks if a path exists and is a directory
 bool ServerParse::is_directory(const std::string& path) const
 {
 	struct stat buffer;
 	return (stat(path.c_str(), &buffer) == 0 && S_ISDIR(buffer.st_mode));
 }
 
-// Returns a pointer to the best-matching LocationParse path.
-// If file doesn't exist, example: '/nothing/hi', serving_errorpages will
-// see it doesnt exist and return an appropriate error_page.
+/**
+ * @brief Finds the best matching location block for a given URL path.
+ *
+ * @details
+ * Selects the most specific (longest prefix match) location from the server
+ * configuration. If multiple locations match, the most specific one wins.
+ *
+ * @param urlPath Requested URL path
+ * @return Pointer to best matching LocationParse, or nullptr if none match
+ */
 const LocationParse* ServerParse::get_best_location(const std::string& urlPath) const
 {
 	const LocationParse* bestMatch = nullptr;
@@ -48,6 +56,14 @@ const LocationParse* ServerParse::get_best_location(const std::string& urlPath) 
 	return bestMatch;
 }
 
+/**
+ * @brief Retrieves a custom error page for a given HTTP error code.
+ *
+ * @details
+ * Looks up the error page path in the server configuration based on the error code.
+ *
+ * @return Pointer to the error page path, or nullptr if not found
+ */
 const std::string* ServerParse::get_error_page(int errorCode) const
 {
 	std::map<int, std::string>::const_iterator it = errorPages.find(errorCode);
@@ -56,7 +72,17 @@ const std::string* ServerParse::get_error_page(int errorCode) const
 	return nullptr;
 }
 
-// Joins two parts together that normalizes the slash between them
+/**
+ * @brief Safely joins two filesystem path components.
+ *
+ * @details
+ * Ensures exactly one '/' between root and URL segment while avoiding
+ * duplicate or missing separators.
+ *
+ * @param root Base directory path
+ * @param url Relative URL path
+ * @return Normalized combined filesystem path
+ */
 std::string ServerParse::joinPaths(const std::string& root, const std::string& url) const
 {
 	if (root.empty())
@@ -79,11 +105,13 @@ std::string ServerParse::joinPaths(const std::string& root, const std::string& u
 }
 
 /**
- *  @brief Decodes percent-encoded characters in a URL path.
+ *  @brief Decodes a percent-encoded URL string.
  * 
- * @details Browsers encode special chars using percent encoding (space = %20).
- * 			When we request or delete a file that contains special chars, the
- * 			server receives the encoded form. This function decodes it to the OG chars
+ * @details 
+ * Convert URL-encoded characters (%20 -> space) and handles '+' as space.
+ * Rejects null-byte injection (%00) for security. 
+ * Used to decode request paths before filesystem access.
+ * 
  * Example: "/upload/My%20File.txt" -> "/upload/My File.txt"
  */
 std::string urlDecode(const std::string& str)
@@ -108,8 +136,22 @@ std::string urlDecode(const std::string& str)
 	return result;
 }
 
-// request url: /images/logo.png, location path: /images.
-// We want the full path: www/html/images/logo.png	
+/**
+ * @brief Converts a URL path into a safe filesystem path.
+ *
+ * @details
+ * - Decodes URL encoding
+ * - Normalizes slashes
+ * - Rejects illegal characters and traversal attempts
+ * - Matches request to best location block
+ * - Builds final filesystem path using location root
+ *
+ * We want the full path: www/html/images/logo.png	
+ * request url: /images/logo.png, location path: /images.
+ *
+ * @param reqPath Raw request path from HTTP request
+ * @return Safe filesystem path, or empty string if invalid
+ */
 std::string ServerParse::build_filesystem_path(const std::string& reqPath) const
 {
 	std::string urlPath = urlDecode(reqPath);

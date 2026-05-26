@@ -45,15 +45,13 @@ std::string HTTPResponse::setDate()
 }
 
 /**
- * @brief Builds a complete HTTP error response for a given state.
+ * @brief Builds a complete HTTP error response for the given HTTP state.
  *
  * @details
- * Initializes the response, generates the appropriate error page (custom or default),
- * sets the required headers, and returns the final HTTP response string.
- *
- * @param request The original HTTP request (used for protocol/version info).
- * @param state The HTTP error state to generate a response for.
- * @return The fully formatted HTTP response string.
+ * - Initializes response context from the request
+ * - Generates appropriate error page (custom or default)
+ * - Applies standard headers (Date, Server, Connection)
+ * - Formats final HTTP response string with status line, headers, and body
  */
 std::string HTTPResponse::buildErrorResponse(const HTTPRequest& request, HTTPState state)
 {
@@ -76,8 +74,20 @@ std::string HTTPResponse::buildErrorResponse(const HTTPRequest& request, HTTPSta
 	return response;
 }
 
-// Updated the buildresponse to create the correct path and checking if it exists.
-// We only need to serve the index.html file in case we use a GET / HEAD request.
+/**
+ * @brief Builds a full HTTP response for a client request.
+ *
+ * @details
+ * - Validates request constraints (URI length)
+ * - Resolves requested resource using server configuration
+ * - Handles directory logic (index files, permissions, autoindex)
+ * - Verifies file existence and access rights
+ * - Reads file content for GET/HEAD requests
+ * - Delegates method-specific handling to parseResponseStr()
+ *
+ * @param request Incoming HTTP request
+ * @return Fully constructed HTTP response string
+ */
 std::string HTTPResponse::buildResponse(HTTPRequest request)
 {
 	std::cerr << "In buildResponse(), with request: " << methodToString(request.method) << " " << request.resourcePath << std::endl;
@@ -180,7 +190,19 @@ std::string HTTPResponse::buildResponse(HTTPRequest request)
 	return parseResponseStr(request, filePath);
 }
 
-// Perhaps need to check if a file was actually created/updated abd set to state created(201)?
+/**
+ * @brief Dispatches request handling based on HTTP method and builds response.
+ *
+ * @details
+ * - Routes request to method-specific handlers (GET, POST, DELETE, HEAD)
+ * - Applies default handling for unsupported methods
+ * - Sets response headers (Content-Type, Content-Length)
+ * - Builds final HTTP response string
+ *
+ * @param request HTTP request
+ * @param filePath Resolved filesystem path for the resource
+ * @return Complete HTTP response string
+ */
 std::string HTTPResponse::parseResponseStr(const HTTPRequest request, const std::string filePath)
 {
 	switch (request.method)
@@ -234,6 +256,12 @@ std::string HTTPResponse::parseResponseStr(const HTTPRequest request, const std:
 	return response;
 }
 
+/**
+ * @brief Clears the response body and resets content headers.
+ *
+ * @details
+ * Used mainly for HEAD responses and empty error states.
+ */
 void HTTPResponse::clearBody()
 {
 	body.clear();
@@ -241,6 +269,17 @@ void HTTPResponse::clearBody()
 	headers["CONTENT-TYPE"] = "";
 }
 
+/**
+ * @brief Updates response state based on HTTP status.
+ *
+ * @details
+ * - Maps HTTPState to status code and reason phrase
+ * - Handles special cases like NoContent (clears body)
+ * - Generates default error body for error states
+ * - Updates Content-Length accordingly
+ *
+ * @param state HTTP status to apply
+ */
 void HTTPResponse::updateForHTTPState(HTTPState state)
 {
 	HTTPMessage statusMessage = HTTPCommon::HTTPStatusMap.at(state);

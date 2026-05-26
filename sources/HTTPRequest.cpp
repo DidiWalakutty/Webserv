@@ -25,7 +25,7 @@ bool HTTPRequest::parseRequest(const std::string& raw)
 		throw HTTPRequestException("Failed to create stream from raw request");
 
 	std::string requestLine;
-	std::getline(stream, requestLine); // Reads until \n, stores it, moves forward.
+	std::getline(stream, requestLine);
 	if (requestLine.empty() || isCRLF(requestLine))
 		throw HTTPRequestException("Empty request line");
 
@@ -64,7 +64,6 @@ bool HTTPRequest::parseRequest(const std::string& raw)
 
 	// --- Validate Headers ---
 	std::string line;
-	// Read and validate HTTP headers line-by-line until the empty line that separates the body.
 	while (std::getline(stream, line))
 	{
 		if (isCRLF(line)) // detects header/body boundary
@@ -169,10 +168,9 @@ bool HTTPRequest::parseRequest(const std::string& raw)
 	return true;
 }
 
+// Checks if it's a valid HTTP method (syntax-wise)
 bool HTTPRequest::isValidMethod(const std::string strMethod) const
 {
-	// Check if this is a valid HTTP method syntax (not whether it's allowed by server config)
-	// Method validation against server/location config happens during request handling
 	HTTPMethod method = HTTPCommon::stringToMethod(strMethod);
 	return method != HTTPMethod::UNSUPPORTED;
 }

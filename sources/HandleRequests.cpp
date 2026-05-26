@@ -1,5 +1,19 @@
 #include "HTTPResponse.hpp"
 
+/**
+ * @brief Serves an HTML file with simple placeholder injection.
+ *
+ * @details
+ * - Loads an HTML file from disk
+ * - Validates file size to prevent oversized responses
+ * - Replaces a single placeholder with dynamic content
+ * - Builds HTTP response headers and body
+ *
+ * @param filePath Path to the HTML file
+ * @param placeholder String inside the file to replace
+ * @param inject Content to insert into the HTML
+ * @return true if the page was successfully served, false otherwise
+ */
 bool HTTPResponse::serveInjectedPage(const std::string& filePath, const std::string& placeholder, const std::string& inject)
 {
 	std::ifstream file(filePath.c_str());
@@ -26,9 +40,18 @@ bool HTTPResponse::serveInjectedPage(const std::string& filePath, const std::str
 	return true;
 }
 
+/**
+ * @brief Handles requests targeting directory paths.
+ *
+ * @details
+ * - Determines if an index file exists and serves it if available
+ * - Supports special dynamic pages (e.g. upload and images)
+ * - Applies access control checks for allowed methods
+ * - Falls back to autoindex generation if enabled
+ * - Returns appropriate HTTP errors if no valid response is possible
+ */
 void HTTPResponse::handleDirectoryRequest(const HTTPRequest& request, const LocationParse* loc, const std::string& filePath)
 {
-	std::cout << "in directory handling" << std::endl;
 	// --- Check cgi directory
 	if (loc->is_cgi)
 	{
@@ -261,10 +284,6 @@ void HTTPResponse::handlePOST(const HTTPRequest& request, const std::string& fil
 		
 		if (!allowedExtensions.count(ext))
 			ext = ".bin";
-		
-		// !!!!test, remove later
-		std::cout << "Extracted - multipart - filename: " << fileName << std::endl;
-		std::cout << "Extracted - multipart - extension: " << ext << std::endl;
 	}
 	
 	// --- Generate filename if not present ---

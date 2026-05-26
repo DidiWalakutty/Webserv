@@ -10,7 +10,7 @@
   * @details
   * - Scans the specified directory for image files with the following extensions: .png, .jp(e)g, .gif.
   * - Ignores "." and ".." entries, to avoid listing current and parent directory.
-  * - For each image, adds a thumbgnail wrapped in a clickable <a> link to the full image.
+  * - For each image, adds a thumbnail wrapped in a clickable <a> link to the full image.
   * - Returns the complete HTML page as a string, ready to be sent as the HTTP response body
   * - Automatically updates the gallery to the newly added images (no need to manually update the HTML).
   */
@@ -315,7 +315,6 @@ std::string HTTPResponse::findExtension(const HTTPRequest& request, const std::s
 
 bool HTTPResponse::checkGetAccess(const std::string& filePath)
 {
-	// Check if file path is empty
 	if (filePath.empty())
 	{
 		handleErrorPages(HTTPState::NotFound);
@@ -350,7 +349,6 @@ bool HTTPResponse::checkGetAccess(const std::string& filePath)
  */
 bool HTTPResponse::checkPostAccess(const std::string& filePath)
 {
-	// Check if file path is empty
 	if (filePath.empty())
 	{
 		handleErrorPages(HTTPState::NotFound);
@@ -390,21 +388,18 @@ bool HTTPResponse::checkPostAccess(const std::string& filePath)
  */
 bool HTTPResponse::checkCGIAccess(const std::string& filePath)
 {
-	// Check if file path is empty
 	if (filePath.empty())
 	{
 		handleErrorPages(HTTPState::NotFound);
 		return false;
 	}
 
-	// Check if file exists
 	if (access(filePath.c_str(), F_OK) != 0)
 	{
 		handleErrorPages(HTTPState::NotFound);
 		return false;
 	}
 
-	// Check if file is readable and executable
 	if (access(filePath.c_str(), R_OK | X_OK) != 0)
 	{
 		handleErrorPages(HTTPState::Forbidden);
@@ -425,7 +420,6 @@ bool HTTPResponse::checkCGIAccess(const std::string& filePath)
  */
 bool HTTPResponse::checkDeleteAccess(const std::string& filePath)
 {
-	// Check if path is empty
 	if (filePath.empty())
 	{
 		handleErrorPages(HTTPState::NotFound);
