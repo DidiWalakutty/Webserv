@@ -53,16 +53,8 @@ public:
 	HTTPResponse &operator=(const HTTPResponse &other) = default;
 	~HTTPResponse() = default;
 
-	/**
-	 * @brief Builds an HTTP response based on the status and request.
-	 * @param request The HTTP request object.
-	 * @return The constructed HTTPResponse string.
-	 */
-	std::string buildResponse(HTTPRequest request);
 
-	/**
-	 * @brief Builds
-	 */
+	std::string buildResponse(HTTPRequest request);
 	std::string buildErrorResponse(const HTTPRequest& request, HTTPState state);
 
 private:
@@ -91,50 +83,13 @@ private:
 	std::string findExtension(const HTTPRequest& request, const std::string& fileData);
 	HTTPState getRedirectState(int code) const;
 
-	/**
-	 * @brief Validates that the buffer is recieved totally.
-	 * @return True if the size mathces the expected size, false otherwise.
-	 */
 	bool validateSize(const std::string& buffer, const std::string& filePath);
-	
-	/**
-	 * @brief Prints the HTTP response details to the standard output.
-	 */
 	void printResponse() const;
-
-	/**
-	 * @brief Determines the Content-Type based on the file extension.
-	 * @param filePath The file path string.
-	 * @return The corresponding Content-Type string.
-	 */
 	std::string parseContentType(const std::string filePath);
-
-	/**
-	 * @brief Sets the current date in HTTP date format.
-	 * @return The formatted date string.
-	 */
 	std::string setDate();
 
-	/**
-	 * @brief Parses the response string based on the request, status message, and file path.
-	 * @param request The HTTP request object.
-	 * @param statusMessage The HTTP message corresponding to the status.
-	 * @param filePath The file path string.
-	 * @return The constructed HTTP response string.
-	 */
-	// std::string parseResponseStr(const HTTPRequest request, HTTPMessage statusMessage, std::string filePath);
-	// checking if update works better, because statusmessage isn't updated correctly
 	std::string parseResponseStr(const HTTPRequest request, const std::string filePath);
-
-	/**
-	 * @brief Clears the response body and resets related headers.
-	 */
 	void clearBody();
-
-	/**
-	 * @brief Updates the response based on the given HTTP state.
-	 * @param state The HTTP state to update the response for.
-	 */
 	void updateForHTTPState(HTTPState state);
 
 	/**
