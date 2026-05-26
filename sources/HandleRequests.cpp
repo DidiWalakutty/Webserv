@@ -457,9 +457,12 @@ void HTTPResponse::handleHEAD(const HTTPRequest& request, const std::string& fil
  */
 void HTTPResponse::handleErrorPages(HTTPState state)
 {
-	std::cout << "in HandleErrorPages with state: " << state << std::endl;
 	updateForHTTPState(state);
-	std::cout << "Error page is given: " << state << std::endl;
+	bool isError = (state >= HTTPState::BadRequest);
+	std::cout << "[HTTP] Generating "
+			  << (isError ? "error" : "success") 
+			  << " page for status code: " << HTTPCommon::HTTPStatusMap.at(state).code << std::endl;
+	
 	HTTPMessage statusMessage = HTTPCommon::HTTPStatusMap.at(state);
 	
 	// Path to error HTML pages
@@ -469,12 +472,12 @@ void HTTPResponse::handleErrorPages(HTTPState state)
 	{
 		resolvedErrorPath = *customErrorPath;
 		std::cout << "Custom error page was provided in config file for status code: " << statusMessage.code << std::endl;
-		std::cout << "Custom page path is: " << resolvedErrorPath << std::endl;
+		// std::cout << "Custom page path is: " << resolvedErrorPath << std::endl;
 	}
 	else
 	{
 		resolvedErrorPath = HTTPCommon::defaultErrorPagePath(statusMessage);
-		std::cout << "Status code: " << statusMessage.code << " is not listed in config file error pages." << std::endl;
+		// std::cout << "Status code: " << statusMessage.code << " is not listed in config file error pages." << std::endl;
 	}
 	std::ifstream file(resolvedErrorPath, std::ios::binary);
 
