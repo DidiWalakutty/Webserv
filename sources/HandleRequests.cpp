@@ -243,7 +243,10 @@ void HTTPResponse::handlePOST(const HTTPRequest& request, const std::string& fil
 		handleErrorPages(HTTPState::BadRequest);
 		return;
 	}
-	if (request.body.size() > serverParse.maxBodySize)
+	size_t effectiveMaxBody = (location && location->maxBodySize > 0)
+		? location->maxBodySize
+		: serverParse.maxBodySize;
+	if (request.body.size() > effectiveMaxBody)
 	{
 		handleErrorPages(HTTPState::RequestTooLarge);
 		return ;
