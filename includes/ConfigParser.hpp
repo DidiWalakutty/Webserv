@@ -46,6 +46,8 @@ class ConfigParser {
 		// --- Validation Data ---
 		bool validateServerParse(ServerParse& server);
 		bool stringToHTTPMethod(const std::string& method, HTTPMethod& outMethod);
+		bool cgiExecutableAllowed(const std::string& executable);
+		bool cgiExtensionAllowed(const std::string& executable);
 
 	public:
 		ConfigParser();

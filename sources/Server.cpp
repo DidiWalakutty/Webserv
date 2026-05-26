@@ -762,7 +762,7 @@ void Server::start()
 		{
 			std::vector<std::shared_ptr<CGI>> snapshot;
 			for (auto& kv : cgiProcesses)
-				snapshot.push_back(kv.second.cgi);
+				snapshot.push_back(kv.second);
 			for (auto& cgi : snapshot)
 				handleCGITimeOut(cgi);
 		}
@@ -882,10 +882,10 @@ bool Server::isCGIRequest(const HTTPRequest& request, const ServerParse& server,
 		return false;
 
 	std::string ext = filePath.substr(dot);
-	if (ext != location->cgi_extension)
-		return false;
-
-	return true;
+	for (size_t	i = 0; i < location->cgi_extension.size(); i++)
+		if (ext == location->cgi_extension[i])
+			return true;
+	return false;
 }
 
 void Server::queueResponse(int clientFD, const HTTPRequest& request, const std::string& responseStr)

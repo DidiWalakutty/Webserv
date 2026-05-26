@@ -33,30 +33,22 @@
  * as well as the @ref Server class for creating, configuring and managing a web server using Epoll.
  */
 
-struct CGIInfo
-{
-	std::shared_ptr<CGI> cgi;			// Pointer to CGI struct
-	bool pipeIsInput;					// true if pipeToChild (server -> CGI), false if pipeFromChild (CGI -> server)
-	int clientFD;						// which client this CGI belongs to
-};
-
 class Server
 {
 	private:
-		std::vector<ServerParse> _servers;			/**< @brief Parsed server blocks from config file */
-		std::map<int, CGIInfo> cgiProcesses;		/**< @brief Active CGI pipe FDs mapped to their CGI state and owning client. */
-
-		int epollFD = -1;							/**< @brief Epoll instance of the file descriptor */
-		std::vector<int> _listeningSockets;			/**< @brief Listening sockets (one per ServerParse) */
-		std::vector<int> _clients;					/**< @brief Connected client sockets. */
-		std::map<int, size_t> _clientToServer;		/**< @brief Tracks which server each client is connected to */
-		std::map<int, std::string> _clientBuffers;	/**< @brief Incomplete request buffers for each client FD. */
-		std::map<int, std::string> pendingWrites;	/**< @brief Full response data waiting to be sent, keyed by client FD. */
-		std::map<int, size_t> writeOffsets;			/**< @brief Bytes already sent for each pending write, keyed by client FD. */
-		std::map<int, bool> closeAfterWrite;		/**< @brief Whether to close the connection after the pending write completes. */
-		const int _maxEvents = 64; 					/**< @brief Maximum number of events to process per epoll_wait call. */
-		ssize_t _maxRequestSize = 1;				/**< @brief Maximum allowed size for incoming HTTP requests. */
-		std::vector<HTTPMethod> _allowedMethods;	/**< @brief Default allowed HTTP methods for the server */
+		std::vector<ServerParse> _servers;					/**< @brief Parsed server blocks from config file */
+		std::map<int, std::shared_ptr<CGI>> cgiProcesses;	/**< @brief Active CGI pipe FDs mapped to their CGI state and owning client. */
+		int epollFD = -1;									/**< @brief Epoll instance of the file descriptor */
+		std::vector<int> _listeningSockets;					/**< @brief Listening sockets (one per ServerParse) */
+		std::vector<int> _clients;							/**< @brief Connected client sockets. */
+		std::map<int, size_t> _clientToServer;				/**< @brief Tracks which server each client is connected to */
+		std::map<int, std::string> _clientBuffers;			/**< @brief Incomplete request buffers for each client FD. */
+		std::map<int, std::string> pendingWrites;			/**< @brief Full response data waiting to be sent, keyed by client FD. */
+		std::map<int, size_t> writeOffsets;					/**< @brief Bytes already sent for each pending write, keyed by client FD. */
+		std::map<int, bool> closeAfterWrite;				/**< @brief Whether to close the connection after the pending write completes. */
+		const int _maxEvents = 64; 							/**< @brief Maximum number of events to process per epoll_wait call. */
+		ssize_t _maxRequestSize = 1;						/**< @brief Maximum allowed size for incoming HTTP requests. */
+		std::vector<HTTPMethod> _allowedMethods;			/**< @brief Default allowed HTTP methods for the server */
 		
 		void createSockets();
 		void createEpoll();

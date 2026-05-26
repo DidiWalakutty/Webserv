@@ -12,16 +12,15 @@ static int						closeFd(int& fd);
 static std::vector<std::string>	buildArgV(const std::string& filePath, const LocationParse& location);
 static std::string				method2Str(HTTPMethod method);
 static std::string				protocol2Str(HTTPProtocolVersion version);
-static std::vector<std::string>	buildEnvP(const HTTPRequest& request, const ServerParse& server, const std::string& filePath, const LocationParse& location);
+static std::vector<std::string>	buildEnvP(const HTTPRequest& request, const ServerParse& server, const std::string& filePath);
 static std::vector<char*>		str2Ptr(std::vector<std::string>& str);
 static int						executeCGI(std::vector<std::string>& argV_str, std::vector<std::string>& envP_str);
 static int						nonblockFd(int fd);
 static int						updateStruct(std::shared_ptr<CGI> cgi, int fd_stdin, int fd_stdout, int clientFD, const HTTPRequest& request);
-static int						addProcess(std::shared_ptr<CGI> cgi, std::map<int, CGIInfo>& cgiProcesses, int clientFD);
+static int						addProcess(std::shared_ptr<CGI> cgi, std::map<int, std::shared_ptr<CGI>>& cgiProcesses);
 static int						addEpoll(std::shared_ptr<CGI> cgi, int epollFD);
-static void						removeCGIParent(std::shared_ptr<CGI> cgi, int pipe_p2c[2], int pipe_c2p[2], std::map<int, CGIInfo>& cgiProcesses, int epollFD);
+static void						removeCGIParent(std::shared_ptr<CGI> cgi, int pipe_p2c[2], int pipe_c2p[2], std::map<int, std::shared_ptr<CGI>>& cgiProcesses, int epollFD);
 static void						removeCGIChild(int pipe_p2c[2], int pipe_c2p[2]);
-
 static std::string				parseCGIHeaders(const std::string& rawHeaders, std::string& statusLine);
 
 
@@ -46,7 +45,7 @@ void	Server::startCGI(int clientFD, const HTTPRequest& request, const ServerPars
 
 		/* ***CHILD*** */
 		else if (cgi->pid == 0)
-			_exit(childCGI(request, server, filePath, location, pipe_p2c, pipe_c2p));
+			exit(childCGI(request, server, filePath, location, pipe_p2c, pipe_c2p));
 
 		/* ***PARENT*** */
 		/* CLOSE PIPES */
@@ -64,7 +63,7 @@ void	Server::startCGI(int clientFD, const HTTPRequest& request, const ServerPars
 			break;
 
 		/* ADD PROCESS */
-		if (addProcess(cgi, cgiProcesses, clientFD))
+		if (addProcess(cgi, cgiProcesses))
 			break;
 
 		/* ADD EPOLL */
@@ -80,13 +79,12 @@ void	Server::startCGI(int clientFD, const HTTPRequest& request, const ServerPars
 
 static int	childCGI(const HTTPRequest& request, const ServerParse& server, const std::string& filePath, const LocationParse& location, int pipe_p2c[2], int pipe_c2p[2])
 {
-	std::vector<std::string>	argV_str;
-	std::vector<std::string>	envP_str;
+	std::vector<std::string>	argV_str = {};
+	std::vector<std::string>	envP_str = {};
 
 	/* REDIRECT */
 	if (redirectPipe(pipe_p2c[0], STDIN_FILENO) ||
-		redirectPipe(pipe_c2p[1], STDOUT_FILENO) ||
-		redirectPipe(pipe_c2p[1], STDERR_FILENO))
+		redirectPipe(pipe_c2p[1], STDOUT_FILENO))
 		return (removeCGIChild(pipe_p2c, pipe_c2p), 1);
 
 	/* CLOSE PIPES */
@@ -107,8 +105,13 @@ static int	childCGI(const HTTPRequest& request, const ServerParse& server, const
 	if (argV_str.empty())
 		return (3);
 
+	// /* BUILD ARGV */
+	// argV_str = buildArgV(filePath, location);
+	// if (argV_str.empty())
+	// 	return (3);
+
 	/* BUILD ENVP */
-	envP_str = buildEnvP(request, server, absFilePath, location);
+	envP_str = buildEnvP(request, server, filePath);
 	if (envP_str.empty())
 		return (4);
 
@@ -135,10 +138,7 @@ static int	childCGI(const HTTPRequest& request, const ServerParse& server, const
 static int	createPipe(int fds[2])
 {
 	if (pipe(fds) == -1)
-	{
-		std::cerr << "pipe(): " << strerror(errno) << std::endl;
-		return (1);
-	}
+		return (std::cerr << "pipe(): " << strerror(errno) << std::endl, 1);
 	return (0);
 }
 
@@ -158,10 +158,7 @@ static pid_t	forkCGI()
 static int	redirectPipe(int oldfd, int newfd)
 {
 	if (dup2(oldfd, newfd) == -1)
-	{
-		std::cerr << "dup2(): " << strerror(errno) << std::endl;
-		return (1);
-	}
+		return (std::cerr << "dup2(): " << strerror(errno) << std::endl, 1);
 	return (0);
 }
 
@@ -172,10 +169,7 @@ static int	closeFd(int& fd)
 	if (fd == -1)
 		return (0);
 	if (close(fd) == -1)
-	{
-		std::cerr << "close(): " << strerror(errno) << std::endl;
-		return (1);
-	}
+		return (std::cerr << "close(): " << strerror(errno) << std::endl, 1);
 	fd = -1;
 	return (0);
 }
@@ -184,18 +178,13 @@ static int	closeFd(int& fd)
 
 static std::vector<std::string>	buildArgV(const std::string& filePath, const LocationParse& location)
 {
-	std::vector<std::string>	argV_str;
+	std::vector<std::string>	argV_str = {};
+	size_t						dot = filePath.find_last_of('.');
+	std::string					ext = filePath.substr(dot);
 
-	if (!location.cgi_executable.empty())
-		argV_str.push_back(location.cgi_executable);
-	else if (location.cgi_extension == ".py")
-		argV_str.push_back("/usr/bin/python3");
-	else if (location.cgi_extension == ".sh")
-		argV_str.push_back("/usr/bin/bash");
-	else if (location.cgi_extension == ".php")
-		argV_str.push_back("/usr/bin/php");
-	else
-		return (argV_str);
+	for (size_t	i = 0; i < location.cgi_extension.size(); i++)
+		if (ext == location.cgi_extension[i])
+			argV_str.push_back(location.cgi_executable[i]);
 	argV_str.push_back(filePath);
 	return (argV_str);
 }
@@ -244,15 +233,16 @@ static std::string	protocol2Str(HTTPProtocolVersion version)
 	}
 }
 
-static std::vector<std::string>	buildEnvP(const HTTPRequest& request, const ServerParse& server, const std::string& filePath, const LocationParse& location)
+
+
+static std::vector<std::string>	buildEnvP(const HTTPRequest& request, const ServerParse& server, const std::string& filePath)
 {
-	std::vector<std::string>	envP_str;
+	std::vector<std::string>	envP_str = {};
+	size_t						dot = filePath.find_last_of('.');
+	std::string					ext = filePath.substr(dot);
 
 	if (request.method == HTTPMethod::UNSUPPORTED)
-	{
-		std::cerr << "Unsupported method" << std::endl;
-		return {};
-	}
+		return (std::cerr << "Unsupported method" << std::endl, envP_str);
 	envP_str.push_back("GATEWAY_INTERFACE=CGI/1.1");
 	envP_str.push_back("REQUEST_METHOD=" + method2Str(request.method));
 	envP_str.push_back("SCRIPT_NAME=" + request.resourcePath);
@@ -267,10 +257,10 @@ static std::vector<std::string>	buildEnvP(const HTTPRequest& request, const Serv
 		request.method == HTTPMethod::PUT ||
 		request.method == HTTPMethod::PATCH)
 	{
-		envP_str.push_back("CONTENT_LENGTH=" + (request.headers.count("CONTENT-LENGTH") ? request.headers.at("CONTENT-LENGTH") : "0"));
-		envP_str.push_back("CONTENT_TYPE=" + (request.headers.count("CONTENT-TYPE") ? request.headers.at("CONTENT-TYPE") : ""));
+		envP_str.push_back("CONTENT_LENGTH=" + (request.headers.count("Content-Length") ? request.headers.at("Content-Length") : "0"));
+		envP_str.push_back("CONTENT_TYPE=" + (request.headers.count("Content-Type") ? request.headers.at("Content-Type") : ""));
 	}
-	if (location.cgi_extension == ".php")
+	if (ext == ".php")
 		envP_str.push_back("REDIRECT_STATUS=200");
 	return (envP_str);
 }
@@ -295,10 +285,7 @@ static int	executeCGI(std::vector<std::string>& argV_str, std::vector<std::strin
 	std::vector<char*>	envP = str2Ptr(envP_str);
 
 	if (execve(argV[0], argV.data(), envP.data()) == -1)
-	{
-		std::cerr << "execve(): " << strerror(errno) << std::endl;
-		return (1);
-	}
+		return (std::cerr << "execve(): " << strerror(errno) << std::endl, 1);
 	return (0);
 }
 
@@ -310,26 +297,14 @@ static int	nonblockFd(int fd)
 
 	flags = fcntl(fd, F_GETFL, 0);
 	if (flags == -1)
-	{
-		std::cerr << "fcntl(F_GETFL): " << strerror(errno) << std::endl;
-		return (1);
-	}
+		return (std::cerr << "fcntl(F_GETFL): " << strerror(errno) << std::endl, 1);
 	if (fcntl(fd, F_SETFL, flags | O_NONBLOCK) == -1)
-	{
-		std::cerr << "fcntl(F_SETFL): " << strerror(errno) << std::endl;
-		return (1);
-	}
+		return (std::cerr << "fcntl(F_SETFL): " << strerror(errno) << std::endl, 1);
 	flags = fcntl(fd, F_GETFD, 0);
 	if (flags == -1)
-	{
-		std::cerr << "fcntl(F_GETFD): " << strerror(errno) << std::endl;
-		return (1);
-	}
+		return (std::cerr << "fcntl(F_GETFD): " << strerror(errno) << std::endl, 1);
 	if (fcntl(fd, F_SETFD, flags | FD_CLOEXEC) == -1)
-	{
-		std::cerr << "fcntl(F_SETFD): " << strerror(errno) << std::endl;
-		return (1);
-	}
+		return (std::cerr << "fcntl(F_SETFD): " << strerror(errno) << std::endl, 1);
 	return (0);
 }
 
@@ -355,32 +330,22 @@ static int	updateStruct(std::shared_ptr<CGI> cgi, int fd_stdin, int fd_stdout, i
 		closeFd(cgi->fd_stdin);
 	cgi->start_time = time(NULL);
 	if (cgi->start_time == -1)
-	{
-		std::cerr << "time(NULL): " << strerror(errno) << std::endl;
-		return (1);
-	}
+		return (std::cerr << "time(NULL): " << strerror(errno) << std::endl, 1);
 	return (0);
 }
 
 
 
-static int	addProcess(std::shared_ptr<CGI> cgi, std::map<int, CGIInfo>& cgiProcesses, int clientFD)
+static int	addProcess(std::shared_ptr<CGI> cgi, std::map<int, std::shared_ptr<CGI>>& cgiProcesses)
 {
 	if (cgi->write_finished == false)
-	{
 		if (cgiProcesses.count(cgi->fd_stdin))
-		{
-			std::cerr << "FD_STDIN already tracked: " << cgi->fd_stdin << std::endl;
-			return (1);
-		}
-		cgiProcesses[cgi->fd_stdin] = CGIInfo{cgi, true, clientFD};
-	}
+			return (std::cerr << "FD_STDIN already tracked: " << cgi->fd_stdin << std::endl, 1);
 	if (cgiProcesses.count(cgi->fd_stdout))
-	{
-		std::cerr << "FD_STDOUT already tracked: " << cgi->fd_stdout << std::endl;
-		return (1);
-	}
-	cgiProcesses[cgi->fd_stdout] = CGIInfo{cgi, false, clientFD};
+		return (std::cerr << "FD_STDOUT already tracked: " << cgi->fd_stdout << std::endl, 1);
+	if (cgi->write_finished == false)
+		cgiProcesses[cgi->fd_stdin] = cgi;
+	cgiProcesses[cgi->fd_stdout] = cgi;
 	return (0);
 }
 
@@ -395,48 +360,32 @@ static int	addEpoll(std::shared_ptr<CGI> cgi, int epollFD)
 	{
 		evIn.events = EPOLLOUT | EPOLLERR | EPOLLHUP;
 		evIn.data.fd = cgi->fd_stdin;
-		if (epoll_ctl(epollFD, EPOLL_CTL_ADD, cgi->fd_stdin, &evIn) == -1 &&
-			errno != EEXIST)
-		{
-			std::cerr << "epoll_ctl(ADD): " << strerror(errno) << std::endl;
-			return (1);
-		}
+		if (epoll_ctl(epollFD, EPOLL_CTL_ADD, cgi->fd_stdin, &evIn) == -1 && errno != EEXIST)
+			return (std::cerr << "epoll_ctl(ADD): " << strerror(errno) << std::endl, 1);
 	}
 	evOut.events = EPOLLIN | EPOLLERR | EPOLLHUP;
 	evOut.data.fd = cgi->fd_stdout;
-	if (epoll_ctl(epollFD, EPOLL_CTL_ADD, cgi->fd_stdout, &evOut) == -1 &&
-		errno != EEXIST)
-	{
-		std::cerr << "epoll_ctl(ADD): " << strerror(errno) << std::endl;
-		return (1);
-	}
+	if (epoll_ctl(epollFD, EPOLL_CTL_ADD, cgi->fd_stdout, &evOut) == -1 && errno != EEXIST)
+		return (std::cerr << "epoll_ctl(ADD): " << strerror(errno) << std::endl, 1);
 	return (0);
 }
 
 
 
-static void	removeCGIParent(std::shared_ptr<CGI> cgi, int pipe_p2c[2], int pipe_c2p[2], std::map<int, CGIInfo>& cgiProcesses, int epollFD)
+static void	removeCGIParent(std::shared_ptr<CGI> cgi, int pipe_p2c[2], int pipe_c2p[2], std::map<int, std::shared_ptr<CGI>>& cgiProcesses, int epollFD)
 {
 	closeFd(pipe_p2c[0]);
 	if (pipe_p2c[1] != -1)
 	{
-		if (epoll_ctl(epollFD, EPOLL_CTL_DEL, pipe_p2c[1], NULL) == -1 &&
-			errno != ENOENT &&
-			errno != EBADF)
-		{
+		if (epoll_ctl(epollFD, EPOLL_CTL_DEL, pipe_p2c[1], NULL) == -1 && errno != ENOENT && errno != EBADF)
 			std::cerr << "epoll_ctl(DEL): " << strerror(errno) << std::endl;
-		}
 		cgiProcesses.erase(pipe_p2c[1]);
 		closeFd(pipe_p2c[1]);
 	}
 	if (pipe_c2p[0] != -1)
 	{
-		if (epoll_ctl(epollFD, EPOLL_CTL_DEL, pipe_c2p[0], NULL) == -1 &&
-			errno != ENOENT &&
-			errno != EBADF)
-		{
+		if (epoll_ctl(epollFD, EPOLL_CTL_DEL, pipe_c2p[0], NULL) == -1 && errno != ENOENT && errno != EBADF)
 			std::cerr << "epoll_ctl(DEL): " << strerror(errno) << std::endl;
-		}
 		cgiProcesses.erase(pipe_c2p[0]);
 		closeFd(pipe_c2p[0]);
 	}
@@ -466,27 +415,16 @@ static void	removeCGIChild(int pipe_p2c[2], int pipe_c2p[2])
 
 void	Server::handleCGIEvent(int fd, uint32_t events)
 {
-	std::map<int, CGIInfo>::iterator	it = cgiProcesses.find(fd);
+	std::map<int, std::shared_ptr<CGI>>::iterator	it = cgiProcesses.find(fd);
 	if (it == cgiProcesses.end())
-	{
-		epoll_ctl(epollFD, EPOLL_CTL_DEL, fd, NULL);
-		return;
-	}
-	std::shared_ptr<CGI>	cgi = it->second.cgi;
-	bool					pipeIsInput = it->second.pipeIsInput;
+		return (epoll_ctl(epollFD, EPOLL_CTL_DEL, fd, NULL), void());
+	std::shared_ptr<CGI>							cgi = it->second;
 
 	handleCGITimeOut(cgi);
 	// handleCGIError (called from timeout) erases entries from cgiProcesses,
 	// invalidating 'it'. Do not access 'it' after this point.
-	if (cgi->error)
-	{
-		handleCGIResponse(cgi);
-		return;
-	}
-	if (pipeIsInput)
-		handleCGIWrite(cgi, fd, events);
-	else
-		handleCGIRead(cgi, fd, events);
+	handleCGIWrite(cgi, fd, events);
+	handleCGIRead(cgi, fd, events);
 	handleCGIWait(cgi);
 	handleCGIResponse(cgi);
 }
@@ -498,10 +436,7 @@ void	Server::handleCGITimeOut(std::shared_ptr<CGI> cgi)
 	time_t	now = time(NULL);
 
 	if (now == (time_t)-1)
-	{
-		std::cerr << "time(NULL): " << strerror(errno) << std::endl;
-		return;
-	}
+		return (std::cerr << "time(NULL): " << strerror(errno) << std::endl, void());
 	if ((now - cgi->start_time) < TIMEOUT)
 		return;
 	cgi->time_out = true;
@@ -541,6 +476,35 @@ void	Server::handleCGIError(std::shared_ptr<CGI> cgi)
 
 
 
+// void	Server::handleCGIWrite(std::shared_ptr<CGI> cgi, int fd, uint32_t events)
+// {
+// 	ssize_t	ret;
+
+// 	if (fd != cgi->fd_stdin || cgi->error || cgi->write_finished)
+// 		return;
+// 	if (events & (EPOLLERR | EPOLLHUP))
+// 		return (handleCGIError(cgi));
+// 	if (!(events & EPOLLOUT))
+// 		return;
+// 	while (cgi->body_written < cgi->body_size)
+// 	{
+// 		ret = write(cgi->fd_stdin, cgi->body.c_str() + cgi->body_written, cgi->body_size - cgi->body_written);
+// 		if (ret > 0)
+// 		{
+// 			cgi->body_written += ret;
+// 			continue;
+// 		}
+// 		if (ret < 0)
+// 			return;
+// 	}
+// 	epoll_ctl(epollFD, EPOLL_CTL_DEL, cgi->fd_stdin, NULL);
+// 	cgiProcesses.erase(cgi->fd_stdin);
+// 	closeFd(cgi->fd_stdin);
+// 	cgi->write_finished = true;
+// }
+
+
+
 void	Server::handleCGIWrite(std::shared_ptr<CGI> cgi, int fd, uint32_t events)
 {
 	ssize_t	ret;
@@ -548,34 +512,60 @@ void	Server::handleCGIWrite(std::shared_ptr<CGI> cgi, int fd, uint32_t events)
 	if (fd != cgi->fd_stdin || cgi->error || cgi->write_finished)
 		return;
 	if (events & (EPOLLERR | EPOLLHUP))
-	{
-		handleCGIError(cgi);
-		return;
-	}
+		return (handleCGIError(cgi));
 	if (!(events & EPOLLOUT))
 		return;
 	if (cgi->body_written < cgi->body_size)
 	{
 		ret = write(cgi->fd_stdin, cgi->body.c_str() + cgi->body_written, cgi->body_size - cgi->body_written);
 		if (ret > 0)
-		{
 			cgi->body_written += ret;
-		}
-		else
-		{
-			handleCGIError(cgi);
-			return;
-		}
 	}
-	// Body fully written (or empty body) — send EOF to CGI process
-	if (cgi->body_written >= cgi->body_size)
+	else
 	{
+		// Body fully written (or empty body) — send EOF to CGI process
 		epoll_ctl(epollFD, EPOLL_CTL_DEL, cgi->fd_stdin, NULL);
 		cgiProcesses.erase(cgi->fd_stdin);
 		closeFd(cgi->fd_stdin);
 		cgi->write_finished = true;
 	}
 }
+
+
+
+// void	Server::handleCGIRead(std::shared_ptr<CGI> cgi, int fd, uint32_t events)
+// {
+// 	char	buf[65536];
+// 	ssize_t	ret;
+
+// 	if (fd != cgi->fd_stdout || cgi->error || cgi->read_finished)
+// 		return;
+// 	if (events & EPOLLERR)
+// 		return (handleCGIError(cgi));
+// 	if (!(events & (EPOLLIN | EPOLLHUP)))
+// 		return;
+// 	while (true)
+// 	{
+// 		ret = read(cgi->fd_stdout, buf, sizeof(buf));
+// 		if (ret > 0)
+// 		{
+// 			cgi->output.append(buf, static_cast<size_t>(ret));
+// 			continue;
+// 		}
+// 		if (ret == 0)
+// 		{
+// 			epoll_ctl(epollFD, EPOLL_CTL_DEL, cgi->fd_stdout, NULL);
+// 			cgiProcesses.erase(cgi->fd_stdout);
+// 			closeFd(cgi->fd_stdout);
+// 			cgi->read_finished = true;
+// 			return;
+// 		}
+// 		if (ret < 0)
+// 			return;
+// 	}
+// }
+
+
 
 void	Server::handleCGIRead(std::shared_ptr<CGI> cgi, int fd, uint32_t events)
 {
@@ -585,17 +575,12 @@ void	Server::handleCGIRead(std::shared_ptr<CGI> cgi, int fd, uint32_t events)
 	if (fd != cgi->fd_stdout || cgi->error || cgi->read_finished)
 		return;
 	if (events & EPOLLERR)
-	{
-		handleCGIError(cgi);
-		return;
-	}
+		return (handleCGIError(cgi));
 	if (!(events & (EPOLLIN | EPOLLHUP)))
 		return;
 	ret = read(cgi->fd_stdout, buf, sizeof(buf));
 	if (ret > 0)
-	{
 		cgi->output.append(buf, static_cast<size_t>(ret));
-	}
 	else if (ret == 0)
 	{
 		epoll_ctl(epollFD, EPOLL_CTL_DEL, cgi->fd_stdout, NULL);
@@ -603,11 +588,9 @@ void	Server::handleCGIRead(std::shared_ptr<CGI> cgi, int fd, uint32_t events)
 		closeFd(cgi->fd_stdout);
 		cgi->read_finished = true;
 	}
-	else
-	{
-		handleCGIError(cgi);
-	}
 }
+
+
 
 void	Server::handleCGIWait(std::shared_ptr<CGI> cgi)
 {
@@ -730,6 +713,7 @@ void	Server::handleCGIResponse(std::shared_ptr<CGI> cgi)
 
 	if (cgi->error || !cgi->write_finished || !cgi->read_finished || !cgi->cgi_finished)
 		return;
+	// CHECK THESE!
 	if (cgi->output.empty())
 	{
 		std::cerr << "CGI produced no output — sending 502." << std::endl;
@@ -741,6 +725,7 @@ void	Server::handleCGIResponse(std::shared_ptr<CGI> cgi)
 		split = cgi->output.find("\n\n");
 		boundaryLen = 2;
 	}
+	// CHECK THESE!
 	if (split == std::string::npos)
 	{
 		std::cerr << "CGI produced no valid header block — sending 502." << std::endl;
@@ -777,5 +762,4 @@ void	Server::queueCGIResponse(int clientFD, const std::string& response)
 		removeClient(clientFD);
 	}
 }
-
 

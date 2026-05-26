@@ -24,8 +24,8 @@ struct LocationParse
 	bool autoIndex = false; 	/* Enable or disable directory listing */
 	bool is_cgi = false;   		/* True if this location executes CGI scripts */
 	
-	std::string cgi_extension; 	/* If is_cgi is true, the file extension that triggers CGI execution (e.g., .py) */
-	std::string cgi_executable; /* needed???CGI executable name to call for CGI requests */
+	std::vector<std::string> cgi_extension;		/* If is_cgi is true, the file extension that triggers CGI execution (e.g., .py) */
+	std::vector<std::string> cgi_executable;	/* CGI executable name to call for CGI requests */
 	
 	size_t maxBodySize = 0;		/* Max allowed body size in bytes for this location */
 	Redirect redirect;							/* Optional redirect for this location (status code + target URL)*/

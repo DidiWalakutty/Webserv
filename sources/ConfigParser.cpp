@@ -370,7 +370,8 @@ LocationParse ConfigParser::parseLocationBlock(const std::vector<std::string>& f
 	location.autoIndex = false;
 	location.is_cgi = false;
 	location.maxBodySize = 0;
-	location.cgi_executable = "";
+	location.cgi_executable = {};
+	location.cgi_extension = {};
 
 	// --- Validate location header format ---
 	location.path = line.substr(pathStart, bracePos - pathStart);
@@ -506,11 +507,27 @@ LocationParse ConfigParser::parseLocationBlock(const std::vector<std::string>& f
 			}
 			else if (key == "cgi_executable")
 			{
-				location.cgi_executable = value;
+				location.cgi_executable.clear();
+				std::vector<std::string> tokens = splitByWhitespace(value);
+				for (size_t i = 0; i < tokens.size(); ++i)
+				{
+					if (cgiExecutableAllowed(tokens[i]))
+						location.cgi_executable.push_back(tokens[i]);
+					else
+						std::cerr << "Warning: Invalid Executable: '" << tokens[i] << "' in location block at line: " << currentLine + 1 << std::endl;					
+				}
 			}
 			else if (key == "cgi_extension")
 			{
-				location.cgi_extension = value;
+				location.cgi_extension.clear();
+				std::vector<std::string> tokens = splitByWhitespace(value);
+				for (size_t i = 0; i < tokens.size(); ++i)
+				{
+					if (cgiExtensionAllowed(tokens[i]))
+						location.cgi_extension.push_back(tokens[i]);
+					else
+						std::cerr << "Warning: Invalid Extension: '" << tokens[i] << "' in location block at line: " << currentLine + 1 << std::endl;					
+				}
 			}
 			else if (key == "max_body_size")
 			{
@@ -554,4 +571,18 @@ ssize_t ConfigParser::getMaxBodySize(const ServerParse& server)
 		return server.maxBodySize;
 	else
 		return MAX_CONFIG_BODY_SIZE; // default max body size if not set in config
+}
+
+bool ConfigParser::cgiExecutableAllowed(const std::string& executable)
+{
+	if (executable == "/opt/pyenv/shims/python3" || executable == "/usr/bin/bash" || executable == "/usr/bin/php-cgi")
+		return true;
+	return false;
+}
+
+bool ConfigParser::cgiExtensionAllowed(const std::string& extension)
+{
+	if (extension == ".py" || extension == ".sh" || extension == ".php")
+		return true;
+	return false;
 }
