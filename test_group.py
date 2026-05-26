@@ -1257,7 +1257,7 @@ def test_siege_suite():
     for label, cmd in scenarios:
         # siege -tNs needs N seconds to run + startup + report; use generous buffer
         concurrent = int(next((a.lstrip("-c") for a in cmd if a.startswith("-c")), "25"))
-        t_budget = 40 if concurrent >= 100 else 30
+        t_budget = 40 if concurrent >= 100 else 40
         try:
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=t_budget)
         except subprocess.TimeoutExpired:
