@@ -16,9 +16,9 @@
 #include <cerrno>
 
 volatile sig_atomic_t Server::running = 0;
-const int MAX_CLIENTS = 1024;
-const size_t READ_BUFFER_SIZE = 65536;  // 64KB per read
-const int INDEFINITE_BLOCKING = -1;
+const int MAX_CLIENTS = 1024;			// max connected clients allowed
+const size_t READ_BUFFER_SIZE = 65536;  // 64KB per read socket buffer
+const int INDEFINITE_BLOCKING = -1;		// epoll_wait blocking mode (wait indefinitely for events)
 std::ostream& ERR = std::cerr;
 
 using Utils::logColored;
@@ -26,12 +26,15 @@ using Utils::strContains;
 
 /**
  * @brief Construct the server engine with parsed configs.
+ * 
+ * Sets up signal handling, creates listening sockets and initializes epoll.
+ * If any step fails, logs the error and shuts down cleanly.
  */
 Server::Server(const std::vector<ServerParse>& parsedServerConfigInfos)
 	: _servers(parsedServerConfigInfos), epollFD(-1)
 {
-	signal(SIGINT, Utils::interruptHandler);
-	signal(SIGPIPE, SIG_IGN);
+	signal(SIGINT, Utils::interruptHandler);	// graceful shutdown on Ctrl+C
+	signal(SIGPIPE, SIG_IGN);					// ignore broken pipe writes
 
 	try
 	{
@@ -58,7 +61,10 @@ Server::~Server()
 
 
 /**
- * @brief Creates and configures the server's listening sockets.
+ * @brief Creates listening sockets for all configured server blocks.
+ * 
+ * Each server config results in a non-blocking TCP socket bound to host:port.
+ * Sockets are set to non-blocking mode.
  */
 void Server::createSockets()
 {
@@ -121,7 +127,7 @@ void Server::createSockets()
 }
 
 /**
- * @brief Set the maximum allowed request size.
+ * @brief Sets maximum allowed request size.
  */
 void Server::setMaxRequestSize(size_t size)
 {
@@ -130,6 +136,8 @@ void Server::setMaxRequestSize(size_t size)
 
 /**
  * @brief Create the epoll instance and register listening sockets.
+ * 
+ * epoll is used as the main event loop mecanism for I/O readiness.
  */
 void Server::createEpoll()
 {
@@ -148,7 +156,7 @@ void Server::createEpoll()
 	for (const int &socketFD : _listeningSockets)
 	{
 		epoll_event event{};
-		event.events = EPOLLIN;
+		event.events = EPOLLIN;		// listen for incoming connections (read events) on the listening socket
 		event.data.fd = socketFD;
 
 		if (epoll_ctl(epollFD, EPOLL_CTL_ADD, socketFD, &event) < 0)
@@ -160,7 +168,7 @@ void Server::createEpoll()
 }
 
 /**
- * @brief Return the server's allowed HTTP methods.
+ * @brief Return server-configured allowed HTTP methods.
  */
 std::vector<HTTPMethod> Server::getAllowedMethods() const
 {
@@ -168,7 +176,7 @@ std::vector<HTTPMethod> Server::getAllowedMethods() const
 }
 
 /**
- * @brief Close and clear all listening sockets.
+ * @brief Close and clear all listening sockets safely. 
  */
 void Server::cleanSockets()
 {
@@ -191,7 +199,7 @@ void Server::cleanSockets()
 }
 
 /**
- * @brief Close the epoll instance and any tracked client sockets.
+ * @brief Closes epoll instance and any tracked client sockets.
  */
 void Server::cleanEpoll()
 {
@@ -222,7 +230,7 @@ void Server::cleanEpoll()
 }
 
 /**
- * @brief Shut down the server and release all owned file descriptors.
+ * @brief Fully shut down server and release all owned file descriptors.
  */
 void Server::shutDown()
 {
@@ -231,7 +239,7 @@ void Server::shutDown()
 }
 
 /**
- * @brief Configure a file descriptor for non-blocking I/O.
+ * @brief Set a file descriptor to non-blocking mode for I/O.
  */
 void Server::setNonBlocking(const int &FD)
 {
@@ -264,7 +272,9 @@ bool Server::isListeningSocket(const int &FD)
 }
 
 /**
- * @brief Accept new client connections and register them in epoll.
+ * @brief Accepts all pending client connectionson a listening socket.
+ * 
+ * Each accepted client is added to epoll for read events.
  */
 void Server::addClient(const epoll_event &event)
 {
@@ -300,7 +310,7 @@ void Server::addClient(const epoll_event &event)
 			}
 		}
 
-		// The new event for what we want epoll to watch for this new client.
+		// register client in epoll for reading
 		epoll_event newClientEvent{};
 		newClientEvent.events = EPOLLIN;
 		newClientEvent.data.fd = clientFD;
@@ -314,7 +324,9 @@ void Server::addClient(const epoll_event &event)
 }
 
 /**
- * @brief Remove a client and clean up all per-client state.
+ * @brief Removes a client and cleans up all per-client state.
+ * 
+ * Also clears buffers, pending writes and mappings.
  */
 void Server::removeClient(const int &clientFD)
 {
@@ -353,6 +365,14 @@ void Server::removeClient(const int &clientFD)
 	logColored("Removed FD: " + std::to_string(clientFD), CYAN);
 }
 
+/**
+ * @brief Finds which configured server instance is responsible for a client FD.
+ * 
+ * @details
+ * - Each accepted client is mapped to the listening socket it came from.
+ * - Allows us to retrieve the correct ServerParse (host, part config).
+ * - For request routing and error resolution.
+ */
 const ServerParse* Server::findServerForClient(int clientFD) const
 {
 	std::map<int, size_t>::const_iterator it = _clientToServer.find(clientFD);
@@ -361,6 +381,12 @@ const ServerParse* Server::findServerForClient(int clientFD) const
 	return &_servers[it->second];
 }
 
+/**
+ * @brief Re-registers/re-enables EPOLLIN monitoring for a client socket.
+ * 
+ * @details After a write phase, we switch the socket back to read mode
+ * so the server can continue handling new requests.
+ */
 bool Server::setClientReadEvents(int clientFD)
 {
 	epoll_event modEv{};
@@ -374,6 +400,14 @@ bool Server::setClientReadEvents(int clientFD)
 	return true;
 }
 
+/**
+ * @brief Converts a request parsing exception into an HTTP error response.
+ *
+ * @details
+ * Maps parser errors (e.g. malformed headers, missing Content-Length)
+ * into appropriate HTTP states, builds an error page (custom or default),
+ * and queues a close-delimited response.
+ */
 bool Server::handleRequestParseError(int clientFD, const HTTPRequest::HTTPRequestException& exc)
 {
 	// Map parser errors to the most appropriate HTTP status.
@@ -436,9 +470,18 @@ bool Server::handleRequestParseError(int clientFD, const HTTPRequest::HTTPReques
 	return true;
 }
 
+/**
+ * @brief Handles a readable event from a client socket.
+ *
+ * @details
+ * 1. Reads buffered request data
+ * 2. Parses HTTP request
+ * 3. Routes to CGI or normal handler
+ * 4. Queues response for async write
+ */
 void Server::handleClientReadEvent(int clientFD)
 {
-	// 4.1) --- Read Request ---
+	// 1) --- Read Request ---
 	std::vector<char> data = readClient(clientFD);
 	if (data.size() == 0)
 	{
@@ -458,7 +501,7 @@ void Server::handleClientReadEvent(int clientFD)
 		" (data size: " + std::to_string(data.size()) + " bytes)",
 		BOLDYELLOW);
 
-	// 4.2) --- Parse Request ---
+	// 2) --- Parse Request ---
 	HTTPRequest request(this);
 	try
 	{
@@ -472,7 +515,8 @@ void Server::handleClientReadEvent(int clientFD)
 		return;
 	}
 
-	// 4.3) --- Find corresponding server config for this client FD ---
+	// 3) --- Routes to CGI or normal handler ---
+	// Find corresponding server config for this client FD
 	const ServerParse* serverPtr = findServerForClient(clientFD);
 	if (!serverPtr)
 	{
@@ -481,7 +525,7 @@ void Server::handleClientReadEvent(int clientFD)
 		return;
 	}
 
-	// 4.4) --- CGI routing ---
+	// 4) --- CGI routing ---
 	std::string filePath;
 	const LocationParse* loc = NULL;
 	if (isCGIRequest(request, *serverPtr, filePath, loc))
@@ -502,12 +546,12 @@ void Server::handleClientReadEvent(int clientFD)
 		return;
 	}
 
-	// 4.5) --- Normal non-CGI Response ---
+	// 5) --- Normal non-CGI Response ---
 	HTTPResponse response(*serverPtr);
 	std::string responseStr = response.buildResponse(request);
 	queueResponse(clientFD, request, responseStr);
 
-	// 4.6) --- If client wants to close, mark close-after-write ---
+	// 6) --- If client wants to close, mark close-after-write ---
 	if (request.headers.count("Connection") && request.headers["Connection"] == "close")
 	{
 		closeAfterWrite[clientFD] = true;
@@ -515,6 +559,15 @@ void Server::handleClientReadEvent(int clientFD)
 	}
 }
 
+/**
+ * @brief Handles EPOLLOUT/writable event for a client socket.
+ *
+ * @details
+ * - Sends queued response data in a non-blocking way using partial writes.
+ * - Tracks write progress per client and either:
+ *   - swtiches back to EPOLLIN for keep alive-connections, or
+ *   - closes the socket if the response is finished and marked for closure.
+ */
 void Server::handleClientWriteEvent(int clientFD)
 { 
 	if (!pendingWrites.count(clientFD)) 
@@ -558,7 +611,16 @@ void Server::handleClientWriteEvent(int clientFD)
 	} 
 }
 
-// Returns -1 if Content-Length is absent, -2 if malformed, otherwise the parsed value.
+/**
+ * @brief Parses the Content-Length header from an HTTP request.
+ *
+ *  - -1 → Content-Length header not present
+ *  - -2 → malformed Content-Length value
+ *  - >=0 → valid parsed Content-Length
+ *
+ * Used during request accumulation to determine whether the full HTTP body
+ * has been received before parsing the request.
+ */
 static ssize_t parseContentLength(const std::string& raw, size_t headersEnd)
 {
 	std::string headerBlock = raw.substr(0, headersEnd);
@@ -587,7 +649,15 @@ static ssize_t parseContentLength(const std::string& raw, size_t headersEnd)
 }
 
 /**
- * @brief Accumulate request bytes until a complete HTTP request is available.
+ * @brief Reads and accumulates raw bytes from a client socket until a full HTTP request is available.
+ *
+ * @details
+ * This function implements request reassembly for non-blocking sockets.
+ * Data is stored per-client until:
+ * - the full HTTP headers are received, and
+ * - if present, the full request body (based on Content-Length) is also received.
+ *
+ * Once a complete request is available, it is returned and the internal buffer is cleared.
  */
 std::vector<char> Server::readClient(const int &FD)
 {
@@ -643,7 +713,18 @@ std::vector<char> Server::readClient(const int &FD)
 }
 
 /**
- * @brief Main event loop for the server.
+ * @brief Main event loop of the server.
+ *
+ * @details
+ * Uses epoll to handle all I/O in a single-threaded event-driven loop.
+ * The server reacts to:
+ * - new connections (listening sockets)
+ * - client reads (EPOLLIN)
+ * - client writes (EPOLLOUT)
+ * - CGI pipe events
+ * - socket errors/disconnections
+ *
+ * The loop blocks on epoll_wait and processes events as they arrive.
  */
 void Server::start()
 {
