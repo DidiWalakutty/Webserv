@@ -171,6 +171,10 @@ void HTTPResponse::handleGET(const HTTPRequest& request, const std::string& file
 			return;
 		}
 	}
+	
+	// --- Regular file request ---
+	if (!checkGetAccess(filePath))
+	return;
 
 	// --- Handle directory requests separately ---
 	if (request.resourcePath == loc->path || request.resourcePath == loc->path + "/")
@@ -178,10 +182,6 @@ void HTTPResponse::handleGET(const HTTPRequest& request, const std::string& file
 		handleDirectoryRequest(request, loc, filePath);
 		return;
 	}
-
-	// --- Regular file request ---
-	if (!checkGetAccess(filePath))
-	return;
 	
 	std::ifstream file(filePath, std::ios::binary); // Treats the file as binary.
 	if (!file.is_open())
