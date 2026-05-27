@@ -61,8 +61,7 @@ void HTTPResponse::handleDirectoryRequest(const HTTPRequest& request, const Loca
 
 	// --- Check if index file exists ---
 	bool indexExists = !filePath.empty() 
-						&& access(filePath.c_str(), F_OK) == 0
-						&& access(filePath.c_str(), R_OK) == 0;
+						&& access(filePath.c_str(), F_OK) == 0;
 
 	if (indexExists)
 	{
