@@ -1,14 +1,10 @@
 #include "Utils.hpp"
 #include "Server.hpp"
 
-#include <algorithm>
-#include <cctype>
 #include <cerrno>
 #include <cstring>
 #include <fcntl.h>
 #include <iostream>
-#include <sstream>
-#include <sys/epoll.h>
 #include <unistd.h>
 
 namespace Utils
@@ -16,36 +12,6 @@ namespace Utils
 	bool strContains(const std::string& text, const char* needle)
 	{
 		return text.find(needle) != std::string::npos;
-	}
-
-	ssize_t parseContentLength(const std::string& raw, size_t headersEnd)
-	{
-		std::string headerBlock = raw.substr(0, headersEnd);
-		std::transform(headerBlock.begin(), headerBlock.end(), headerBlock.begin(), ::tolower);
-
-		size_t pos = headerBlock.find("content-length:");
-		if (pos == std::string::npos)
-			return -1;
-
-		pos += 15;
-		while (pos < raw.size() && (raw[pos] == ' ' || raw[pos] == '\t'))
-			pos++;
-
-		size_t end = pos;
-		while (end < raw.size() && std::isdigit(static_cast<unsigned char>(raw[end])))
-			end++;
-
-		if (end == pos)
-			return -2;
-
-		try
-		{
-			return std::stoll(raw.substr(pos, end - pos));
-		}
-		catch (...)
-		{
-			return -2;
-		}
 	}
 
 	int createPipe(int fds[2])
@@ -111,46 +77,6 @@ namespace Utils
 		if (fcntl(fd, F_SETFD, flags | FD_CLOEXEC) == -1)
 			return (std::cerr << "fcntl(F_SETFD): " << strerror(errno) << std::endl, 1);
 		return 0;
-	}
-
-	std::string parseCGIHeaders(const std::string& rawHeaders, std::string& statusLine)
-	{
-		std::istringstream stream(rawHeaders);
-		std::string line;
-		std::string headers;
-		bool hasContentType = false;
-		while (std::getline(stream, line))
-		{
-			if (!line.empty() && line.back() == '\r')
-				line.pop_back();
-			if (line.empty())
-				continue;
-			std::string lower(line);
-			std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c){ return std::tolower(c); });
-			if (lower.compare(0, 7, "status:") == 0)
-			{
-				statusLine = line.substr(7);
-				size_t start = statusLine.find_first_not_of(' ');
-				if (start == std::string::npos)
-					statusLine = "200 OK";
-				else
-					statusLine.erase(0, start);
-				if (statusLine.size() < 3 || !std::isdigit(static_cast<unsigned char>(statusLine[0])) || !std::isdigit(static_cast<unsigned char>(statusLine[1])) || !std::isdigit(static_cast<unsigned char>(statusLine[2])) || (statusLine.size() > 3 && statusLine[3] != ' '))
-					statusLine = "502 Bad Gateway";
-			}
-			else if (lower.compare(0, 13, "content-type:") == 0)
-			{
-				hasContentType = true;
-				headers += line + "\r\n";
-			}
-			else if (lower.compare(0, 15, "content-length:") != 0)
-			{
-				headers += line + "\r\n";
-			}
-		}
-		if (!hasContentType)
-			headers += "Content-Type: text/html\r\n";
-		return headers;
 	}
 
 	void logColored(std::ostream& out, const std::string& msg, const char* color)

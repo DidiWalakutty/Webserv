@@ -114,7 +114,7 @@ std::string ServerParse::joinPaths(const std::string& root, const std::string& u
  * 
  * Example: "/upload/My%20File.txt" -> "/upload/My File.txt"
  */
-std::string urlDecode(const std::string& str)
+std::string ServerParse::urlDecode(const std::string& str) const
 {
 	std::string result;
 	for (size_t i = 0; i < str.length(); i++)

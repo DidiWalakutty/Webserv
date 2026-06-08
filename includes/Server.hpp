@@ -8,7 +8,7 @@
 #include "HTTPResponse.hpp"
 #include "HTTPCommon.hpp"
 #include "HTTPRequest.hpp"
-#include "Config.hpp"
+#include "ServerParse.hpp"
 #include "CGIEngine.hpp"
 
 // Reset
@@ -66,6 +66,7 @@ class Server
 		bool handleRequestParseError(int clientFD, const HTTPRequest::HTTPRequestException& exc);
 		void handleClientReadEvent(int clientFD);
 		void handleClientWriteEvent(int clientFD);
+		ssize_t parseContentLength(const std::string& raw, size_t headersEnd) const;
 		
 	public:
 		static volatile sig_atomic_t running; /**< @brief Describes if the server should close or keep running. */

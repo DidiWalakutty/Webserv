@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Config.hpp"
+#include "ServerParse.hpp"
 #include <sys/stat.h>
 #include <string>
 #include <vector>
@@ -48,6 +48,19 @@ class ConfigParser {
 		bool stringToHTTPMethod(const std::string& method, HTTPMethod& outMethod);
 		bool cgiExecutableAllowed(const std::string& executable);
 		bool cgiExtensionAllowed(const std::string& executable);
+		bool isValidServerName(const std::string& name) const;
+		bool isValidIPv4(const std::string& ip) const;
+		bool isValidHost(const std::string& host) const;
+		bool isValidLocationPath(const std::string& path) const;
+		bool isValidRedirectTarget(const std::string& path) const;
+		bool isValidErrorPages(const std::map<int, std::string>& errorPages) const;
+		bool isValidRoot(const std::string& root) const;
+		bool isValidIndex(const std::string& name) const;
+		bool validateMethodsAndBools(const LocationParse& loc) const;
+		bool validatePathsAndMethods(const ServerParse& server) const;
+		bool duplicateLocations(const ServerParse& server) const;
+		void print_methods(const std::vector<HTTPMethod>& methods) const;
+		void print_location(const LocationParse& loc) const;
 
 	public:
 		ConfigParser();

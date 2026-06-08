@@ -1,5 +1,5 @@
 #include "Server.hpp"
-#include "Config.hpp"
+#include "ServerParse.hpp"
 #include "ConfigParser.hpp"
 #include "Utils.hpp"
 
@@ -408,6 +408,36 @@ bool Server::setClientReadEvents(int clientFD)
 	return true;
 }
 
+ssize_t Server::parseContentLength(const std::string& raw, size_t headersEnd) const
+{
+	std::string headerBlock = raw.substr(0, headersEnd);
+	std::transform(headerBlock.begin(), headerBlock.end(), headerBlock.begin(), ::tolower);
+
+	size_t pos = headerBlock.find("content-length:");
+	if (pos == std::string::npos)
+		return -1;
+
+	pos += 15;
+	while (pos < raw.size() && (raw[pos] == ' ' || raw[pos] == '\t'))
+		pos++;
+
+	size_t end = pos;
+	while (end < raw.size() && std::isdigit(static_cast<unsigned char>(raw[end])))
+		end++;
+
+	if (end == pos)
+		return -2;
+
+	try
+	{
+		return std::stoll(raw.substr(pos, end - pos));
+	}
+	catch (...)
+	{
+		return -2;
+	}
+}
+
 /**
  * @brief Converts a request parsing exception into an HTTP error response.
  *
@@ -662,7 +692,7 @@ std::vector<char> Server::readClient(const int &FD)
 		return result; // headers still incomplete, keep accumulating
 
 	// --- 4. If there is a body, wait until it is fully buffered ---
-	ssize_t contentLength = Utils::parseContentLength(buffer, headersEnd);
+	ssize_t contentLength = parseContentLength(buffer, headersEnd);
 	if (contentLength == -2)
 	{
 		// Malformed Content-Length — pass the data upstream and let the parser error

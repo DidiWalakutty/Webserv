@@ -50,6 +50,7 @@ struct ServerParse
 	const LocationParse* get_best_location(const std::string& urlPath) const; // Returns best matching location for a URL path
 	const std::string* get_error_page(int errorCode) const; 					// Returns custom error page for a given HTTP error code.
 	std::string build_filesystem_path(const std::string& urlPath) const;
+	std::string urlDecode(const std::string& str) const;
 	std::string joinPaths(const std::string& root, const std::string& url) const;
 
 	// --- Check if file exists or if path is a directory ---

@@ -1,6 +1,6 @@
 #include "HTTPCommon.hpp"
 #include "HTTPRequest.hpp"
-#include "Config.hpp"
+#include "ServerParse.hpp"
 #include <algorithm>
 #include <unistd.h>
 #include <sys/stat.h>

@@ -3,11 +3,12 @@
 #include <cstring>
 #include <fstream>
 #include <iostream>
+#include <algorithm>
 #include <sstream>
 #include <sys/epoll.h>
 #include <unistd.h>
 
-#include "Config.hpp"
+#include "ServerParse.hpp"
 #include "HTTPRequest.hpp"
 #include "Utils.hpp"
 
@@ -179,6 +180,46 @@ void CGIEngine::handleCGIWait(std::shared_ptr<CGI> cgi)
 	handleCGIErrorResponse(cgi);
 }
 
+std::string CGIEngine::parseCGIHeaders(const std::string& rawHeaders, std::string& statusLine) const
+{
+	std::istringstream stream(rawHeaders);
+	std::string line;
+	std::string headers;
+	bool hasContentType = false;
+	while (std::getline(stream, line))
+	{
+		if (!line.empty() && line.back() == '\r')
+			line.pop_back();
+		if (line.empty())
+			continue;
+		std::string lower(line);
+		std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c){ return std::tolower(c); });
+		if (lower.compare(0, 7, "status:") == 0)
+		{
+			statusLine = line.substr(7);
+			size_t start = statusLine.find_first_not_of(' ');
+			if (start == std::string::npos)
+				statusLine = "200 OK";
+			else
+				statusLine.erase(0, start);
+			if (statusLine.size() < 3 || !std::isdigit(static_cast<unsigned char>(statusLine[0])) || !std::isdigit(static_cast<unsigned char>(statusLine[1])) || !std::isdigit(static_cast<unsigned char>(statusLine[2])) || (statusLine.size() > 3 && statusLine[3] != ' '))
+				statusLine = "502 Bad Gateway";
+		}
+		else if (lower.compare(0, 13, "content-type:") == 0)
+		{
+			hasContentType = true;
+			headers += line + "\r\n";
+		}
+		else if (lower.compare(0, 15, "content-length:") != 0)
+		{
+			headers += line + "\r\n";
+		}
+	}
+	if (!hasContentType)
+		headers += "Content-Type: text/html\r\n";
+	return headers;
+}
+
 void CGIEngine::handleCGIResponse(std::shared_ptr<CGI> cgi)
 {
 	std::string response;
@@ -188,7 +229,7 @@ void CGIEngine::handleCGIResponse(std::shared_ptr<CGI> cgi)
 	size_t headerEnd = cgi->output.find("\r\n\r\n");
 	if (headerEnd != std::string::npos)
 	{
-		headers = Utils::parseCGIHeaders(cgi->output.substr(0, headerEnd), statusLine);
+		headers = parseCGIHeaders(cgi->output.substr(0, headerEnd), statusLine);
 		body = cgi->output.substr(headerEnd + 4);
 	}
 	else
@@ -334,33 +375,6 @@ std::vector<std::string> CGIEngine::buildArgV(const std::string& filePath, const
 	return argV_str;
 }
 
-std::string CGIEngine::method2Str(HTTPMethod method) const
-{
-	switch (method)
-	{
-		case HTTPMethod::GET: return "GET";
-		case HTTPMethod::POST: return "POST";
-		case HTTPMethod::DELETE: return "DELETE";
-		case HTTPMethod::PUT: return "PUT";
-		case HTTPMethod::HEAD: return "HEAD";
-		case HTTPMethod::PATCH: return "PATCH";
-		default: return "UNSUPPORTED";
-	}
-}
-
-std::string CGIEngine::protocol2Str(HTTPProtocolVersion version) const
-{
-	switch (version)
-	{
-		case HTTPProtocolVersion::HTTP_0_9: return "HTTP/0.9";
-		case HTTPProtocolVersion::HTTP_1_0: return "HTTP/1.0";
-		case HTTPProtocolVersion::HTTP_1_1: return "HTTP/1.1";
-		case HTTPProtocolVersion::HTTP_2_0: return "HTTP/2.0";
-		case HTTPProtocolVersion::HTTP_3_0: return "HTTP/3.0";
-		default: return "UNSUPPORTED";
-	}
-}
-
 std::vector<std::string> CGIEngine::buildEnvP(const HTTPRequest& request, const ServerParse& server, const std::string& filePath) const
 {
 	std::vector<std::string> envP_str = {};
@@ -370,11 +384,11 @@ std::vector<std::string> CGIEngine::buildEnvP(const HTTPRequest& request, const 
 	if (request.method == HTTPMethod::UNSUPPORTED)
 		return (std::cerr << "Unsupported method" << std::endl, envP_str);
 	envP_str.push_back("GATEWAY_INTERFACE=CGI/1.1");
-	envP_str.push_back("REQUEST_METHOD=" + method2Str(request.method));
+	envP_str.push_back("REQUEST_METHOD=" + HTTPCommon::methodToString(request.method));
 	envP_str.push_back("SCRIPT_NAME=" + request.resourcePath);
 	envP_str.push_back("SERVER_NAME=" + server.serverName);
 	envP_str.push_back("SERVER_PORT=" + std::to_string(server.port));
-	envP_str.push_back("SERVER_PROTOCOL=" + protocol2Str(request.protocolVersion));
+	envP_str.push_back("SERVER_PROTOCOL=" + HTTPCommon::protocolVersionToString(request.protocolVersion));
 	envP_str.push_back("SERVER_SOFTWARE=webserv/1.0");
 	envP_str.push_back("REMOTE_ADDR=127.0.0.1");
 	envP_str.push_back("QUERY_STRING=" + request.queryStringCGI);

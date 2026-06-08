@@ -56,11 +56,10 @@ private:
 	void handleCGIWrite(std::shared_ptr<CGI> cgi, int fd, uint32_t events);
 	void handleCGIRead(std::shared_ptr<CGI> cgi, int fd, uint32_t events);
 	void handleCGIWait(std::shared_ptr<CGI> cgi);
+	std::string parseCGIHeaders(const std::string& rawHeaders, std::string& statusLine) const;
 	void handleCGIResponse(std::shared_ptr<CGI> cgi);
 	void handleCGIErrorResponse(std::shared_ptr<CGI> cgi);
 	std::vector<std::string> buildArgV(const std::string& filePath, const LocationParse& location) const;
-	std::string method2Str(HTTPMethod method) const;
-	std::string protocol2Str(HTTPProtocolVersion version) const;
 	std::vector<std::string> buildEnvP(const HTTPRequest& request, const ServerParse& server, const std::string& filePath) const;
 	int updateStruct(std::shared_ptr<CGI> cgi, int fd_stdin, int fd_stdout, int clientFD, const HTTPRequest& request);
 	int addProcess(std::shared_ptr<CGI> cgi);
