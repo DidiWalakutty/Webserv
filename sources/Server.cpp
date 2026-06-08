@@ -41,6 +41,13 @@ Server::Server(const std::vector<ServerParse>& parsedServerConfigInfos)
 	{
 		createSockets();	// like a door for clients to connect to
 		createEpoll();		// like a notification mechanism
+		_cgiEngine = std::make_unique<CGIEngine>(
+			epollFD,
+			pendingWrites,
+			writeOffsets,
+			closeAfterWrite,
+			[this](int fd) { this->removeClient(fd); }
+		);
 	}
 	catch (const std::exception& e)
 	{
@@ -529,9 +536,9 @@ void Server::handleClientReadEvent(int clientFD)
 	// 4) --- CGI routing ---
 	std::string filePath;
 	const LocationParse* loc = NULL;
-	if (isCGIRequest(request, *serverPtr, filePath, loc))
+	if (_cgiEngine && _cgiEngine->isCGIRequest(request, *serverPtr, filePath, loc))
 	{
-		HTTPState cgiAccessState = checkCGIAccess(filePath);
+		HTTPState cgiAccessState = _cgiEngine->checkCGIAccess(filePath);
 		// Access wasn't good, return error page.
 		if (cgiAccessState != HTTPState::Ok)
 		{
@@ -543,7 +550,7 @@ void Server::handleClientReadEvent(int clientFD)
 
 		// Access was OK, handle CGI.
 		logColored("Handling CGI request for: " + filePath, CYAN);
-		startCGI(clientFD, request, *serverPtr, filePath, *loc);
+		_cgiEngine->startCGI(clientFD, request, *serverPtr, filePath, *loc);
 		return;
 	}
 
@@ -613,43 +620,6 @@ void Server::handleClientWriteEvent(int clientFD)
 }
 
 /**
- * @brief Parses the Content-Length header from an HTTP request.
- *
- *  - -1 → Content-Length header not present
- *  - -2 → malformed Content-Length value
- *  - >=0 → valid parsed Content-Length
- *
- * Used during request accumulation to determine whether the full HTTP body
- * has been received before parsing the request.
- */
-static ssize_t parseContentLength(const std::string& raw, size_t headersEnd)
-{
-	std::string headerBlock = raw.substr(0, headersEnd);
-	std::transform(headerBlock.begin(), headerBlock.end(), headerBlock.begin(), ::tolower);
-
-	size_t pos = headerBlock.find("content-length:");
-	if (pos == std::string::npos)
-		return -1; // not present
-
-	pos += 15; // skip "content-length:"
-	while (pos < raw.size() && (raw[pos] == ' ' || raw[pos] == '\t'))
-		pos++;
-
-	size_t end = pos;
-	while (end < raw.size() && std::isdigit(raw[end]))
-		end++;
-
-	if (end == pos)
-		return -2; // no digits — malformed
-
-	try {
-		return std::stoll(raw.substr(pos, end - pos));
-	} catch (...) {
-		return -2; // overflow or garbage — malformed
-	}
-}
-
-/**
  * @brief Reads and accumulates raw bytes from a client socket until a full HTTP request is available.
  *
  * @details
@@ -692,7 +662,7 @@ std::vector<char> Server::readClient(const int &FD)
 		return result; // headers still incomplete, keep accumulating
 
 	// --- 4. If there is a body, wait until it is fully buffered ---
-	ssize_t contentLength = parseContentLength(buffer, headersEnd);
+	ssize_t contentLength = Utils::parseContentLength(buffer, headersEnd);
 	if (contentLength == -2)
 	{
 		// Malformed Content-Length — pass the data upstream and let the parser error
@@ -749,7 +719,7 @@ void Server::start()
 		// This is useful when we want the program to be event-driven and only proceed 
 		// when there is actual activity, without polling or using a fixed timeout.
 		int count = epoll_wait(epollFD, events, _maxEvents,
-			cgiProcesses.empty() ? INDEFINITE_BLOCKING : CGI_POLL_INTERVAL_MS);
+			(!_cgiEngine || !_cgiEngine->hasActiveProcesses()) ? INDEFINITE_BLOCKING : CGI_POLL_INTERVAL_MS);
 		if (count < 0) 
 		{
 			if (errno == EINTR)
@@ -759,13 +729,8 @@ void Server::start()
 		}
 		
 		// --- Periodic CGI timeout check (runs even when epoll_wait times out) ---
-		{
-			std::vector<std::shared_ptr<CGI>> snapshot;
-			for (auto& kv : cgiProcesses)
-				snapshot.push_back(kv.second);
-			for (auto& cgi : snapshot)
-				handleCGITimeOut(cgi);
-		}
+		if (_cgiEngine)
+			_cgiEngine->handleTimeouts();
 
 		// --- Loop through all triggered events ---
 		for (int i = 0; i < count; i++)
@@ -792,9 +757,9 @@ void Server::start()
 			}
 
 			// 2) --- CGI Pipe Events ---
-			else if (cgiProcesses.count(fd))
+			else if (_cgiEngine && _cgiEngine->hasProcessFd(fd))
 			{
-				handleCGIEvent(fd, ev);
+				_cgiEngine->handleCGIEvent(fd, ev);
 			}
 
 			// 3)--- Socket Error or Disconnect ---
@@ -821,71 +786,6 @@ void Server::start()
 	running = false;
 
 	shutDown();
-}
-
-
-HTTPState Server::checkCGIAccess(const std::string& filePath)
-{
-	struct stat st;
-
-	// --- 1. Check if file exists ---
-	if (access(filePath.c_str(), F_OK) != 0)
-		return HTTPState::NotFound;
-
-	// --- 2. Get file info ---
-	if (stat(filePath.c_str(), &st) != 0)
-		return HTTPState::InternalServerError;
-
-	// --- 3. Reject directories ---
-	if (S_ISDIR(st.st_mode))
-		return HTTPState::Forbidden;
-		
-	// --- 4. Check read permission ---
-	if (access(filePath.c_str(), R_OK) != 0)
-		return HTTPState::Forbidden;
-
-	// --- 5. Check execute permission ---
-	if (access(filePath.c_str(), X_OK) != 0)
-		return HTTPState::Forbidden;
-
-	// Needed??? --- 6. Prevents checking sockets, pipes etc
-	if (!S_ISREG(st.st_mode))
-		return HTTPState::Forbidden;
-		
-	return HTTPState::Ok;
-}
-
-bool Server::isCGIRequest(const HTTPRequest& request, const ServerParse& server,
-                          std::string& filePath, const LocationParse*& location)
-{
-	// --- Only GET and POST are considered CGI requests ---
-	if (HTTPMethod::GET != request.method && HTTPMethod::POST != request.method)
-		return false;
-		
-	// --- 1. Find matching location ---
-	location = server.get_best_location(request.resourcePath);
-	if (!location)
-		return false;
-
-	// --- 2. Must be marked as CGI ---
-	if (!location->is_cgi)
-		return false;
-
-	// --- 3. Build filesystem path ---
-	filePath = server.build_filesystem_path(request.resourcePath);
-	if (filePath.empty())
-		return false;
-
-	// --- 4. Check extension ---
-	size_t dot = filePath.find_last_of('.');
-	if (dot == std::string::npos)
-		return false;
-
-	std::string ext = filePath.substr(dot);
-	for (size_t	i = 0; i < location->cgi_extension.size(); i++)
-		if (ext == location->cgi_extension[i])
-			return true;
-	return false;
 }
 
 void Server::queueResponse(int clientFD, const HTTPRequest& request, const std::string& responseStr)

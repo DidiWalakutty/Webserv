@@ -9,7 +9,7 @@
 #include "HTTPCommon.hpp"
 #include "HTTPRequest.hpp"
 #include "Config.hpp"
-#include "CGI.hpp"
+#include "CGIEngine.hpp"
 
 // Reset
 #define RESET       "\033[0m"
@@ -37,7 +37,7 @@ class Server
 {
 	private:
 		std::vector<ServerParse> _servers;					/**< @brief Parsed server blocks from config file */
-		std::map<int, std::shared_ptr<CGI>> cgiProcesses;	/**< @brief Active CGI pipe FDs mapped to their CGI state and owning client. */
+		std::unique_ptr<CGIEngine> _cgiEngine;
 		int epollFD = -1;									/**< @brief Epoll instance of the file descriptor */
 		std::vector<int> _listeningSockets;					/**< @brief Listening sockets (one per ServerParse) */
 		std::vector<int> _clients;							/**< @brief Connected client sockets. */
@@ -66,20 +66,6 @@ class Server
 		bool handleRequestParseError(int clientFD, const HTTPRequest::HTTPRequestException& exc);
 		void handleClientReadEvent(int clientFD);
 		void handleClientWriteEvent(int clientFD);
-		
-		// --- Run CGI ---
-		bool isCGIRequest(const HTTPRequest& request, const ServerParse& server, std::string& filePath, const LocationParse*& location);
-		void startCGI(int clientFD, const HTTPRequest& request, const ServerParse& server, const std::string& filePath, const LocationParse& location);
-		void handleCGIEvent(int fd, uint32_t events);
-		void handleCGITimeOut(std::shared_ptr<CGI> cgi);
-		void handleCGIError(std::shared_ptr<CGI> cgi);
-		void handleCGIWrite(std::shared_ptr<CGI> cgi, int fd, uint32_t events);
-		void handleCGIRead(std::shared_ptr<CGI> cgi, int fd, uint32_t events);
-		void handleCGIWait(std::shared_ptr<CGI> cgi);
-		void handleCGIResponse(std::shared_ptr<CGI> cgi);
-		void handleCGIErrorResponse(std::shared_ptr<CGI> cgi);
-		void queueCGIResponse(int clientFD, const std::string& response);
-		HTTPState checkCGIAccess(const std::string& filePath);
 		
 	public:
 		static volatile sig_atomic_t running; /**< @brief Describes if the server should close or keep running. */
